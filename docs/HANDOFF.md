@@ -1,186 +1,227 @@
-# Handoff — chess-book-editor session 1 → session 2
+# Handoff — chess-book-editor
 
-Written 2026-05-26 at the moment master switches Claude Code's working
-directory from `D:\Elton\TestArea\chess-book-ai\` to this repo.
+Updated 2026-05-26 end of session 2.
 
-Read this first, then [CLAUDE.md](../CLAUDE.md) for steady-state guidance.
+Read this first for full context. For steady-state guidance see
+[CLAUDE.md](../CLAUDE.md).
 
-## What just happened (session 1 summary)
+## Where we are
 
-Session 1 lived in `chess-book-ai/`. The goal was to evaluate whether the
-master could build a browser-based XQF editor that reads/writes XQF files
-losslessly. Outcome: **yes, feasible — persistence layer is verified**.
+Working end-to-end MVP. Master can:
 
-Investigation steps that led here:
-1. Found `walker8088/cchess` has an `XQFWriter` (newer version not yet
-   installed globally on master's machine).
-2. Spike at `chess-book-ai/spike/xqf_writer/` (now deleted) round-tripped
-   46 XQF files through the upstream writer — **0/46 perfect**. Every file
-   collapsed multi-branch trees to the main line (branchs N → 1).
-3. Diagnosed three bugs (see `vendor/io_xqf_patched.py` module docstring).
-4. Wrote `PatchedXQFWriter` subclass with all three fixes. **46/46 perfect**.
-5. Generated 5 sample XQFs in `samples/`. Master manually opened each in
-   XQStudio — all variations, annotations, headers display correctly.
-6. Master approved direction. Repo was init'd, spike artifacts moved here,
-   first commit made (`c68ce43`).
+1. Browse the XQF library from a file-tree pane
+2. Open any XQF, see the board + linearised move list + annote + variations
+3. Navigate with buttons (`|◀ ◀ ⎇分支 ▶ ▶|`) or keyboard (←/→/↑/↓/Home/End/B/Ctrl-S)
+4. Switch board themes (傳統手繪 / 雅石回紋 / 鎏金歲月)
+5. Edit annote text on any move
+6. Save → original is backed up as `*.XQF.bak`, new file written via PatchedXQFWriter
+7. Drag splitters to resize panels; sizes + theme + last-opened-file persist server-side
 
-Master then chose to proceed with building the editor (path A from the
-options offered), skipped upstreaming the patch to cchess (B), and authorised
-deletion of the chess-book-ai spike (C — done).
+Nothing in the **tree-editing layer** is built (add/delete moves, promote
+variations, metadata edit). Persistence and rendering layers are stable and
+all 46/46 round-trip tests still pass.
 
-## Current state (verified)
+## Session 1 (recap, see commit `c68ce43`)
 
-| Component | Status | Notes |
-|---|---|---|
-| `vendor/io_xqf_patched.py` | ✅ verified | 46/46 round-trip, XQStudio opens output cleanly |
-| `tests/test_roundtrip.py` | ✅ passing | Re-run after any cchess upgrade |
-| `samples/` | ✅ XQStudio-verified | Don't regenerate without re-verifying |
-| `frontend/assets/board.js` | 📋 copied raw | From chess-book-ai/site_builder/assets/, not adapted yet |
-| `frontend/assets/style.css` | 📋 copied raw | Same |
-| `backend/` | empty | Flask/FastAPI shell pending |
-| Editor UI | not started | |
+Built and verified the **persistence layer only**:
 
-## Critical context the next session needs
+- `vendor/io_xqf_patched.py` — `PatchedXQFWriter` (recursive DFS, GB18030, no
+  v18 encryption). 46/46 perfect round-trip on the XQF library.
+- `tests/test_roundtrip.py` — path-set comparison test, used as ground truth
+- `samples/` — XQStudio-verified outputs (manually opened by master)
 
-### 1. cchess Move tree semantics (subtle)
+## Session 2 — what got built
 
-There are TWO sibling pointers in `cchess.move.Move`:
-- `move.variation_next` — linked-list pointer, **only** populated for top-level
-  variations (via `Book.append_first_move` → `add_variation`).
-- `move.variations_all` — Python list of all siblings, **always** maintained.
+### Backend (`backend/`)
 
-`Move.append_next_move()` (called by reader for deep variations) only updates
-`variations_all`, **not** `variation_next`. So:
+- `app.py` — Flask app, binds 127.0.0.1:5174:
+  - `GET  /api/xqf/list` → directory tree under `XQF_ROOT`
+  - `GET  /api/xqf/load?path=<rel>` → `{info, init_fen, roots, path}`
+  - `POST /api/xqf/save` body `{path, info, init_fen, roots}` → writes
+    `<file>.XQF.bak` then `<file>.XQF`
+  - `GET  /api/preferences`, `POST /api/preferences` → `preferences.json`
+    at repo root (shallow-merge POST)
+  - `/` and `/assets/<file>` serve the frontend statically
+  - `XQF_ROOT = D:\Elton\TestArea\chess-book` (hard-coded, rejects paths
+    outside it)
+- `xqf_service.py` — Book ↔ JSON converter + Big5 annote recovery:
+  - `book_to_json` walks `next_move.variations_all` (see CLAUDE.md
+    gotcha #3), adds `notation` (Chinese, traditional) + `ply` + `side`
+    per node. Black-side cannon `砲` is mapped to `包`.
+  - `json_to_book` mirrors `_read_steps` from `cchess.io_xqf`: for each
+    move it sets the move-side based on the piece's colour (so endgame
+    puzzles with non-standard turn parity still rebuild).
+  - `recover_book_strings(book)` — mutates Book in place to recover Big5
+    annotes: `s.encode("gb18030").decode("big5")` succeeds on mojibake
+    and fails on already-correct strings, so it's self-detecting. Called
+    inside `load_xqf` only.
+- `save_xqf(path, data)` — writes `.bak` first, then uses
+  `PatchedXQFWriter` (still GB18030 on the wire).
 
-> **Always walk `move.next_move.variations_all` to find children at any depth.
-> Walking `variation_next` works only at the root and silently misses deep
-> branches. This was bug #2 of the writer fix; it would silently come back
-> if anyone refactors tree-traversal code.**
+### Frontend (`frontend/`)
 
-### 2. Annotation encoding = GB18030 (not GBK)
+Layout: 3-pane flex (`#filePane | #boardPane | #rightPane`) with three
+draggable splitters. Right pane subdivides: `棋譜` (full height left)
+and `注解 / 本步可選` (stacked right column).
 
-Upstream cchess writer encodes annotes as GBK. Master uses Traditional Chinese.
-GBK doesn't cover many traditional chars → upstream silently drops them via
-`errors="ignore"`. Reader decodes as GB18030. The patch encodes as GB18030.
+- `index.html` — single page; loads `board.js` then `editor.js` as
+  classic (non-module) scripts so they share the global lexical scope.
+- `assets/board.js` — **modified copy** of chess-book-ai's renderer.
+  Only minimal surgery applied so `drawBoard()` works standalone:
+    - `isRedPerspective()` defaults to `true` when `REDP_BOX` isn't set
+    - `drawMeanderFrame()` had a vertical-band geometry bug (lx/rx
+      formula was off by 9px so half the meander drew off-board). Fixed
+      to `lx = (B + 9) / 2`, `rx = W - (B + 9) / 2`.
+  Otherwise we DON'T call its bootstrap `initGamePage` — just lift the
+  pure renderer + `parseFen`/`applyIccs`/`iccsToCoord` helpers.
+- `assets/editor.js` — main app:
+  - `EDITOR.activePath` is a list of child indices from the root; `[]`
+    = initial position. Used everywhere for navigation.
+  - `currentLine()` linearises the path through the active variation
+    plus the main continuation from there (matches XQStudio's display).
+  - `navToNearestBranch()` walks back along activePath to find the
+    deepest ply with `siblingsAt(...).length > 1` and navigates to its
+    **parent** — so the next-move button takes you to the branch ply
+    where 本步可選 shows the alternatives.
+  - Splitters mutate `target.style.flexBasis` (NOT width/height —
+    inside a flex container, flex-basis wins). State persisted via
+    `savePreference(key, size)` on mouseup.
+  - Annote textarea writes back into `EDITOR.data` on every input;
+    `commitAnnoteEdit()` flushes pending changes before navigate/save.
+- `assets/editor.css` — warm-dark palette with gold accent (`--accent:
+  #d4a043`). XQStudio-inspired panel layout. LXGW WenKai TC font
+  (loaded by board.js's `ensurePieceFontLoaded` from Google Fonts).
 
-> **Any new code that touches XQF annotation bytes should use GB18030 in both
-> directions. Don't reintroduce GBK.**
+### Tests + tools
 
-### 3. Writer version = 0x0A (low version, unencrypted)
+- `tests/test_json_roundtrip.py` — XQF → JSON → Book → XQF → reread,
+  with Big5 recovery applied to both sides for a fair compare. 46/46.
+- `tests/test_annote_edit.py` — opens a file, mutates an annote with
+  Traditional Chinese + Ext-B `𠀋` + ASCII + newline, saves, reloads,
+  compares byte-identical. Pass.
+- `tools/dump_annotes.py` — UTF-8-safe dump of every annote in every
+  XQF (raw reader vs JSON service, side-by-side). Useful to spot any
+  remaining mojibake. Writes to `tools/annote_dump.txt` so PowerShell's
+  cp950 doesn't choke.
 
-We don't reproduce the v18 XOR encryption. Writing as v0x0A is XQStudio-compatible,
-much simpler, and skips the encryption headache. Output files are ~50% larger
-than v18 input — that's expected.
+### User preferences (`preferences.json` at repo root, gitignored)
 
-### 4. Two cchess installs side-by-side
+- `splitFileW`, `splitMovesW`, `splitAnnoteH` — splitter sizes (px)
+- `boardTheme` — `traditional` | `stone` | `gilded`
+- `lastFile` — relative path of the last successfully opened file;
+  auto-reopened on next boot (expands parent dirs, highlights, loads)
 
-| Repo | cchess source | Why |
-|---|---|---|
-| `chess-book-ai` | Old pip install (only `read_xqf.py`, has `Game`) | Pinned by existing site_builder code |
-| **`chess-book-editor`** | GitHub master (has `io_xqf.py`, `Book`) | Required for writer |
+## Critical context (still load-bearing — don't break)
 
-> **Do NOT `pip install --upgrade cchess` globally.** Use `.venv` here, leave
-> the chess-book-ai install alone. They serve different code paths.
+### 1. Big5 source / GB18030 wire / Unicode in memory
 
-### 5. board.js / style.css are dragged-in, not adapted
+The 41 XQF source files use **Big5** encoded annotes. cchess's reader
+hardcodes GB18030 → reads them as mojibake. `recover_book_strings`
+recovers proper Traditional Chinese strings on load. The editor
+operates on those strings. **Save still writes GB18030** (every modern
+XQF reader handles GB18030 — including XQStudio — and GB18030 covers
+all Unicode CJK). Saved files are therefore NOT byte-identical to the
+source (different encoding), but reread cleanly across tools.
 
-I copied them verbatim from `chess-book-ai/site_builder/assets/`. They were
-written for a **read-only analyzer view** — they include:
-- Score chart (`drawChart`, lines 780-858) — irrelevant for editor
-- Engine PV demo (`stopDemo`, `setDemoMode`, etc.) — irrelevant
-- Trap/brilliant highlighting in `annotateTable` (line 1084) — irrelevant
-- 本步可選 panel (`VAR_PICKER`, line 867) — **reusable / adapt for editor**
-- `applyIccs(fen, iccs)` line 70 — **critical reusable**
-- `drawBoard(svg, fen, bookMove, engineMove)` line 448 — **reusable**
-- `parseFen()` line 44 — **critical reusable**
-- 3 themes + multiple board styles (lines 272-446) — bonus, keep
+If you encounter a file that wasn't Big5 (e.g. AI-generated), the
+recovery's Big5 decode step will fail on bytes Big5 can't represent,
+and the string is left as-is. Self-detecting.
 
-> **Strategy: don't strip board.js yet. Build the editor UI alongside it,
-> use what's useful, leave the rest dormant. Strip later when the editor
-> shape is stable.**
+### 2. `move.next_move.variations_all`, never `variation_next`
 
-## What the next session should build (path A)
+cchess's `Move.append_next_move` (used for deep variations) only
+updates `variations_all`, not `variation_next`. The writer fix and our
+DFS walk both depend on this. **If anyone refactors tree-traversal
+code to walk `variation_next`, deep variations silently disappear.**
 
-The first vertical slice (no editing yet — just open/display/save round-trip
-through the browser):
+### 3. `STATE` was a name collision with board.js
 
-1. **Flask backend** at `backend/app.py`:
-   - `GET /api/xqf/list` → directory tree of `D:\Elton\TestArea\chess-book\`
-   - `GET /api/xqf/load?path=...` → JSON: `{init_fen, move_tree, info}` —
-     derive from a `cchess.Book` via `read_from_xqf`
-   - `POST /api/xqf/save` body `{path, init_fen, move_tree, info}` → use
-     `PatchedXQFWriter` to write back
-   - Hard-code `XQF_ROOT = r"D:\Elton\TestArea\chess-book"`, refuse paths
-     outside it
+board.js declares `const STATE = ...` at module-script top level.
+editor.js's analogous state object is named `EDITOR` to avoid this.
+**Don't reintroduce `STATE` in editor.js** — it'll throw
+`Identifier 'STATE' has already been declared` and break the page.
 
-2. **JSON shape for move_tree** — sketch:
-   ```json
-   {
-     "iccs": "h2e2",
-     "annote": "中砲",
-     "children": [
-       { "iccs": "h7e7", "annote": "", "children": [...] },
-       { "iccs": "b9c7", "annote": "屏風馬", "children": [...] }
-     ]
-   }
-   ```
-   Convert to/from `cchess.Book` via straightforward DFS. The first child of
-   the children array is the "main continuation" (next_move); the rest are
-   the variation siblings.
+### 4. cchess's `move_iccs` vs reader
 
-3. **Minimal frontend** at `frontend/index.html`:
-   - Left panel: file tree (clicking a file calls `/api/xqf/load`)
-   - Center: board (reuse `drawBoard()` from board.js)
-   - Right: move tree display (start with simple nested `<ul>`; clicking a
-     node updates board state via `applyIccs()`)
-   - "Save" button calls `/api/xqf/save` with the unchanged tree → quickest
-     way to verify the full pipe round-trips through the browser
+`board.move_iccs(s)` validates strict turn alternation. The XQF reader
+does NOT — it sets the move-side based on the piece colour at the
+source square before each move. Endgame puzzles depend on this. Our
+`_apply_node` in `xqf_service.py` mirrors the reader's behaviour;
+**don't switch to `move_iccs` "for simplicity"** — two source files
+in the library (`牛頭滾`, similar endgames) will fail to rebuild.
 
-4. **End-to-end round-trip test**: open `中砲對單提馬.XQF`, save without
-   changes, diff path-set against original via `tests/test_roundtrip.py`
-   logic. If green → persistence is wired correctly.
+### 5. Black cannon = 包, not 砲
 
-Only after the round-trip-through-browser works should editing operations
-(add child move, edit annote, delete subtree, reorder siblings) be added.
+cchess's `to_text(traditional=True)` maps both sides' cannon to 砲.
+Master's convention: red 砲, black 包. `_node_to_json` post-processes:
+when `move.move_side == SIDE_BLACK`, replace 砲 with 包 in the
+notation string. Don't undo this.
 
-## Things deliberately NOT done in session 1
+## What's NOT built (session 3 targets)
 
-- **No upstream PR to walker8088/cchess.** Master said skip for now (path B).
-  The patch stays vendored. Could revisit later.
-- **No shared `xiangqi-board-lib`.** Initially the master accepts board.js
-  drift between chess-book-ai and this repo. Extract a shared lib only after
-  both projects stabilize and the divergence becomes painful.
-- **No public deployment.** This is a local-only tool. Don't add GitHub Pages
-  setup, don't mirror to a `docs/` directory.
+In rough priority order:
 
-## Master's working preferences (carried over)
+### Must-have for editor to be usable
 
-From `chess-book-ai/`'s memory:
-- 稱呼「尊敬的主人」, Traditional Chinese, terse responses
-- Pushes back on sloppy interpretation of engine/library output
-- For exploratory questions: 2–3 sentences with recommendation + main
-  tradeoff, *don't* implement until master agrees
+1. **Edit metadata** — title / red player / black player / event / date.
+   Touches `book.info` only; no tree changes. Smallest scope. Add a UI
+   panel above 棋譜 or behind a `⚙ 賽事資訊` button.
+2. **Add a move** — extend the active line. Need board-click input OR
+   ICCS textbox. Backend: `_apply_node` already handles tree-grow.
+3. **Add a variation** — sibling of active move. UI: "在此分支" button
+   that takes a new ICCS and inserts it into the parent's children.
+4. **Delete subtree** — drop active node + descendants. Requires
+   updating the parent's children list and `Move.variations_all`. Confirm
+   dialog mandatory.
+5. **Promote / demote variation** — swap variation with main line (very
+   common in book editing). Probably needs an arrow-up/down button next
+   to each variation in 本步可選.
+
+### Nice-to-have
+
+6. **Click pieces on board to move** — drag-and-drop, much more
+   intuitive than reading ICCS. board.js doesn't have piece interaction
+   wired; need new code.
+7. **Undo / Redo** — once tree-edit operations exist, an undo stack on
+   the JSON tree (with `EDITOR.data` snapshots) is straightforward.
+8. **Board flip** — `data-board-flipped` attribute + `CURRENT_REDP`
+   wiring is already in board.js, just needs a UI toggle.
+9. **File-tree filter / search** — 41 files isn't bad, but a quick
+   filter would help.
+
+### Deferred
+
+- **Upstream PR to walker8088/cchess** — `PatchedXQFWriter` is
+  PR-ready. Master deferred (path B in session 1).
+- **Shared `xiangqi-board-lib`** — until chess-book-ai and the editor
+  diverge painfully, keep the copy.
+
+## Files to read first in session 3
+
+1. `backend/xqf_service.py` — Book ↔ JSON; pay attention to
+   `_apply_node` (how to grow the tree when implementing add-move).
+2. `frontend/assets/editor.js` `currentLine()` / `nodeAt()` /
+   `siblingsAt()` — how the path-based addressing works.
+3. `vendor/io_xqf_patched.py` — writer docstring still explains why
+   the patch exists.
+4. `CLAUDE.md` — steady-state guidance (still accurate).
+
+## Master's working preferences (running notes)
+
+From sessions 1 + 2:
+
+- 稱呼「尊敬的主人」
+- Traditional Chinese, **terse** responses; one-paragraph diagnosis
+  followed by minimal fix; no trailing summaries unless asked
+- Exploratory questions: 2-3 sentences with recommendation + main
+  tradeoff, don't implement until master agrees
+- **Doesn't over-engineer** — when master said "靠左對齊即可" after I
+  had built a 3-column grid + spacer for centred buttons, that was a
+  correction to over-design. Default to the simplest layout first.
+- Sees through bugs fast — points out concrete failure modes (e.g.
+  "垂直紋路的位置不正確") and expects diagnosis + fix, not handwaving
+- Iterates on UI a lot. Expect 2-3 rounds of polish on every visual
+  change. Don't argue past round 2; just do what master asks.
 - Wants 繁體中文 throughout (UI labels, annotations, etc.)
-- Default Pikafish to `Threads=4` if engine work happens here (it shouldn't —
-  that's chess-book-ai's domain)
-
-## Files to read first in session 2
-
-1. `vendor/io_xqf_patched.py` — module docstring explains the writer fix
-2. `tests/test_roundtrip.py` — see how path-set comparison works (will
-   reuse the same logic for the browser-round-trip test)
-3. `frontend/assets/board.js` lines 44–110 — `parseFen`, `iccsToCoord`,
-   `applyIccs`. These are the reusable core.
-4. `CLAUDE.md` — steady-state guidance
-
-## Open questions for master in session 2
-
-1. Backend framework: Flask or FastAPI? (Recommend Flask for simplicity; the
-   API is 3 endpoints, no async needed.)
-2. File-tree refresh: live (watch filesystem) or on-demand (refresh button)?
-   Recommend on-demand for first cut.
-3. Backup/versioning: should `POST /api/xqf/save` write to a `.bak` first?
-   Strong recommend yes — first edits will surface bugs we haven't found yet.
-4. Whether to also display chess-book-ai's analysis data (engine scores,
-   trap annotations) as read-only overlays. Probably no for v1 — keep editor
-   clean.
+- Pikafish runs `Threads=4` if engine work happens (it shouldn't —
+  engine analysis is chess-book-ai's domain)

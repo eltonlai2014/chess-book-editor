@@ -13,3 +13,5 @@ _tmp_*.xqf
 
 # Don't commit local user edits unless explicitly staged
 output/
+preferences.json
+tools/*.txt

@@ -418,8 +418,12 @@ function drawMeanderFrame(svg, opts) {
   const unitPath = "M 0 0 H 18 M 0 9 H 18 M 4 1 V 7 H 14 V 3 H 8 V 5";
   const yTop = (B - 9) / 2;             // centre meander vertically in top band
   const yBot = H - B + (B - 9) / 2;     // ... and bottom band
-  const lx = (B - 9) / 2;               // left band: rotate(90) places unit at [lx, lx+9]
-  const rx = W - (B - 9) / 2;           // right band: rotate(-90) places unit at [rx-9, rx]
+  // rotate(90) around origin maps local (a,b) -> screen (-b, a). After
+  // translate(lx, y), the unit spans screen x ∈ [lx - 9, lx]. To centre it
+  // in the left band [0, B], lx must be (B + 9) / 2 — NOT (B - 9) / 2.
+  // (The original was off by 9px, pushing half the meander off the board.)
+  const lx = (B + 9) / 2;               // left band: unit screen x ∈ [lx-9, lx] centred in [0, B]
+  const rx = W - (B + 9) / 2;           // right band: unit screen x ∈ [rx, rx+9] centred in [W-B, W]
   const stroke = { stroke: ink, "stroke-width": 0.9, fill: "none", "stroke-opacity": 0.92 };
   const engrave = highlight ? { stroke: highlight, "stroke-width": 0.9, fill: "none", "stroke-opacity": 0.55 } : null;
 
@@ -966,7 +970,7 @@ const VAR_PICKER = {
 const ALTS_BY_FEN = {};
 const MOVE_LOOKUP = {};
 
-function isRedPerspective() { return REDP_BOX.checked; }
+function isRedPerspective() { return REDP_BOX ? REDP_BOX.checked : true; }
 
 function stopDemo() {
   if (STATE.demoTimer) {

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-Hant" data-board="traditional">
+<head>
+  <meta charset="utf-8">
+  <title>XQF Editor</title>
+  <link rel="stylesheet" href="/assets/editor.css">
+</head>
+<body>
+  <header>
+    <h1>象棋譜編輯器</h1>
+    <div class="actions">
+      <label class="boardThemePicker">
+        棋盤
+        <select id="boardThemeSel">
+          <option value="traditional">傳統手繪</option>
+          <option value="stone">雅石回紋</option>
+          <option value="gilded">鎏金歲月</option>
+        </select>
+      </label>
+      <button id="saveBtn" disabled>儲存</button>
+      <span id="status"></span>
+    </div>
+  </header>
+  <main>
+    <aside id="filePane">
+      <h2>檔案</h2>
+      <div class="rootPath" title="檔案來源根目錄">📂 D:\Elton\TestArea\chess-book</div>
+      <div id="fileTree">載入中…</div>
+    </aside>
+    <div class="splitter splitter-v" data-resize="filePane" data-pref="splitFileW"></div>
+    <section id="boardPane">
+      <h2 id="fileTitle">尚未載入</h2>
+      <svg id="board" viewBox="0 0 540 600" width="540" height="600"></svg>
+      <div id="navBar">
+        <button id="navFirst"  title="回開局 (Home)">|◀</button>
+        <button id="navPrev"   title="上一步 (←)">◀</button>
+        <button id="navBranch" title="回到上一個分支點 (B)">⎇ 分支</button>
+        <button id="navNext"   title="下一步 (→)">▶</button>
+        <button id="navLast"   title="最末步 (End)">▶|</button>
+        <span id="moveInfo"></span>
+      </div>
+    </section>
+    <aside id="rightPane">
+      <div id="rpMoves" class="rpSection rpMoves">
+        <h2>棋譜</h2>
+        <div id="moveList"></div>
+      </div>
+      <div class="splitter splitter-v" data-resize="rpMoves" data-pref="splitMovesW"></div>
+      <div class="rpRightCol">
+        <div id="rpAnnote" class="rpSection rpAnnote">
+          <h2>注解</h2>
+          <textarea id="annoteBox" placeholder="（無註解，可在此輸入）"></textarea>
+        </div>
+        <div class="splitter splitter-h" data-resize="rpAnnote" data-pref="splitAnnoteH" data-direction="row"></div>
+        <div class="rpSection rpVars">
+          <h2>本步的所有走法</h2>
+          <div id="varPicker"></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <!-- Hidden control board.js looks up for red/black perspective. -->
+  <input type="checkbox" id="redPerspective" checked style="display:none">
+  <script src="/assets/board.js"></script>
+  <script src="/assets/editor.js"></script>
+</body>
+</html>

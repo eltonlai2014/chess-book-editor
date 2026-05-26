@@ -1,0 +1,503 @@
+/* XQF Editor — warm-dark UI tuned to xiangqi wood/stone aesthetics.
+ *
+ * Design system:
+ *   palette  : warm-dark surfaces, gold accent, traditional cinnabar emphasis
+ *   spacing  : 4 / 8 / 12 / 16 px rhythm
+ *   typography: 12px (meta) / 14px (body) / 16px (content) / 18-20px (title)
+ *   transitions: 120ms ease for interactive state changes
+ */
+
+:root {
+  /* Surfaces — warm-dark, neutral but tinted slightly brown to match wood themes */
+  --bg-0:   #15130f;   /* outermost / chrome */
+  --bg-1:   #1d1a16;   /* main background */
+  --bg-2:   #25211c;   /* panel surface */
+  --bg-3:   #2f2a23;   /* panel header / chip */
+  --bg-4:   #3a342c;   /* hover */
+
+  /* Lines */
+  --line:   #3a342c;
+  --line-strong: #4a4237;
+
+  /* Text */
+  --text:        #ebe3d4;
+  --text-muted:  #a8a094;
+  --text-faint:  #6e675c;
+
+  /* Accents */
+  --accent:        #d4a043;   /* gold (gilded board) */
+  --accent-strong: #e8b75c;
+  --accent-soft:   rgba(212, 160, 67, 0.15);
+  --red:           #c0392b;   /* cinnabar (red side) */
+  --info:          #5fa8d6;   /* selected highlight */
+  --ok:            #7ec47e;
+  --err:           #d97070;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.35);
+
+  --radius-sm: 3px;
+  --radius:    5px;
+  --radius-lg: 8px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft JhengHei", "PingFang TC", "Noto Sans TC",
+    Roboto, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- scrollbars ---------- */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+  border: 2px solid var(--bg-1);
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+
+/* ---------- header ---------- */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, var(--bg-3) 0%, var(--bg-2) 100%);
+  border-bottom: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-sm);
+  flex: 0 0 52px;
+  z-index: 2;
+}
+header h1 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+header h1::before {
+  content: "♚";
+  color: var(--accent);
+  margin-right: 8px;
+  font-size: 20px;
+  vertical-align: -1px;
+}
+
+.actions { display: flex; gap: 14px; align-items: center; }
+.actions button {
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.actions button:hover:not(:disabled) {
+  background: var(--bg-4);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.actions button:active:not(:disabled) { background: var(--bg-2); }
+.actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#saveBtn:not(:disabled) {
+  background: var(--accent);
+  color: #2a1f0a;
+  border-color: var(--accent-strong);
+  font-weight: 600;
+}
+#saveBtn:not(:disabled):hover {
+  background: var(--accent-strong);
+  color: #1a1305;
+}
+
+.boardThemePicker {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-muted);
+}
+.boardThemePicker select {
+  background: var(--bg-3); color: var(--text);
+  border: 1px solid var(--line-strong);
+  padding: 5px 10px; border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+.boardThemePicker select:hover { border-color: var(--accent); }
+
+#status {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 180px;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+#status.ok  { color: var(--ok);  }
+#status.err { color: var(--err); }
+#status:not(:empty)::before {
+  content: "●";
+  margin-right: 6px;
+  font-size: 8px;
+  vertical-align: 2px;
+  opacity: 0.7;
+}
+
+/* ---------- main flex (splitter-driven) ---------- */
+main {
+  display: flex;
+  flex-direction: row;
+  height: calc(100vh - 52px);
+  min-width: 0;
+  overflow: hidden;
+}
+#filePane  { flex: 0 0 240px; min-width: 140px; }
+#boardPane { flex: 0 0 568px; }
+#rightPane { flex: 1 1 0; min-width: 280px; display: flex; flex-direction: row; overflow: hidden; }
+aside, section { overflow: hidden; background: var(--bg-1); }
+
+/* ---------- splitters ---------- */
+.splitter {
+  flex: 0 0 6px;
+  background: var(--bg-2);
+  position: relative;
+  z-index: 1;
+  transition: background 120ms ease;
+}
+.splitter-v { cursor: col-resize; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+.splitter-h { cursor: row-resize; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); flex: 0 0 6px; }
+.splitter::before {
+  /* Wider hit target than the visible bar so it's easier to grab. */
+  content: ""; position: absolute;
+}
+.splitter-v::before { inset: 0 -3px; }
+.splitter-h::before { inset: -3px 0; }
+.splitter:hover, .splitter.dragging { background: var(--accent); }
+.splitter:hover { border-color: var(--accent-strong); }
+.splitter::after {
+  /* Subtle visual grip marker */
+  content: "";
+  position: absolute;
+  background: var(--text-faint);
+  opacity: 0.4;
+  border-radius: 2px;
+}
+.splitter-v::after { top: 50%; left: 2px; width: 2px; height: 24px; transform: translateY(-50%); }
+.splitter-h::after { left: 50%; top: 2px; height: 2px; width: 24px; transform: translateX(-50%); }
+.splitter:hover::after, .splitter.dragging::after { background: #fff; opacity: 0.8; }
+body.dragging { cursor: col-resize; user-select: none; }
+body.dragging.dragging-row { cursor: row-resize; }
+
+/* Panel header — sticky, with subtle surface so it doesn't blend with content */
+h2 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---------- left: file tree ---------- */
+#filePane { padding: 14px 12px; overflow: auto; }
+.rootPath {
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(212, 160, 67, 0.25);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  margin: 0 0 12px;
+  font-family: "SF Mono", "Consolas", monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#fileTree ul {
+  list-style: none;
+  padding-left: 14px;
+  margin: 0;
+  border-left: 1px dotted var(--line);
+}
+#fileTree > ul { padding-left: 0; border-left: none; }
+#fileTree li {
+  padding: 4px 8px;
+  margin: 1px 0;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.4;
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+#fileTree li.dir { color: var(--text-muted); cursor: default; padding-left: 4px; }
+#fileTree li.dir > span.dirname {
+  cursor: pointer;
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+#fileTree li.dir > span.dirname:hover { color: var(--accent); background: var(--bg-3); }
+#fileTree li.file:hover { background: var(--bg-3); color: var(--text); }
+#fileTree li.file.active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+/* ---------- centre: board + nav ---------- */
+#boardPane {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 16px 14px;
+  overflow: hidden;
+  width: 568px;
+  background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+}
+#fileTitle {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: normal; text-transform: none;
+  margin: 0 0 10px;
+  padding: 0 0 8px;
+  align-self: stretch;
+  text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--line);
+}
+#board {
+  margin: 4px 0 12px;
+  flex: 0 0 auto;
+  display: block;
+  border-radius: var(--radius);
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.5),
+    0 8px 24px rgba(0,0,0,0.3);
+}
+/* Left-aligned flex row: buttons first, moveInfo follows. moveInfo growing
+   never pushes the buttons because they're anchored at the left. */
+#navBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+#navBar button {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-family: monospace; font-size: 15px;
+  min-width: 44px;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+#navBar button:hover:not(:disabled) {
+  background: var(--bg-4);
+  border-color: var(--line-strong);
+}
+#navBar button:active:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--accent);
+}
+#navBar button:disabled { opacity: 0.25; cursor: not-allowed; }
+#moveInfo {
+  margin-left: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
+  min-width: 0;
+  flex: 1 1 auto;     /* take remaining width — ellipsis truncates if too long */
+}
+#moveInfo:not(:empty)::before {
+  content: "▸";
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+/* ---------- right: 棋譜 | (注解 / 本步可選) — flex with splitters ---------- */
+.rpSection {
+  padding: 12px 14px;
+  overflow: auto;
+  min-height: 0; min-width: 0;
+  background: var(--bg-1);
+}
+.rpMoves     { flex: 0 0 360px; min-width: 200px; }   /* resizable via splitter */
+.rpRightCol  { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; overflow: hidden; }
+.rpAnnote    {
+  flex: 0 0 280px;          /* resizable height via splitter */
+  min-height: 100px;
+  display: flex; flex-direction: column;
+}
+.rpVars      { flex: 1 1 0; min-height: 80px; background: var(--bg-2); }
+/* When current ply has no siblings, hide vars + its splitter; annote takes all */
+/* When no variations at current ply: hide vars + its splitter, let annote
+   fill. !important needed to override the inline flex-basis the user may
+   have set by dragging the annote splitter. */
+#rightPane.noVars .rpAnnote                  { flex: 1 1 auto !important; }
+#rightPane.noVars .splitter-h,
+#rightPane.noVars .rpVars                    { display: none; }
+
+/* 棋譜 panel header */
+.moveListHeader { margin-bottom: 10px; }
+.moveListHeader h2 { margin: 0 0 4px; border-bottom: none; padding-bottom: 0; }
+.srcPath {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: "SF Mono", "Consolas", monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 棋譜 list */
+#moveList {
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+.plyLine {
+  display: flex; align-items: baseline; cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  user-select: none;
+  white-space: nowrap;
+  border-left: 2px solid transparent;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+.plyLine:hover { background: var(--bg-3); }
+.plyLine.active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+.plyLine .plyNum {
+  color: var(--text-faint);
+  min-width: 38px;
+  font-variant-numeric: tabular-nums;
+  text-align: right; padding-right: 10px;
+  font-family: "SF Mono", "Consolas", monospace;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+.plyLine.active .plyNum { color: var(--accent); }
+.plyLine .plyText {
+  flex: 1 1 auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.plyLine.black { color: var(--text-muted); }
+.plyLine.black.active { color: var(--accent-strong); }
+.plyMark {
+  margin-left: 8px;
+  font-size: 11px;
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.plyLine .plyMark { color: var(--red); }
+.plyLine.active .plyMark { color: var(--accent); opacity: 1; }
+.initLine {
+  color: var(--text-faint);
+  font-style: italic;
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+}
+
+/* 注解 */
+.rpAnnote h2 { flex: 0 0 auto; }
+#annoteBox {
+  flex: 1 1 auto;
+  width: 100%;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
+  font-size: 16px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  resize: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+#annoteBox:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-3);
+}
+#annoteBox:disabled {
+  color: var(--text-faint);
+  background: var(--bg-1);
+  border-color: var(--line);
+}
+#annoteBox::placeholder { color: var(--text-faint); font-style: italic; }
+
+/* 本步的所有走法 */
+#varPicker {
+  font-size: 15px;
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
+}
+.varOpt {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 5px 10px;
+  margin: 2px 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  border-left: 2px solid transparent;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.varOpt:hover { background: var(--bg-3); }
+.varOpt .varLetter {
+  color: var(--text-faint);
+  font-weight: 600;
+  min-width: 22px;
+  flex: 0 0 auto;
+  font-family: "SF Mono", "Consolas", monospace;
+  font-size: 13px;
+}
+.varOpt.active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--accent-strong);
+}
+.varOpt.active .varLetter { color: var(--accent); }
+.varOpt .varArrow {
+  margin-left: auto;
+  color: var(--accent);
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+.varOpt:not(.active) .varArrow { visibility: hidden; }
+
+/* ---------- focus rings (keyboard accessibility) ---------- */
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
