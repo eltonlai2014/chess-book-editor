@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.vscode/
+.idea/
+*.log
+
+# Round-trip test temp files
+_tmp_*.xqf
+*_tmp.xqf
+
+# Don't commit local user edits unless explicitly staged
+output/
