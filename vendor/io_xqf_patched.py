@@ -68,7 +68,17 @@ class PatchedXQFWriter(XQFWriter):
             encoded = text.encode(self.annote_encoding)
         except (UnicodeEncodeError, LookupError):
             encoded = text.encode(self.annote_encoding, errors="ignore")
+        # Truncate at max_length-1 bytes — but back off if the cut lands
+        # mid-multi-byte-char. cchess's reader uses strict decode (no
+        # errors='ignore'), so a half-char at the end discards the entire
+        # field. Back-off is at most ~3 iters (GB18030 chars are 1/2/4 bytes).
         length = min(len(encoded), max_length - 1)
+        while length > 0:
+            try:
+                encoded[:length].decode(self.annote_encoding)
+                break
+            except UnicodeDecodeError:
+                length -= 1
         self.header[offset] = length
         self._set_bytes(offset + 1, encoded[:length])
 
@@ -121,15 +131,35 @@ class PatchedXQFWriter(XQFWriter):
                 self._write_siblings(fp, children)
 
     def save(self, file_name):
-        """Serialize Book → XQF (v0x0A unencrypted)."""
+        """Serialize Book → XQF (v0x0A unencrypted).
+
+        The init-info "synthetic move" precedes the move tree and carries
+        the book-level annote (譜首引言 — chapter intros, opening overviews,
+        etc.). Original PatchedXQFWriter always wrote annote_len=0 here,
+        silently dropping these. CBR libraries like 《中国象棋中级教程》
+        rely on this field for chapter narrative.
+        """
+        init_annote = getattr(self.book, "annote", "") or ""
+        if init_annote:
+            try:
+                init_annote_bytes = init_annote.encode(self.annote_encoding)
+            except (UnicodeEncodeError, LookupError):
+                init_annote_bytes = init_annote.encode(
+                    self.annote_encoding, errors="ignore"
+                )
+        else:
+            init_annote_bytes = b""
+        init_len_prefix = struct.pack("<I", len(init_annote_bytes))
+
         with open(file_name, "wb") as f:
             f.write(self.header)
             first = self.book.first_move
             if first is None:
-                f.write(b"\x18\x20\x00\xff\x00\x00\x00\x00")
+                # No real moves — synthetic step with no next, no var.
+                f.write(b"\x18\x20\x00\xff" + init_len_prefix + init_annote_bytes)
                 return
-            # init-info sentinel: 4 bytes step_info + 4 bytes annote_len (=0)
-            f.write(b"\x18\x20\xf0\xff\x00\x00\x00\x00")
+            # Has children — synthetic step with has_next flag.
+            f.write(b"\x18\x20\xf0\xff" + init_len_prefix + init_annote_bytes)
             # First moves (and any first-move alternatives) live in
             # first.variations_all; reader treats them as siblings under the
             # implicit root parent.
