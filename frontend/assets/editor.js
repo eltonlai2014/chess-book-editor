@@ -1307,6 +1307,14 @@ function applyBoardTheme(name) {
   savePreference("boardTheme", name);
 }
 
+function applyBoardPerspective(name) {
+  const isRed = name !== "black";
+  const checkbox = document.getElementById("redPerspective");
+  if (checkbox) checkbox.checked = isRed;
+  if (EDITOR.data) refreshActive();
+  savePreference("boardPerspective", isRed ? "red" : "black");
+}
+
 function applyUiTheme(name) {
   const theme = UI_THEMES[name] ? name : "ember";
   document.documentElement.dataset.uiTheme = theme;
@@ -1416,6 +1424,8 @@ reorderEvalRows();
 ensureBoardThemeOptions();
 const themeSel = $("#boardThemeSel");
 themeSel.addEventListener("change", () => applyBoardTheme(themeSel.value));
+const boardViewToggle = $("#boardViewToggle");
+if (boardViewToggle) boardViewToggle.addEventListener("change", () => applyBoardPerspective(boardViewToggle.checked ? "black" : "red"));
 ensureUiThemePicker();
 const uiThemeSel = $("#uiThemeSel");
 
@@ -1517,6 +1527,9 @@ async function tryAutoLoadLastFile() {
     themeSel.value = savedTheme;
     document.documentElement.dataset.board = savedTheme;
   }
+  const savedBoardPerspective = PREFS.boardPerspective === "black" ? "black" : "red";
+  if (boardViewToggle) boardViewToggle.checked = savedBoardPerspective === "black";
+  applyBoardPerspective(savedBoardPerspective);
   const savedUiTheme = PREFS.uiTheme;
   const initialUiTheme = UI_THEMES[savedUiTheme] ? savedUiTheme : "ember";
   if (uiThemeSel) uiThemeSel.value = initialUiTheme;

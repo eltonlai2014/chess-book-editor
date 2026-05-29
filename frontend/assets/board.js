@@ -1002,7 +1002,10 @@ const VAR_PICKER = {
 const ALTS_BY_FEN = {};
 const MOVE_LOOKUP = {};
 
-function isRedPerspective() { return REDP_BOX ? REDP_BOX.checked : true; }
+function isRedPerspective() {
+  const box = REDP_BOX || document.getElementById("redPerspective");
+  return box ? box.checked : true;
+}
 
 function stopDemo() {
   if (STATE.demoTimer) {

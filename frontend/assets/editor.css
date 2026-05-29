@@ -241,6 +241,64 @@ header h1::before {
 }
 .boardThemePicker select:hover { border-color: var(--accent); }
 
+.viewToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.viewToggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.viewToggleTrack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 3px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--bg-3), var(--bg-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.viewToggle:hover .viewToggleTrack { border-color: var(--accent); }
+.viewToggleText {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  min-width: 24px;
+  text-align: center;
+  transition: color 120ms ease;
+}
+.viewToggleThumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: radial-gradient(circle at 34% 34%, rgba(255,244,220,0.52), rgba(255,244,220,0.10) 42%, transparent 62%), linear-gradient(180deg, #dbc07c, #9d7940);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.24), inset 0 1px 1px rgba(255,255,255,0.12);
+  transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.viewToggle input:not(:checked) + .viewToggleTrack .viewToggleText:first-child {
+  color: var(--accent-strong);
+}
+.viewToggle input:checked + .viewToggleTrack .viewToggleText:last-child {
+  color: #b9ddf0;
+}
+.viewToggle input:checked + .viewToggleTrack .viewToggleThumb {
+  border-color: rgba(255,255,255,0.08);
+  background: radial-gradient(circle at 34% 34%, rgba(234,244,248,0.42), rgba(234,244,248,0.10) 42%, transparent 62%), linear-gradient(180deg, #8aa3b1, #54636f);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.26), inset 0 1px 1px rgba(255,255,255,0.10);
+}
+.viewToggle input:focus-visible + .viewToggleTrack {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 #status {
   font-size: 12px;
   color: var(--text-muted);
