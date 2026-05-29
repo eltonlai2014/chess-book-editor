@@ -341,6 +341,38 @@ const BOARD_STYLES = {
     lastMove: { kind: "ring", color: "#d4a043" },
     suggest:  { kind: "ring", color: "#e26054" },
   },
+  copperwood: {
+    label: "copperwood",
+    font: "wenkai",
+    background: { kind: "wood" },
+    grid:   { stroke: "#5a3318", width: 1, outer: 3 },
+    coord:  { color: "#6a4325", font: "serif" },
+    river:  { color: "#714323", style: "italic" },
+    red:    { fill: "#f6e2cb", border: "#8e3d20", innerRing: "#b85b33", text: "#b14b29",
+              grad: { from: "#fff2df", to: "#deb187" } },
+    black:  { fill: "#2d221c", border: "#120d0a", innerRing: "#8b776a", text: "#f4eadf",
+              grad: { from: "#4a3a31", to: "#17110d" } },
+    piece:  { shadow: "soft", innerRing: true, gradient: true,
+              specular: false, engrave: false, rim: false },
+    lastMove: { kind: "box", color: "#a95a2a" },
+    suggest:  { kind: "ring", color: "#cf6a32" },
+  },
+  celadon: {
+    label: "celadon",
+    font: "wenkai",
+    background: { kind: "stone", color: "#c8d2ca", grain: "#6f8177" },
+    grid:   { stroke: "#55685f", width: 1.0, outer: 1.8 },
+    coord:  { color: "#61756c", font: "serif" },
+    river:  { color: "#5c7068", style: "normal" },
+    red:    { fill: "#efe4d7", border: "#87534d", innerRing: null, text: "#b0554a",
+              grad: { from: "#f9f1e8", to: "#d8c7b8" } },
+    black:  { fill: "#2f3a36", border: "#141917", innerRing: null, text: "#eef2ef",
+              grad: { from: "#4d5c56", to: "#1f2623" } },
+    piece:  { shadow: "strong", innerRing: false, gradient: true,
+              specular: false, engrave: true, rim: true },
+    lastMove: { kind: "ring", color: "#6b8a7e" },
+    suggest:  { kind: "ring", color: "#bf6253" },
+  },
 };
 
 function currentBoardStyle() {
@@ -1597,4 +1629,9 @@ function initGamePage(GAME) {
   }
 }
 
+window.drawBoard = drawBoard;
+window.parseFen = parseFen;
+window.applyIccs = applyIccs;
+window.iccsToCoord = iccsToCoord;
+window.ensurePieceFontLoaded = ensurePieceFontLoaded;
 window.initGamePage = initGamePage;

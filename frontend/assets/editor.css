@@ -42,6 +42,108 @@
   --radius-lg: 8px;
 }
 
+html[data-ui-theme="ember"] {
+  --bg-0: #15130f;
+  --bg-1: #1d1a16;
+  --bg-2: #25211c;
+  --bg-3: #2f2a23;
+  --bg-4: #3a342c;
+  --line: #3a342c;
+  --line-strong: #4a4237;
+  --text: #ebe3d4;
+  --text-muted: #a8a094;
+  --text-faint: #6e675c;
+  --accent: #d4a043;
+  --accent-strong: #e8b75c;
+  --accent-soft: rgba(212, 160, 67, 0.15);
+  --info: #5fa8d6;
+}
+
+html[data-ui-theme="jade"] {
+  --bg-0: #101715;
+  --bg-1: #16201d;
+  --bg-2: #1c2925;
+  --bg-3: #24342f;
+  --bg-4: #30453f;
+  --line: #2d433d;
+  --line-strong: #3c5850;
+  --text: #e3eee9;
+  --text-muted: #a2b7af;
+  --text-faint: #6f857c;
+  --accent: #6bb89c;
+  --accent-strong: #8ad4b7;
+  --accent-soft: rgba(107, 184, 156, 0.16);
+  --info: #7fc4d6;
+}
+
+html[data-ui-theme="ink"] {
+  --bg-0: #0f1218;
+  --bg-1: #151b23;
+  --bg-2: #1c2430;
+  --bg-3: #253041;
+  --bg-4: #304058;
+  --line: #2b374a;
+  --line-strong: #3c4d68;
+  --text: #e4eaf2;
+  --text-muted: #a5b0c0;
+  --text-faint: #738196;
+  --accent: #7aa2f7;
+  --accent-strong: #9ab8ff;
+  --accent-soft: rgba(122, 162, 247, 0.16);
+  --info: #8bd5ca;
+}
+
+html[data-ui-theme="plum"] {
+  --bg-0: #171118;
+  --bg-1: #211826;
+  --bg-2: #2a2031;
+  --bg-3: #362942;
+  --bg-4: #463356;
+  --line: #43304f;
+  --line-strong: #59406a;
+  --text: #eee4f2;
+  --text-muted: #b8a6c0;
+  --text-faint: #83728c;
+  --accent: #c38cff;
+  --accent-strong: #d7aefe;
+  --accent-soft: rgba(195, 140, 255, 0.16);
+  --info: #8ecae6;
+}
+
+html[data-ui-theme="copper"] {
+  --bg-0: #18120f;
+  --bg-1: #241a16;
+  --bg-2: #2f221d;
+  --bg-3: #3b2c25;
+  --bg-4: #4a372e;
+  --line: #4a342a;
+  --line-strong: #64473a;
+  --text: #f0e2d6;
+  --text-muted: #b9a397;
+  --text-faint: #8a7468;
+  --accent: #c47a4d;
+  --accent-strong: #dd9362;
+  --accent-soft: rgba(196, 122, 77, 0.16);
+  --info: #9fc0d1;
+}
+
+html[data-ui-theme="pineash"] {
+  --bg-0: #121416;
+  --bg-1: #1a1d20;
+  --bg-2: #23282c;
+  --bg-3: #2d3439;
+  --bg-4: #394248;
+  --line: #32393f;
+  --line-strong: #444e56;
+  --text: #e7e6e2;
+  --text-muted: #afb1ad;
+  --text-faint: #7a807b;
+  --accent: #aeb49e;
+  --accent-strong: #c7ccb8;
+  --accent-soft: rgba(174, 180, 158, 0.14);
+  --info: #8fb2bf;
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -163,16 +265,27 @@ main {
   height: calc(100vh - 52px);
   min-width: 0;
   overflow: hidden;
+  gap: 10px;
+  padding: 10px;
+  background:
+    radial-gradient(circle at top center, rgba(212,160,67,0.05), transparent 38%),
+    linear-gradient(180deg, #191611 0%, var(--bg-1) 100%);
 }
-#filePane  { flex: 0 0 240px; min-width: 140px; }
+#filePane  { flex: 0 0 250px; min-width: 180px; }
 #boardPane { flex: 0 0 568px; }
-#rightPane { flex: 1 1 0; min-width: 280px; display: flex; flex-direction: row; overflow: hidden; }
-aside, section { overflow: hidden; background: var(--bg-1); }
+#rightPane { flex: 1 1 0; min-width: 320px; display: flex; flex-direction: row; overflow: hidden; gap: 10px; }
+aside, section {
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(47,42,35,0.55) 0%, rgba(29,26,22,0.92) 100%);
+  border: 1px solid rgba(232, 183, 92, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02);
+}
 
 /* ---------- splitters ---------- */
 .splitter {
   flex: 0 0 6px;
-  background: var(--bg-2);
+  background: transparent;
   position: relative;
   z-index: 1;
   transition: background 120ms ease;
@@ -216,19 +329,20 @@ h2 {
 }
 
 /* ---------- left: file tree ---------- */
-#filePane { padding: 14px 12px; overflow: auto; }
+#filePane { padding: 0; overflow: auto; }
 .rootPath {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 11px;
   color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid rgba(212, 160, 67, 0.25);
-  padding: 4px 4px 4px 8px;
-  border-radius: var(--radius-sm);
-  margin: 0 0 12px;
+  background: linear-gradient(180deg, rgba(212,160,67,0.12), rgba(212,160,67,0.06));
+  border: 1px solid rgba(212, 160, 67, 0.22);
+  padding: 8px 8px 8px 10px;
+  border-radius: 8px;
+  margin: 0 12px 12px;
   font-family: "SF Mono", "Consolas", monospace;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 .rootPath #rootPathDisplay {
   flex: 1 1 auto;
@@ -278,76 +392,88 @@ h2 {
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-#fileTree li.dir > span.dirname:hover { color: var(--accent); background: var(--bg-3); }
-#fileTree li.file:hover { background: var(--bg-3); color: var(--text); }
+#fileTree li.dir > span.dirname:hover {
+  color: var(--accent);
+  background: linear-gradient(90deg, rgba(212,160,67,0.12), rgba(212,160,67,0.04));
+}
+#fileTree li.file:hover {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  color: var(--text);
+}
 #fileTree li.file.active {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border-left-color: var(--accent);
-  font-weight: 500;
+  background: linear-gradient(90deg, rgba(212,160,67,0.24), rgba(212,160,67,0.10));
+  color: #fff2d8;
+  border-left-color: var(--accent-strong);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(232,183,92,0.16);
 }
 
 /* ---------- centre: board + nav ---------- */
 #boardPane {
   display: flex; flex-direction: column; align-items: center;
-  padding: 16px 14px;
+  padding: 12px 12px 14px;
   overflow: hidden;
   width: 568px;
   background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
 #fileTitle {
   color: var(--accent-strong);
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: 0.02em; text-transform: none;
-  margin: 0 0 10px;
-  padding: 0 0 8px;
+  margin: 0 0 12px;
+  padding: 2px 10px 10px;
   align-self: stretch;
   text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex: 0 0 auto;
-  border-bottom: 2px solid var(--line-strong);
+  border-bottom: 1px solid rgba(232, 183, 92, 0.12);
+  text-shadow: 0 0 18px rgba(232,183,92,0.10);
 }
 #board {
   margin: 4px 0 12px;
   flex: 0 0 auto;
   display: block;
-  border-radius: var(--radius);
+  border-radius: 10px;
   box-shadow:
     0 2px 6px rgba(0,0,0,0.5),
-    0 8px 24px rgba(0,0,0,0.3);
+    0 20px 30px rgba(0,0,0,0.28);
 }
 /* Left-aligned flex row: buttons first, moveInfo follows. moveInfo growing
    never pushes the buttons because they're anchored at the left. */
 #navBar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   flex: 0 0 auto;
-  padding: 4px 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(58,52,44,0.40), rgba(37,33,28,0.88));
+  border: 1px solid rgba(232, 183, 92, 0.12);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 #navBar button {
-  background: transparent;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
   color: var(--text);
-  border: 1px solid transparent;
+  border: 1px solid rgba(232,183,92,0.10);
   padding: 6px 12px;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   font-family: monospace; font-size: 15px;
   min-width: 44px;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 #navBar button:hover:not(:disabled) {
-  background: var(--bg-4);
-  border-color: var(--line-strong);
+  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
+  border-color: rgba(232,183,92,0.24);
+  color: var(--accent-strong);
+  transform: translateY(-1px);
 }
 #navBar button:active:not(:disabled) {
-  background: var(--bg-3);
+  background: rgba(212,160,67,0.10);
   color: var(--accent);
+  transform: translateY(0);
 }
 #navBar button:disabled { opacity: 0.25; cursor: not-allowed; }
 
@@ -358,6 +484,10 @@ h2.panelHead {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin: 0 0 12px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(232, 183, 92, 0.12);
+  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
 }
 h2.panelHead > span { flex: 1 1 auto; }
 .iconBtn {
@@ -393,11 +523,12 @@ h2.panelHead > span { flex: 1 1 auto; }
 #moveInfo {
   margin-left: 12px;
   font-size: 13px;
-  color: var(--text-muted);
+  color: #bfb5a2;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
   min-width: 0;
   flex: 1 1 auto;     /* take remaining width — ellipsis truncates if too long */
+  letter-spacing: 0.02em;
 }
 #moveInfo:not(:empty)::before {
   content: "▸";
@@ -410,7 +541,12 @@ h2.panelHead > span { flex: 1 1 auto; }
   padding: 12px 14px;
   overflow: auto;
   min-height: 0; min-width: 0;
-  background: var(--bg-1);
+  background: linear-gradient(180deg, rgba(44,38,31,0.94), rgba(27,24,20,0.98));
+  border: 1px solid rgba(232, 183, 92, 0.18);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    0 8px 20px rgba(0,0,0,0.14);
 }
 .rpMoves     { flex: 0 0 360px; min-width: 200px; }   /* resizable via splitter */
 .rpRightCol  { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; overflow: hidden; }
@@ -427,6 +563,10 @@ h2.panelHead > span { flex: 1 1 auto; }
 #rightPane.noVars .rpAnnote                  { flex: 1 1 auto !important; }
 #rightPane.noVars .splitter-h,
 #rightPane.noVars .rpVars                    { display: none; }
+
+#rpMoves, .rpRightCol, .rpAnnote, .rpVars {
+  background: transparent;
+}
 
 /* 棋譜 panel header */
 .moveListHeader { margin-bottom: 10px; }
@@ -457,10 +597,11 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .plyLine:hover { background: var(--bg-3); }
 .plyLine.active {
-  background: var(--accent-soft);
-  border-left-color: var(--accent);
-  color: var(--accent-strong);
+  background: linear-gradient(90deg, rgba(212,160,67,0.22), rgba(212,160,67,0.08));
+  border-left-color: var(--accent-strong);
+  color: #fff4de;
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(232,183,92,0.16);
 }
 .plyLine .plyNum {
   color: var(--text-faint);
@@ -482,11 +623,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   margin-left: 6px;
   font-size: 10px;
   flex: 0 0 auto;
-  background: transparent;
-  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(232,183,92,0.18);
   color: var(--text-muted);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+  border-radius: 999px;
   line-height: 1.4;
 }
 .plyLine.active .plyMark {
@@ -522,21 +663,25 @@ h2.panelHead > span { flex: 1 1 auto; }
 #annoteBox {
   flex: 1 1 auto;
   width: 100%;
-  background: var(--bg-2);
+  background: linear-gradient(180deg, rgba(30,27,22,0.96), rgba(24,21,18,0.98));
   color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid rgba(232,183,92,0.14);
+  border-radius: 10px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
   font-size: 16px;
-  line-height: 1.6;
-  padding: 10px 12px;
+  line-height: 1.7;
+  padding: 12px 14px;
   resize: none;
-  transition: border-color 120ms ease, background 120ms ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
 #annoteBox:focus {
   outline: none;
-  border-color: var(--accent);
-  background: var(--bg-3);
+  border-color: rgba(232,183,92,0.40);
+  background: linear-gradient(180deg, rgba(42,37,30,0.98), rgba(27,24,20,0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 0 0 3px rgba(212,160,67,0.10);
 }
 #annoteBox:disabled {
   color: var(--text-faint);
@@ -550,20 +695,23 @@ h2.panelHead > span { flex: 1 1 auto; }
 .evalDbRow {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 3px 4px 3px 8px;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 8px 7px 11px;
   font-size: 11px;
   font-family: "SF Mono", "Consolas", monospace;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid rgba(212, 160, 67, 0.25);
-  border-radius: var(--radius-sm);
+  color: var(--accent-strong);
+  background: linear-gradient(180deg, rgba(212,160,67,0.20), rgba(212,160,67,0.10));
+  border: 1px solid rgba(212, 160, 67, 0.30);
+  border-radius: 10px;
   /* boardPane uses align-items:center on its column flex, so without
      align-self:stretch this row takes its natural content width and
      overflows the 568px pane — the pick button gets clipped off-screen. */
   align-self: stretch;
   min-width: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 8px 18px rgba(0,0,0,0.12);
 }
 .evalDbRow #evalDbPath {
   flex: 1 1 0;
@@ -587,28 +735,41 @@ h2.panelHead > span { flex: 1 1 auto; }
    below the navBar, single line, scroll-on-overflow so long cdb suggestions
    don't break layout. */
 #evalLine {
-  margin-top: 6px;
-  padding: 6px 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(37,33,28,0.96), rgba(32,28,23,0.98));
+  border: 1px solid rgba(232, 183, 92, 0.12);
+  border-radius: 10px;
   font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-faint);
+  line-height: 1.45;
+  color: #c7bda9;
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 16px;
   align-items: baseline;
-  min-height: 28px;
+  justify-content: flex-start;
+  min-height: 38px;
+  width: 100%;
+  align-self: stretch;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 #evalLine .evalNote { font-style: italic; }
 #evalLine .evalCell { white-space: nowrap; }
 #evalLine .evalLabel {
-  color: var(--text-faint);
-  margin-right: 2px;
+  color: #9f957f;
+  margin-right: 4px;
+  letter-spacing: 0.03em;
 }
-#evalLine .evalScore { color: var(--text); font-variant-numeric: tabular-nums; }
-#evalLine .evalBest .evalMove { color: var(--accent-strong); }
+#evalLine .evalScore {
+  color: #eadcc0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+#evalLine .evalBest .evalMove {
+  color: #e8bb60;
+  font-weight: 600;
+}
 #evalLine .evalCdb { color: var(--text); }
 
 /* 本步的所有走法 */
@@ -636,9 +797,10 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 13px;
 }
 .varOpt.active {
-  background: var(--accent-soft);
-  border-left-color: var(--accent);
-  color: var(--accent-strong);
+  background: linear-gradient(90deg, rgba(212,160,67,0.22), rgba(212,160,67,0.08));
+  border-left-color: var(--accent-strong);
+  color: #fff1d8;
+  box-shadow: inset 0 0 0 1px rgba(232,183,92,0.16);
 }
 .varOpt.active .varLetter { color: var(--accent); }
 .varOpt .varArrow {
@@ -653,12 +815,12 @@ h2.panelHead > span { flex: 1 1 auto; }
    Always rendered on non-main-line rows, hidden on the main line itself. */
 .varOpt .varPromote {
   margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(232,183,92,0.18);
   color: var(--text-muted);
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  border-radius: 999px;
   cursor: pointer;
   flex: 0 0 auto;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;

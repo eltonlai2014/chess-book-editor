@@ -35,6 +35,17 @@ const EDITOR_THEME_COLORS = {
   traditional: { select: "#e67e22", target: "#16a085" },  // orange / teal on warm wood (teal pops harder than the original steel-blue against mid-tone wood)
   stone:       { select: "#c0392b", target: "#3a6b3a" },  // cinnabar / pine green on cream stone
   gilded:      { select: "#e8b75c", target: "#5fa8d6" },  // brighter gold / cool blue on dark slate
+  copperwood:  { select: "#cf6a32", target: "#7aa6a1" },
+  celadon:     { select: "#c75b4a", target: "#5b8f7a" },
+};
+
+const UI_THEMES = {
+  ember: "琥珀夜",
+  jade: "青玉霧",
+  ink: "墨夜藍",
+  plum: "梅影紫",
+  copper: "赤銅棕",
+  pineash: "松煙灰",
 };
 function editorColors() {
   const t = document.documentElement.dataset.board || "traditional";
@@ -63,6 +74,36 @@ async function savePreference(key, value) {
 }
 
 const $ = (sel) => document.querySelector(sel);
+
+function ensureBoardThemeOptions() {
+  const select = document.getElementById("boardThemeSel");
+  if (!select) return;
+  const labels = {
+    traditional: "傳統手繪",
+    stone: "雅石回紋",
+    gilded: "鎏金歲月",
+    copperwood: "赤銅古木",
+    celadon: "青瓷素雅",
+  };
+  for (const [value, text] of Object.entries(labels)) {
+    let option = select.querySelector(`option[value="${value}"]`);
+    if (!option) {
+      option = document.createElement("option");
+      option.value = value;
+      select.appendChild(option);
+    }
+    option.textContent = text;
+  }
+}
+
+function reorderEvalRows() {
+  const evalLine = $("#evalLine");
+  const evalDbRow = document.querySelector(".evalDbRow");
+  if (!evalLine || !evalDbRow) return;
+  const parent = evalLine.parentElement;
+  if (!parent || evalLine.previousElementSibling === evalDbRow) return;
+  parent.insertBefore(evalLine, evalDbRow);
+}
 
 function setStatus(text, cls) {
   const s = $("#status");
@@ -1253,6 +1294,37 @@ function applyBoardTheme(name) {
   savePreference("boardTheme", name);
 }
 
+function applyUiTheme(name) {
+  const theme = UI_THEMES[name] ? name : "ember";
+  document.documentElement.dataset.uiTheme = theme;
+  savePreference("uiTheme", theme);
+}
+
+function ensureUiThemePicker() {
+  const actions = document.querySelector("header .actions");
+  if (!actions || document.getElementById("uiThemeSel")) return;
+
+  const label = document.createElement("label");
+  label.className = "boardThemePicker uiThemePicker";
+  label.append("介面");
+
+  const select = document.createElement("select");
+  select.id = "uiThemeSel";
+  for (const [value, text] of Object.entries(UI_THEMES)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = text;
+    select.appendChild(option);
+  }
+  label.appendChild(select);
+
+  const boardPicker = document.getElementById("boardThemeSel")?.closest("label");
+  if (boardPicker && boardPicker.nextSibling) actions.insertBefore(label, boardPicker.nextSibling);
+  else actions.prepend(label);
+
+  select.addEventListener("change", () => applyUiTheme(select.value));
+}
+
 // ---------- keyboard ----------
 
 window.addEventListener("keydown", (e) => {
@@ -1325,10 +1397,14 @@ $("#rootPickBtn").onclick = pickRoot;
 
 // Eval DB picker — opens native file dialog (positions.db / .sqlite).
 $("#evalDbPickBtn").onclick = pickEvalDb;
+reorderEvalRows();
 
 // Board theme picker. Initial value applied in boot() after PREFS load.
+ensureBoardThemeOptions();
 const themeSel = $("#boardThemeSel");
 themeSel.addEventListener("change", () => applyBoardTheme(themeSel.value));
+ensureUiThemePicker();
+const uiThemeSel = $("#uiThemeSel");
 
 // Ensure board.js's WenKai TC font is registered (Google Fonts injected on
 // demand). All three themes use the "wenkai" font key. Without this the board
@@ -1424,10 +1500,14 @@ async function tryAutoLoadLastFile() {
 (async function boot() {
   await loadPreferences();
   const savedTheme = PREFS.boardTheme;
-  if (savedTheme && ["traditional", "stone", "gilded"].includes(savedTheme)) {
+  if (savedTheme && ["traditional", "stone", "gilded", "copperwood", "celadon"].includes(savedTheme)) {
     themeSel.value = savedTheme;
     document.documentElement.dataset.board = savedTheme;
   }
+  const savedUiTheme = PREFS.uiTheme;
+  const initialUiTheme = UI_THEMES[savedUiTheme] ? savedUiTheme : "ember";
+  if (uiThemeSel) uiThemeSel.value = initialUiTheme;
+  document.documentElement.dataset.uiTheme = initialUiTheme;
   setupSplitters();
   // Parallelisable on boot — eval info is independent of the XQF tree fetch
   // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.
