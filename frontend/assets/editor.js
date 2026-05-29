@@ -16,7 +16,25 @@ const EDITOR = {
   currentPath: null,
   data: null,
   activePath: [],     // index path into roots[][.children]... — [] = init position
+  selectedSquare: null,  // "h2" when user has selected a from-square via click
+  legalTargets: [],   // list of dest iccs ("e2",...) for currently selected piece
 };
+
+// Per-theme editor colours for selection halo + legal-destination markers.
+// Each theme has its own palette in board.js; we pick contrasting accents:
+//   select : ring drawn around the selected own-piece (vivid, not gold so it
+//            doesn't clash with the lastMove gold rings in stone/gilded)
+//   target : dot/ring shown on each legal destination square
+// Falls back to traditional's palette if the active theme key is missing.
+const EDITOR_THEME_COLORS = {
+  traditional: { select: "#e67e22", target: "#16a085" },  // orange / teal on warm wood (teal pops harder than the original steel-blue against mid-tone wood)
+  stone:       { select: "#c0392b", target: "#3a6b3a" },  // cinnabar / pine green on cream stone
+  gilded:      { select: "#e8b75c", target: "#5fa8d6" },  // brighter gold / cool blue on dark slate
+};
+function editorColors() {
+  const t = document.documentElement.dataset.board || "traditional";
+  return EDITOR_THEME_COLORS[t] || EDITOR_THEME_COLORS.traditional;
+}
 
 // Server-persisted preferences (splitter sizes, board theme, ...).
 // Loaded once on boot; mutations posted back to /api/preferences immediately.
@@ -82,14 +100,388 @@ function fenAndLastIccsFor(path) {
   return { fen, lastIccs };
 }
 
+// ---------- click-to-add-move ----------
+// Two-step interaction:
+//   1. Click an own-side piece → that square becomes EDITOR.selectedSquare
+//   2. Click any other square → POST /api/xqf/move-info to validate +
+//      compute notation; on success, insert a new node and navigate to it
+//
+// Implementation: drawBoard() in board.js wipes the SVG on every redraw, so
+// after each redraw we install a transparent 90-cell <g class="clickLayer">
+// on top to catch pointer events. Selection halo is drawn in the same pass.
+//
+// SVG_NS, screenX, screenY, parseFen are all declared at module-top in
+// board.js and reused here via shared classic-script scope.
+
+function squareIccs(col, row) {
+  // ICCS: cols a-i = 0-8, rows 0-9 as digits.
+  return String.fromCharCode(97 + col) + row;
+}
+function parseSquare(sq) {
+  return { col: sq.charCodeAt(0) - 97, row: parseInt(sq[1], 10) };
+}
+function currentFen() {
+  if (!EDITOR.data) return null;
+  return fenAndLastIccsFor(EDITOR.activePath).fen;
+}
+function pieceAt(sq) {
+  // Returns piece char (e.g. "R" / "k") or null if empty / no game loaded.
+  const fen = currentFen();
+  if (!fen) return null;
+  const { rows } = parseFen(fen);   // board.js helper
+  const { col, row } = parseSquare(sq);
+  return rows[row][col] || null;
+}
+function isFriendlyPiece(piece, sideToMove) {
+  if (!piece) return false;
+  const isRed = piece === piece.toUpperCase();
+  return (isRed && sideToMove === "w") || (!isRed && sideToMove === "b");
+}
+
+function installBoardOverlay(svg) {
+  // 90 transparent rects (data-iccs="<square>") + an optional selection halo
+  // + legal-target dots, bundled into <g class="clickLayer"> so it's clear
+  // what redraws own.
+  const colors = editorColors();
+  const layer = document.createElementNS(SVG_NS, "g");
+  layer.setAttribute("class", "clickLayer");
+
+  // Legal-destination markers: ring around enemy occupied square (capture),
+  // small dot on empty square (move). Drawn first so they sit under the
+  // click-rects but above the pieces (after halo is inserted below).
+  const fen = currentFen();
+  const occupiedSet = new Set();
+  if (fen) {
+    const { rows } = parseFen(fen);
+    for (let r = 0; r <= 9; r++) {
+      for (let c = 0; c <= 8; c++) {
+        if (rows[r][c]) occupiedSet.add(squareIccs(c, r));
+      }
+    }
+  }
+  for (const sq of EDITOR.legalTargets) {
+    const { col, row } = parseSquare(sq);
+    const cx = screenX(col), cy = screenY(row);
+    if (occupiedSet.has(sq)) {
+      // Capture: hollow ring around the enemy piece
+      const ring = document.createElementNS(SVG_NS, "circle");
+      ring.setAttribute("cx", cx);
+      ring.setAttribute("cy", cy);
+      ring.setAttribute("r", 29);
+      ring.setAttribute("fill", "none");
+      ring.setAttribute("stroke", colors.target);
+      ring.setAttribute("stroke-width", 2.5);
+      ring.setAttribute("stroke-opacity", 0.85);
+      ring.style.pointerEvents = "none";
+      layer.appendChild(ring);
+    } else {
+      // Empty square: filled dot at the centre
+      const dot = document.createElementNS(SVG_NS, "circle");
+      dot.setAttribute("cx", cx);
+      dot.setAttribute("cy", cy);
+      dot.setAttribute("r", 7);
+      dot.setAttribute("fill", colors.target);
+      dot.setAttribute("fill-opacity", 0.65);
+      dot.style.pointerEvents = "none";
+      layer.appendChild(dot);
+    }
+  }
+
+  // Click-capture rects on top so destination markers don't swallow clicks.
+  for (let r = 0; r <= 9; r++) {
+    for (let c = 0; c <= 8; c++) {
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("x", screenX(c) - 30);
+      rect.setAttribute("y", screenY(r) - 30);
+      rect.setAttribute("width", 60);
+      rect.setAttribute("height", 60);
+      rect.setAttribute("fill", "transparent");
+      rect.setAttribute("data-iccs", squareIccs(c, r));
+      rect.style.cursor = "pointer";
+      layer.appendChild(rect);
+    }
+  }
+
+  // Selection halo on the source square — inserted first so it sits visually
+  // behind everything else in this layer but on top of the piece drawing.
+  if (EDITOR.selectedSquare) {
+    const { col, row } = parseSquare(EDITOR.selectedSquare);
+    const halo = document.createElementNS(SVG_NS, "circle");
+    halo.setAttribute("cx", screenX(col));
+    halo.setAttribute("cy", screenY(row));
+    halo.setAttribute("r", 29);
+    halo.setAttribute("fill", "none");
+    halo.setAttribute("stroke", colors.select);
+    halo.setAttribute("stroke-width", 3);
+    halo.setAttribute("stroke-opacity", 0.95);
+    halo.style.pointerEvents = "none";
+    layer.insertBefore(halo, layer.firstChild);
+  }
+  svg.appendChild(layer);
+}
+
+function onSquareClick(sq) {
+  if (!EDITOR.data) return;
+  const fen = currentFen();
+  if (!fen) return;
+  const sideToMove = parseFen(fen).side;
+  const piece = pieceAt(sq);
+
+  // Same square clicked → deselect
+  if (EDITOR.selectedSquare === sq) {
+    clearSelection();
+    refreshActive();
+    return;
+  }
+  // No selection yet: clicking own piece selects it; anything else is a no-op
+  if (!EDITOR.selectedSquare) {
+    if (isFriendlyPiece(piece, sideToMove)) selectSquare(sq);
+    return;
+  }
+  // Have a selection: clicking another own piece re-selects (handy when user
+  // changes mind); otherwise attempt the move.
+  if (isFriendlyPiece(piece, sideToMove)) {
+    selectSquare(sq);
+    return;
+  }
+  tryAddMove(EDITOR.selectedSquare, sq);
+}
+
+function clearSelection() {
+  EDITOR.selectedSquare = null;
+  EDITOR.legalTargets = [];
+}
+
+// Show selection immediately, then async-fetch legal destinations and redraw
+// when they arrive. Two refreshActive() calls so the halo doesn't visibly lag
+// the click — destination dots can pop in a frame later, which is fine.
+async function selectSquare(sq) {
+  EDITOR.selectedSquare = sq;
+  EDITOR.legalTargets = [];
+  refreshActive();
+  const fen = currentFen();
+  const reqSquare = sq;   // capture for the race-check below
+  try {
+    const r = await fetch("/api/xqf/legal-targets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, from: sq }),
+    });
+    const resp = await r.json();
+    if (resp.error || !resp.targets) return;
+    // Race guard: if the user clicked a different square (or deselected)
+    // while we were awaiting, drop the stale response.
+    if (EDITOR.selectedSquare !== reqSquare) return;
+    EDITOR.legalTargets = resp.targets;
+    refreshActive();
+  } catch (_) { /* network glitch — leave dots empty, click-to-move still works */ }
+}
+
+async function tryAddMove(fromSq, toSq) {
+  const iccs = fromSq + toSq;
+  const fen = currentFen();
+  setStatus("驗證走法…");
+  try {
+    const r = await fetch("/api/xqf/move-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, iccs }),
+    });
+    const resp = await r.json();
+    if (resp.error) { setStatus(resp.error, "err"); return; }
+    const outcome = insertMoveAt(EDITOR.activePath, {
+      iccs,
+      notation: resp.notation,
+      side: resp.side,
+      ply: EDITOR.activePath.length + 1,
+      annote: "",
+      children: [],
+    });
+    if (outcome === "added")        setStatus(`已新增 ${resp.notation}`, "ok");
+    else if (outcome === "existing") setStatus(`已切換至 ${resp.notation}`, "ok");
+    else                             setStatus("");  // cancelled
+  } catch (e) {
+    setStatus("新增失敗：" + e.message, "err");
+  }
+}
+
+// Count moves under `node` (excluding `node` itself). Used by the delete
+// confirmation prompt: any descendants → user must explicitly approve.
+function countDescendants(node) {
+  let n = 0;
+  const stack = [...(node.children || [])];
+  while (stack.length) {
+    const cur = stack.pop();
+    n++;
+    if (cur.children) stack.push(...cur.children);
+  }
+  return n;
+}
+
+// Delete the node at EDITOR.activePath (i.e. the currently-active move).
+// To delete a non-active sibling variation, navigate to it first via the
+// 本步可選 picker, then call this. The initial position (activePath = [])
+// can't be deleted — there's no node there. Confirms before destroying any
+// subtree (one or more descendant moves).
+function deleteCurrentMove() {
+  if (!EDITOR.data || EDITOR.activePath.length === 0) return;
+  const node = nodeAt(EDITOR.activePath);
+  if (!node) return;
+  const label = node.notation || node.iccs;
+  const desc = countDescendants(node);
+  const prompt = desc > 0
+    ? `『${label}』之後還有 ${desc} 步走法／分支，全部一併刪除？`
+    : `確定刪除『${label}』？`;
+  if (!window.confirm(prompt)) return;
+
+  const parentPath = EDITOR.activePath.slice(0, -1);
+  const idx = EDITOR.activePath[EDITOR.activePath.length - 1];
+  const siblings = parentPath.length === 0
+    ? EDITOR.data.roots
+    : (nodeAt(parentPath).children || []);
+  siblings.splice(idx, 1);
+
+  clearSelection();
+  EDITOR.activePath = parentPath;
+  refreshActive();
+  setStatus(`已刪除 ${label}` + (desc > 0 ? `（連同 ${desc} 步）` : ""), "ok");
+}
+
+// Promote a sibling at `parentPath.children[siblingIdx]` to be the new main
+// line (children[0]). Implementation: swap siblings[0] with siblings[siblingIdx]
+// and patch EDITOR.activePath if it currently traverses one of the two.
+//
+// parentPath = [] means root-level siblings live in EDITOR.data.roots.
+// Subtrees move atomically with their sibling — no re-indexing of descendants.
+function promoteToMain(parentPath, siblingIdx) {
+  if (siblingIdx === 0) return;  // already main line
+  const siblings = parentPath.length === 0
+    ? (EDITOR.data ? EDITOR.data.roots : null)
+    : (nodeAt(parentPath)?.children || null);
+  if (!siblings || siblingIdx >= siblings.length) return;
+
+  const tmp = siblings[0];
+  siblings[0] = siblings[siblingIdx];
+  siblings[siblingIdx] = tmp;
+
+  // If the active path passes through one of the two swapped siblings at the
+  // ply right after parentPath, follow the swap so the user stays on the same
+  // physical line.
+  if (EDITOR.activePath.length > parentPath.length) {
+    const depthIdx = EDITOR.activePath[parentPath.length];
+    if (depthIdx === 0)             EDITOR.activePath[parentPath.length] = siblingIdx;
+    else if (depthIdx === siblingIdx) EDITOR.activePath[parentPath.length] = 0;
+  }
+  const promotedLabel = siblings[0].notation || siblings[0].iccs;
+  refreshActive();
+  setStatus(`已升『${promotedLabel}』為主線`, "ok");
+}
+
+// Insert a freshly-built node as a child of the node at `parentPath`.
+//   - If an existing child already has this iccs, navigate to it (no dup,
+//     no confirm — re-selecting an existing variation is not destructive)
+//   - If `parentPath` already has children of different iccs, this insert
+//     creates a new variation branch — pop a confirm dialog first
+//   - Otherwise (parent was a leaf) just extend the line, no confirm
+//
+// children[0] is the main continuation; pushing later entries makes the new
+// move a sibling variation. Matches XQStudio behaviour and the JSON shape
+// documented in xqf_service.py.
+// Returns: "added" | "existing" | "cancelled"
+function insertMoveAt(parentPath, newNode) {
+  let siblings;
+  if (parentPath.length === 0) {
+    if (!EDITOR.data.roots) EDITOR.data.roots = [];
+    siblings = EDITOR.data.roots;
+  } else {
+    const parent = nodeAt(parentPath);
+    if (!parent) return "cancelled";
+    if (!parent.children) parent.children = [];
+    siblings = parent.children;
+  }
+  const existing = siblings.findIndex((n) => n.iccs === newNode.iccs);
+  if (existing >= 0) {
+    clearSelection();
+    navigateTo(parentPath.concat([existing]));
+    return "existing";
+  }
+  if (siblings.length > 0) {
+    const existingLabels = siblings.map((c) => c.notation || c.iccs).join("、");
+    const newLabel = newNode.notation || newNode.iccs;
+    const ok = window.confirm(
+      `此步已有續著：${existingLabels}\n新增『${newLabel}』為分支走法？`,
+    );
+    if (!ok) { clearSelection(); refreshActive(); return "cancelled"; }
+  }
+  clearSelection();
+  siblings.push(newNode);
+  navigateTo(parentPath.concat([siblings.length - 1]));
+  return "added";
+}
+
 // ---------- file tree ----------
 
 async function loadFileTree() {
   const r = await fetch("/api/xqf/list");
   const tree = await r.json();
+  if (tree.root) updateRootDisplay(tree.root);
   if (tree.error) { $("#fileTree").textContent = "錯誤：" + tree.error; return; }
   $("#fileTree").innerHTML = "";
   $("#fileTree").appendChild(renderDir(tree));
+}
+
+function updateRootDisplay(root) {
+  const el = $("#rootPathDisplay");
+  if (!el) return;
+  el.textContent = "📂 " + root;
+  el.title = root;
+}
+
+// ---------- root directory picker ----------
+// Native Windows folder dialog via /api/xqf/pick-root (tkinter subprocess).
+// On selection: POST the path to /api/xqf/root, then reload the file tree.
+
+async function pickRoot() {
+  const btn = $("#rootPickBtn");
+  btn.disabled = true;
+  setStatus("選擇目錄中…");
+  try {
+    const r = await fetch("/api/xqf/pick-root", { method: "POST" });
+    const resp = await r.json();
+    if (resp.error) { setStatus("選擇失敗：" + resp.error, "err"); return; }
+    if (!resp.ok || !resp.path) { setStatus(""); return; }   // cancelled
+    await applyRoot(resp.path);
+  } catch (e) {
+    setStatus("選擇失敗：" + e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function applyRoot(path) {
+  setStatus("套用中…");
+  const r = await fetch("/api/xqf/root", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  const resp = await r.json();
+  if (resp.error) { setStatus("套用失敗：" + resp.error, "err"); return; }
+  // Root changed: lastFile was cleared server-side, drop in-memory state too
+  // so we don't try to save back to a now-orphan rel path.
+  EDITOR.currentPath = null;
+  EDITOR.data = null;
+  EDITOR.activePath = [];
+  clearSelection();
+  $("#saveBtn").disabled = true;
+  $("#metaBtn").disabled = true;
+  $("#fileTitle").textContent = "尚未載入";
+  $("#moveList").innerHTML = "";
+  $("#annoteBox").value = "";
+  $("#annoteBox").disabled = true;
+  $("#moveInfo").textContent = "";
+  await loadFileTree();
+  setStatus("已切換目錄", "ok");
 }
 
 function renderDir(node) {
@@ -128,10 +520,12 @@ async function selectFile(rel, liEl) {
     EDITOR.currentPath = rel;
     EDITOR.data = data;
     EDITOR.activePath = [];
+    clearSelection();
     const fileName = rel.split("/").pop();
     $("#fileTitle").textContent = fileName;
     $("#fileTitle").title = rel;  // full path on hover
     $("#saveBtn").disabled = false;
+    $("#metaBtn").disabled = false;
     refreshActive();
     setStatus("已載入", "ok");
     // Remember for next session — boot() reopens this file automatically.
@@ -220,6 +614,7 @@ function navigateTo(path) {
   // Before navigating away, ensure any pending annote edit is committed.
   commitAnnoteEdit();
   EDITOR.activePath = path;
+  clearSelection();
   refreshActive();
 }
 
@@ -228,6 +623,7 @@ function refreshActive() {
   const { fen, lastIccs } = fenAndLastIccsFor(path);
   // board.js drawBoard signature: drawBoard(svg, fen, bookMove, engineMove)
   drawBoard($("#board"), fen, lastIccs, null);
+  installBoardOverlay($("#board"));   // click rects + selection halo on top
 
   renderMoveList();
 
@@ -241,8 +637,14 @@ function refreshActive() {
 
   const node = nodeAt(path);
   const annoteBox = $("#annoteBox");
-  annoteBox.value = node ? (node.annote || "") : "";
-  annoteBox.disabled = (node === null);
+  if (node) {
+    annoteBox.value = node.annote || "";
+    annoteBox.disabled = false;
+  } else {
+    // Initial position — annote box shows the book-level intro (譜首引言).
+    annoteBox.value = (EDITOR.data && EDITOR.data.init_annote) || "";
+    annoteBox.disabled = !EDITOR.data;  // editable when a file is loaded
+  }
 
   renderVarPicker();
 
@@ -255,6 +657,7 @@ function refreshActive() {
   $("#navFirst").disabled  = path.length === 0;
   $("#navPrev").disabled   = path.length === 0;
   $("#navBranch").disabled = path.length === 0;
+  $("#navDelete").disabled = path.length === 0;
   const next = node ? (node.children || [])[0] : (EDITOR.data && EDITOR.data.roots && EDITOR.data.roots[0]);
   $("#navNext").disabled = !next;
   $("#navLast").disabled = !next;
@@ -279,9 +682,12 @@ function renderVarPicker() {
   }
   rightPane.classList.remove("noVars");
   const letters = "ABCDEFGHIJKLMN";
+  const parentPath = path.length === 0 ? [] : path.slice(0, -1);
   opts.forEach((opt, i) => {
     const row = document.createElement("div");
-    row.className = "varOpt" + (i === activeIdx ? " active" : "");
+    row.className = "varOpt"
+      + (i === activeIdx ? " active" : "")
+      + (i === 0 ? " mainLine" : "");
     const L = document.createElement("span");
     L.className = "varLetter";
     L.textContent = letters[i] + ".";
@@ -294,6 +700,18 @@ function renderVarPicker() {
       arrow.className = "varArrow";
       arrow.textContent = "←";
       row.appendChild(arrow);
+    } else if (i !== 0) {
+      // Non-main-line, non-active row: offer "升主線".
+      const btn = document.createElement("button");
+      btn.className = "varPromote";
+      btn.type = "button";
+      btn.textContent = "升主線";
+      btn.title = "把此變例升為主線（與主線交換位置）";
+      btn.onclick = (e) => {
+        e.stopPropagation();  // don't also navigate
+        promoteToMain(parentPath, i);
+      };
+      row.appendChild(btn);
     }
     row.onclick = () => {
       const newPath = path.length === 0 ? [i] : path.slice(0, -1).concat([i]);
@@ -308,10 +726,65 @@ function renderVarPicker() {
 // pushed into EDITOR.data on input — the next /api/xqf/save POST carries them.
 
 function commitAnnoteEdit() {
-  const node = nodeAt(EDITOR.activePath);
-  if (!node) return;
   const newVal = $("#annoteBox").value;
-  if (node.annote !== newVal) node.annote = newVal;
+  const node = nodeAt(EDITOR.activePath);
+  if (node) {
+    if (node.annote !== newVal) node.annote = newVal;
+    return;
+  }
+  // Initial position — edits go to the book-level intro.
+  if (EDITOR.data && (EDITOR.data.init_annote || "") !== newVal) {
+    EDITOR.data.init_annote = newVal;
+  }
+}
+
+// ---------- metadata edit modal ----------
+// Fields map directly to XQF header slots (see cchess.io_xqf.XQFWriter
+// __init__: title/event/date/location/red_player/black_player/commentator are
+// fixed-length GB18030 strings; result is a 1-byte enum we map server-side).
+// Editing applies straight into EDITOR.data.info; the next save POST carries
+// the new values, and backend xqf_service.save_xqf writes both the string
+// fields (via PatchedXQFWriter's parent __init__) and the result byte.
+const META_FIELDS = [
+  "title", "event", "date", "location",
+  "red_player", "black_player", "commentator", "result",
+];
+
+function openMetaModal() {
+  if (!EDITOR.data) return;
+  const info = EDITOR.data.info || {};
+  for (const k of META_FIELDS) {
+    const el = $("#metaField-" + k);
+    if (!el) continue;
+    el.value = info[k] != null ? String(info[k]) : (k === "result" ? "*" : "");
+  }
+  $("#metaModal").hidden = false;
+  // Focus title for immediate keyboard input.
+  const first = $("#metaField-title");
+  if (first) first.focus();
+}
+
+function closeMetaModal() {
+  $("#metaModal").hidden = true;
+}
+
+function applyMetaEdits() {
+  if (!EDITOR.data) { closeMetaModal(); return; }
+  if (!EDITOR.data.info) EDITOR.data.info = {};
+  const info = EDITOR.data.info;
+  let changed = false;
+  for (const k of META_FIELDS) {
+    const el = $("#metaField-" + k);
+    if (!el) continue;
+    const newVal = el.value;
+    const oldVal = info[k] != null ? String(info[k]) : "";
+    if (newVal !== oldVal) {
+      info[k] = newVal;
+      changed = true;
+    }
+  }
+  closeMetaModal();
+  if (changed) setStatus("資訊已更新（記得存檔）", "ok");
 }
 
 // ---------- nav button handlers ----------
@@ -420,8 +893,16 @@ function applyBoardTheme(name) {
 // ---------- keyboard ----------
 
 window.addEventListener("keydown", (e) => {
-  // Don't intercept keys while typing in textarea (esp. arrow keys for cursor).
-  if (document.activeElement && document.activeElement.tagName === "TEXTAREA") return;
+  // Esc closes the metadata modal from anywhere.
+  if (e.key === "Escape" && !$("#metaModal").hidden) {
+    closeMetaModal();
+    e.preventDefault();
+    return;
+  }
+  // Don't intercept other keys while typing in form controls
+  // (textarea for annote, inputs in the metadata modal).
+  const tag = document.activeElement ? document.activeElement.tagName : "";
+  if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
   if (!EDITOR.data) return;
   switch (e.key) {
     case "ArrowLeft":  navPrev();    e.preventDefault(); break;
@@ -430,6 +911,7 @@ window.addEventListener("keydown", (e) => {
     case "ArrowDown":  navVarDown(); e.preventDefault(); break;
     case "Home":       navFirst();          e.preventDefault(); break;
     case "End":        navLast();           e.preventDefault(); break;
+    case "Delete":     deleteCurrentMove(); e.preventDefault(); break;
     case "b": case "B":
       if (!e.ctrlKey && !e.metaKey) { navToNearestBranch(); e.preventDefault(); }
       break;
@@ -442,14 +924,32 @@ window.addEventListener("keydown", (e) => {
 // ---------- boot ----------
 
 $("#saveBtn").onclick = save;
+$("#metaBtn").onclick = openMetaModal;
+$("#metaCancel").onclick = closeMetaModal;
+$("#metaOk").onclick = applyMetaEdits;
+$("#metaModal").addEventListener("click", (e) => {
+  if (e.target.id === "metaModal") closeMetaModal();  // click backdrop to close
+});
 $("#navFirst").onclick = navFirst;
 $("#navPrev").onclick = navPrev;
 $("#navBranch").onclick = navToNearestBranch;
 $("#navNext").onclick = navNext;
 $("#navLast").onclick = navLast;
+$("#navDelete").onclick = deleteCurrentMove;
 
 // Annote textarea: commit on every keystroke so EDITOR.data stays in sync.
 $("#annoteBox").addEventListener("input", commitAnnoteEdit);
+
+// Click-to-add-move: delegate clicks on the board SVG to onSquareClick.
+// The transparent overlay rects in installBoardOverlay() carry data-iccs.
+$("#board").addEventListener("click", (e) => {
+  const target = e.target.closest("[data-iccs]");
+  if (!target) return;
+  onSquareClick(target.getAttribute("data-iccs"));
+});
+
+// Root directory picker — opens native Windows folder dialog.
+$("#rootPickBtn").onclick = pickRoot;
 
 // Board theme picker. Initial value applied in boot() after PREFS load.
 const themeSel = $("#boardThemeSel");

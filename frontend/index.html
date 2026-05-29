@@ -17,6 +17,7 @@
           <option value="gilded">鎏金歲月</option>
         </select>
       </label>
+      <button id="metaBtn" disabled title="編輯賽事資訊">📋 賽事資訊</button>
       <button id="saveBtn" disabled>儲存</button>
       <span id="status"></span>
     </div>
@@ -24,7 +25,10 @@
   <main>
     <aside id="filePane">
       <h2>檔案</h2>
-      <div class="rootPath" title="檔案來源根目錄">📂 D:\Elton\TestArea\chess-book</div>
+      <div class="rootPath">
+        <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
+        <button id="rootPickBtn" title="選擇目錄…">📁</button>
+      </div>
       <div id="fileTree">載入中…</div>
     </aside>
     <div class="splitter splitter-v" data-resize="filePane" data-pref="splitFileW"></div>
@@ -42,7 +46,10 @@
     </section>
     <aside id="rightPane">
       <div id="rpMoves" class="rpSection rpMoves">
-        <h2>棋譜</h2>
+        <h2 class="panelHead">
+          <span>棋譜</span>
+          <button id="navDelete" class="danger iconBtn" title="刪除目前走法及其後續 (Delete)">🗑</button>
+        </h2>
         <div id="moveList"></div>
       </div>
       <div class="splitter splitter-v" data-resize="rpMoves" data-pref="splitMovesW"></div>
@@ -61,6 +68,34 @@
   </main>
   <!-- Hidden control board.js looks up for red/black perspective. -->
   <input type="checkbox" id="redPerspective" checked style="display:none">
+
+  <!-- Metadata edit dialog. Hidden by default; opened via #metaBtn. -->
+  <div id="metaModal" class="modal" hidden>
+    <div class="modalDialog" role="dialog" aria-modal="true" aria-labelledby="metaTitle">
+      <h3 id="metaTitle">賽事資訊</h3>
+      <div class="metaForm">
+        <label>標題<input id="metaField-title" type="text" maxlength="60"></label>
+        <label>賽事<input id="metaField-event" type="text" maxlength="60"></label>
+        <label>日期<input id="metaField-date" type="text" maxlength="30" placeholder="YYYY.MM.DD"></label>
+        <label>地點<input id="metaField-location" type="text" maxlength="30"></label>
+        <label>紅方<input id="metaField-red_player" type="text" maxlength="14"></label>
+        <label>黑方<input id="metaField-black_player" type="text" maxlength="14"></label>
+        <label>講評<input id="metaField-commentator" type="text" maxlength="30"></label>
+        <label>結果
+          <select id="metaField-result">
+            <option value="*">未知</option>
+            <option value="1-0">紅勝</option>
+            <option value="0-1">黑勝</option>
+            <option value="1/2-1/2">和棋</option>
+          </select>
+        </label>
+      </div>
+      <div class="modalActions">
+        <button id="metaCancel">取消</button>
+        <button id="metaOk" class="primary">套用</button>
+      </div>
+    </div>
+  </div>
   <script src="/assets/board.js"></script>
   <script src="/assets/editor.js"></script>
 </body>

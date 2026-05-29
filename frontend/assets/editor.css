@@ -216,16 +216,40 @@ h2 {
 /* ---------- left: file tree ---------- */
 #filePane { padding: 14px 12px; overflow: auto; }
 .rootPath {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid rgba(212, 160, 67, 0.25);
-  padding: 6px 8px;
+  padding: 4px 4px 4px 8px;
   border-radius: var(--radius-sm);
   margin: 0 0 12px;
   font-family: "SF Mono", "Consolas", monospace;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.rootPath #rootPathDisplay {
+  flex: 1 1 auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.rootPath #rootPickBtn {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.rootPath #rootPickBtn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--accent);
+  border-color: var(--line-strong);
+}
+.rootPath #rootPickBtn:disabled { opacity: 0.4; cursor: wait; }
 #fileTree ul {
   list-style: none;
   padding-left: 14px;
@@ -324,6 +348,41 @@ h2 {
   color: var(--accent);
 }
 #navBar button:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* Panel header with inline icon button (e.g. 棋譜 / 🗑) — keeps the small-caps
+   title look but adds a flex baseline so the button sits flush with the rule. */
+h2.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+h2.panelHead > span { flex: 1 1 auto; }
+.iconBtn {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  /* Cancel the parent h2's uppercase + letter-spacing — the emoji + glyph
+     would otherwise pick up the small-caps treatment and look odd. */
+  text-transform: none;
+  letter-spacing: normal;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.iconBtn:disabled { opacity: 0.25; cursor: not-allowed; }
+.iconBtn.danger:hover:not(:disabled) {
+  background: rgba(217, 112, 112, 0.15);
+  color: var(--err);
+  border-color: var(--err);
+}
+.iconBtn.danger:active:not(:disabled) {
+  background: rgba(217, 112, 112, 0.25);
+  color: var(--err);
+}
 #moveInfo {
   margin-left: 12px;
   font-size: 13px;
@@ -493,6 +552,116 @@ h2 {
   font-size: 14px;
 }
 .varOpt:not(.active) .varArrow { visibility: hidden; }
+
+/* "升主線" button — promotes a non-main-line variation to children[0].
+   Always rendered on non-main-line rows, hidden on the main line itself. */
+.varOpt .varPromote {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.varOpt .varPromote:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+.varOpt.active .varPromote,
+.varOpt.mainLine .varPromote { display: none; }
+
+/* ---------- modal (metadata editor) ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.modal[hidden] { display: none; }
+.modalDialog {
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 18px 22px 16px;
+  min-width: 360px;
+  max-width: 480px;
+}
+.modalDialog h3 {
+  margin: 0 0 14px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  letter-spacing: 0.02em;
+}
+.metaForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+.metaForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.metaForm label:has(#metaField-title),
+.metaForm label:has(#metaField-event) {
+  grid-column: span 2;
+}
+.metaForm input,
+.metaForm select {
+  background: var(--bg-1);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.metaForm input:focus,
+.metaForm select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+.modalActions button {
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.modalActions button:hover {
+  background: var(--bg-4);
+  border-color: var(--accent);
+}
+.modalActions button.primary {
+  background: var(--accent);
+  color: #2a1f0a;
+  border-color: var(--accent-strong);
+  font-weight: 600;
+}
+.modalActions button.primary:hover {
+  background: var(--accent-strong);
+}
 
 /* ---------- focus rings (keyboard accessibility) ---------- */
 button:focus-visible,
