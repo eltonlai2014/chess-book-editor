@@ -707,13 +707,25 @@ async function fetchEvalsForFile() {
   }
 }
 
-// Format a centipawn / mate score for the current eval cell.
-function fmtEvalScore(entry) {
+// Format DB eval for UI in fixed red POV.
+// positions.db stores mover-POV values in centipawns; this editor treats
+// 100 = 1 兵, so we display the integer cp-like value directly as "分".
+function fmtEvalScore(entry, fen) {
   if (!entry) return "—";
-  if (entry.mate != null) return entry.mate > 0 ? `#+${entry.mate}` : `#${entry.mate}`;
+  const side = (fen && fen.trim().split(/\s+/)[1]) || "w";
+  const flip = side === "b" ? -1 : 1;
+  if (entry.mate != null) {
+    const m = Number(entry.mate);
+    if (!Number.isFinite(m)) return "—";
+    const redMate = m * flip;
+    return redMate > 0 ? `#+${Math.abs(redMate)}` : `#-${Math.abs(redMate)}`;
+  }
   if (entry.score == null) return "—";
-  const sign = entry.score > 0 ? "+" : "";
-  return `${sign}${entry.score}`;
+  const cp = Number(entry.score);
+  if (!Number.isFinite(cp)) return "—";
+  const redScore = Math.round(cp * flip);
+  const sign = redScore > 0 ? "+" : "";
+  return `${sign}${redScore}`;
 }
 
 // Translate a single ICCS move under `fen` to traditional Chinese via the
@@ -760,7 +772,8 @@ async function renderEvalLine() {
   for (const d of [12, 22, 28, 32]) {
     const e = entry[`d${d}`];
     if (!e) continue;
-    cells.push(`<span class="evalCell"><span class="evalLabel">深${d}</span> <span class="evalScore">${fmtEvalScore(e)}</span></span>`);
+    const suffix = (e.mate == null) ? `<span class="evalLabel"> 分</span>` : "";
+    cells.push(`<span class="evalCell"><span class="evalLabel">深${d}</span> <span class="evalScore">${fmtEvalScore(e, fen)}</span>${suffix}</span>`);
   }
   // Prefer deepest available eval's best move for the suggestion line.
   const deepest = entry.d32 || entry.d28 || entry.d22 || entry.d12;
