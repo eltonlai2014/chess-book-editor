@@ -39,16 +39,14 @@ def check_one(xqf_path: Path):
     # JSON -> file -> reread (the actual save_xqf path)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xqf") as tf:
         tmp = Path(tf.name)
-    bak = tmp.with_suffix(tmp.suffix + ".bak")
     try:
         data["path"] = "ignored"
         save_xqf(tmp, data)
         book_c = read_from_xqf(str(tmp), Book)
         paths_c = collect_paths(book_c)
     finally:
-        for f in (tmp, bak):
-            if f.exists():
-                f.unlink()
+        if tmp.exists():
+            tmp.unlink()
     if paths_a != paths_c:
         return {"file": rel, "ok": False, "error": f"file roundtrip paths {len(paths_a)} -> {len(paths_c)}"}
     return {"file": rel, "ok": True, "paths": len(paths_a)}

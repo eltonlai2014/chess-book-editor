@@ -80,8 +80,8 @@ header {
   z-index: 2;
 }
 header h1 {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   margin: 0;
   color: var(--text);
   letter-spacing: 0.02em;
@@ -201,16 +201,18 @@ aside, section { overflow: hidden; background: var(--bg-1); }
 body.dragging { cursor: col-resize; user-select: none; }
 body.dragging.dragging-row { cursor: row-resize; }
 
-/* Panel header — sticky, with subtle surface so it doesn't blend with content */
+/* Panel header — bigger and more deliberate than body text. Gold underline
+   gives each section a clear lead. Hierarchy: h1 18 > h2 16 ≥ all content
+   (file tree 15, varPicker 15, moveList 16, annote body 14). */
 h2 {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin: 0 0 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  margin: 0 0 10px;
+  text-transform: none;
+  letter-spacing: 0.02em;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px solid var(--line-strong);
 }
 
 /* ---------- left: file tree ---------- */
@@ -245,9 +247,9 @@ h2 {
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .rootPath #rootPickBtn:hover:not(:disabled) {
-  background: var(--bg-3);
-  color: var(--accent);
-  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent);
 }
 .rootPath #rootPickBtn:disabled { opacity: 0.4; cursor: wait; }
 #fileTree ul {
@@ -294,17 +296,17 @@ h2 {
   background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
 #fileTitle {
-  color: var(--text);
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: normal; text-transform: none;
+  color: var(--accent-strong);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em; text-transform: none;
   margin: 0 0 10px;
   padding: 0 0 8px;
   align-self: stretch;
   text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex: 0 0 auto;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px solid var(--line-strong);
 }
 #board {
   margin: 4px 0 12px;
@@ -374,6 +376,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .iconBtn:disabled { opacity: 0.25; cursor: not-allowed; }
+.iconBtn:hover:not(:disabled):not(.danger) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
 .iconBtn.danger:hover:not(:disabled) {
   background: rgba(217, 112, 112, 0.15);
   color: var(--err);
@@ -472,13 +479,20 @@ h2.panelHead > span { flex: 1 1 auto; }
 .plyLine.black { color: var(--text-muted); }
 .plyLine.black.active { color: var(--accent-strong); }
 .plyMark {
-  margin-left: 8px;
-  font-size: 11px;
+  margin-left: 6px;
+  font-size: 10px;
   flex: 0 0 auto;
-  opacity: 0.8;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
 }
-.plyLine .plyMark { color: var(--red); }
-.plyLine.active .plyMark { color: var(--accent); opacity: 1; }
+.plyLine.active .plyMark {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
 .initLine {
   color: var(--text-faint);
   font-style: italic;
@@ -597,10 +611,12 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .modalDialog h3 {
   margin: 0 0 14px 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   color: var(--accent-strong);
   letter-spacing: 0.02em;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--line-strong);
 }
 .metaForm {
   display: grid;
@@ -618,6 +634,8 @@ h2.panelHead > span { flex: 1 1 auto; }
 .metaForm label:has(#metaField-event) {
   grid-column: span 2;
 }
+/* New-XQF modal: every row full-width (only 3 short fields). */
+#newModal .metaForm label { grid-column: span 2; }
 .metaForm input,
 .metaForm select {
   background: var(--bg-1);
@@ -649,18 +667,23 @@ h2.panelHead > span { flex: 1 1 auto; }
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
-.modalActions button:hover {
+.modalActions button:hover:not(:disabled) {
   background: var(--bg-4);
   border-color: var(--accent);
+  color: var(--accent-strong);
 }
+.modalActions button:active:not(:disabled) { background: var(--bg-2); }
+.modalActions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .modalActions button.primary {
   background: var(--accent);
   color: #2a1f0a;
   border-color: var(--accent-strong);
   font-weight: 600;
 }
-.modalActions button.primary:hover {
+.modalActions button.primary:hover:not(:disabled) {
   background: var(--accent-strong);
+  color: #1a1305;
+  border-color: var(--accent-strong);
 }
 
 /* ---------- focus rings (keyboard accessibility) ---------- */

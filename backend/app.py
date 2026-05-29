@@ -4,6 +4,7 @@ Local-only by design (binds 127.0.0.1), no auth:
 
     GET  /api/xqf/list                 -> directory tree under current root
     GET  /api/xqf/load?path=<rel>      -> {info, init_fen, roots}
+    POST /api/xqf/new   body {title, filename?, subdir?} -> {ok, path}
     POST /api/xqf/save  body {path, info, init_fen, roots}
     POST /api/xqf/move-info body {fen, iccs} -> {ok, notation, side}
     POST /api/xqf/legal-targets body {fen, from} -> {ok, targets:[iccs,...]}
@@ -35,7 +36,9 @@ from flask import Flask, jsonify, request, send_from_directory  # noqa: E402
 from backend.xqf_service import (  # noqa: E402
     compute_legal_targets,
     compute_move_info,
+    create_xqf,
     load_xqf,
+    sanitise_filename,
     save_xqf,
 )
 
@@ -299,6 +302,46 @@ def move_info():
     return jsonify({"ok": True, **info})
 
 
+@app.post("/api/xqf/new")
+def new_xqf():
+    """Create a fresh .XQF with the given title at <root>[/subdir]/<filename>.
+
+    Body: {title: str, filename?: str, subdir?: str}
+      - title:    required, non-empty (becomes book.info['title'])
+      - filename: optional; defaults to sanitise_filename(title). ".XQF" is
+                  appended if not already present.
+      - subdir:   optional; relative directory under the library root
+                  (forward or backward slashes both fine, validated by
+                  _safe_resolve like every other path-taking endpoint).
+
+    Refuses to overwrite an existing file (409). Creates the parent
+    directory tree if missing.
+    """
+    body = request.get_json(silent=True) or {}
+    title = (body.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "標題不可為空"}), 400
+    filename = (body.get("filename") or "").strip() or sanitise_filename(title)
+    if not filename.lower().endswith(".xqf"):
+        filename += ".XQF"
+    subdir = (body.get("subdir") or "").strip().replace("\\", "/").strip("/")
+    rel = f"{subdir}/{filename}" if subdir else filename
+    try:
+        target = _safe_resolve(rel)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if target.suffix.lower() != ".xqf":
+        return jsonify({"error": "filename must end in .XQF"}), 400
+    if target.exists():
+        return jsonify({"error": f"檔案已存在：{rel}"}), 409
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        create_xqf(target, title)
+    except Exception as e:
+        return jsonify({"error": f"建立失敗：{e}"}), 500
+    return jsonify({"ok": True, "path": rel})
+
+
 @app.post("/api/xqf/save")
 def save():
     body = request.get_json(silent=True) or {}
@@ -313,7 +356,7 @@ def save():
         save_xqf(target, body)
     except Exception as e:
         return jsonify({"error": f"save failed: {e}"}), 500
-    return jsonify({"ok": True, "path": rel, "bak": rel + ".bak"})
+    return jsonify({"ok": True, "path": rel})
 
 
 if __name__ == "__main__":

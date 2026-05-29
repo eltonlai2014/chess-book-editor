@@ -11,8 +11,8 @@ library path is configurable from the UI (see *Choose your library* below).
 
 MVP editor working end-to-end: browse library → open XQF → navigate moves /
 variations → edit annotations (including the init / 譜首引言 annote) → save
-(with `.bak` backup). Tree-editing operations (add/delete move, promote
-variation, edit metadata) not built yet. See [docs/HANDOFF.md](docs/HANDOFF.md)
+back as XQF. Tree-editing operations (add/delete move, promote variation,
+edit metadata) shipped; what's still to do see [docs/HANDOFF.md](docs/HANDOFF.md). See [docs/HANDOFF.md](docs/HANDOFF.md)
 for full context.
 
 Persistence + format work that is already verified:

@@ -24,7 +24,10 @@
   </header>
   <main>
     <aside id="filePane">
-      <h2>檔案</h2>
+      <h2 class="panelHead">
+        <span>檔案</span>
+        <button id="newXqfBtn" class="iconBtn" title="新增棋譜" disabled>➕ 新增</button>
+      </h2>
       <div class="rootPath">
         <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
         <button id="rootPickBtn" title="選擇目錄…">📁</button>
@@ -93,6 +96,22 @@
       <div class="modalActions">
         <button id="metaCancel">取消</button>
         <button id="metaOk" class="primary">套用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New-XQF dialog. Opened from the file pane's ➕ 新增 button. -->
+  <div id="newModal" class="modal" hidden>
+    <div class="modalDialog" role="dialog" aria-modal="true" aria-labelledby="newTitle">
+      <h3 id="newTitle">新增棋譜</h3>
+      <div class="metaForm">
+        <label>標題<input id="newField-title" type="text" maxlength="60" placeholder="必填"></label>
+        <label>子目錄<input id="newField-subdir" type="text" maxlength="200" placeholder="留空＝放在根目錄"></label>
+        <label>檔名<input id="newField-filename" type="text" maxlength="80" placeholder="留空＝由標題自動產生"></label>
+      </div>
+      <div class="modalActions">
+        <button id="newCancel">取消</button>
+        <button id="newOk" class="primary">建立</button>
       </div>
     </div>
   </div>

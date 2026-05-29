@@ -16,14 +16,42 @@ Each `node`:
 `children[1:]` are siblings (variations at that ply). This mirrors how
 `_read_steps` walks XQF: recurse into has_next, then into has_var.
 """
+import re
 from pathlib import Path
 
-from cchess import Book
+from cchess import Book, FULL_INIT_FEN
 from cchess.board import ChessBoard
 from cchess.common import append_move_to_book, get_fench_color, iccs2pos, pos2iccs, SIDE_BLACK
 from cchess.io_xqf import read_from_xqf
 
 from vendor import PatchedXQFWriter
+
+
+# XQF header fields the writer __init__ KeyErrors on if absent. Use this set
+# whenever building a Book from scratch (create_xqf) to avoid surprise.
+_XQF_HEADER_KEYS = (
+    "title", "event", "date", "location",
+    "red_player", "black_player", "commentator",
+)
+
+_FILENAME_BAD = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WIN_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def sanitise_filename(name: str, max_len: int = 80) -> str:
+    """Same rules as tools/cbl_to_xqf.py — duplicated to avoid backend ↔ tools cross-import."""
+    cleaned = _FILENAME_BAD.sub("_", name).strip(" .")
+    if not cleaned:
+        return "untitled"
+    if cleaned.upper() in _WIN_RESERVED:
+        cleaned = f"_{cleaned}"
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len].rstrip(" .")
+    return cleaned or "untitled"
 
 
 # XQF header result byte (offset 0x40, see cchess.io_xqf.XQFWriter.set_result).
@@ -113,36 +141,58 @@ def _has_pua(s: str) -> bool:
     return any("" <= c <= "" for c in s)
 
 
+# Top-216 chars covering ~100% of usage in clean chess-commentary annotations.
+# Same set chess-book-ai uses in site_builder/build_data.py — acts as a "looks
+# like real chess commentary" vocabulary score, used to disambiguate when both
+# GB18030 and Big5 produce valid-but-different Chinese.
+_CHESS_VOCAB = set(
+    "法的方馬路走紅抗勢有優中後兌對較黑利手車無充分用性壓著子六加厚攻軟件局衡招要下棄可動此面"
+    "最計畫化出主翼多棋之勝奪大易機求線謀底佳準備右得但先行好錯很容現力卒相取以再爭定簡位不交"
+    "換符合人類思維會直接貫徹長距離進變與比頭兵矛盾頑強砲包只能和推薦退解反應具觀死急吃陣型弱"
+    "點虧左一保留均搶支援呆滯回益等伺而帥其他都為集擊殘必雙制占過河略佔逼實質上並明顯收送被視"
+    "臥槽傌穩空門巧消拆飛認威脅抽趨緩足宜輕健跳避免七開放未戰術成功平妙叫將確立雖置欠"
+)
+
+
+def _vocab_score(s: str) -> int:
+    """Count chars matching the in-domain chess-commentary vocabulary."""
+    return sum(1 for c in s if c in _CHESS_VOCAB)
+
+
 def _maybe_recover_big5(s):
-    """Best-effort Big5 recovery. Returns recovered string or original on failure.
+    """Best-effort Big5 recovery. Returns recovered string or original.
 
-    Defence layers against false positives (recovery turning correct GB18030
-    text into mojibake, which can happen because the byte ranges overlap):
+    The hard problem: byte sequences can be valid in BOTH GB18030 and Big5,
+    producing two different but plausible-looking Chinese strings. The
+    GB18030 reading is what cchess already gave us; we attempt the Big5
+    reading and pick whichever scores higher against in-domain chess
+    vocabulary (`_CHESS_VOCAB`). Ties keep the original GB18030 — same
+    default as chess-book-ai's `_recover_annote`, and the only safe call
+    for files like the master's AI-annotated XQF where annotes are
+    genuinely Traditional Chinese in GB18030 (e.g., 正著, 紅方殘局優勢).
 
-      1. **Positive signal** — `s` contains a simplified-only character
-         (in GB18030 but not Big5) AND no PUA → keep `s`. (PUA gate matters
-         because Big5 mojibake can coincidentally include simplified-only
-         CJK chars; pairing with PUA distinguishes real GB from mojibake.)
-      2. **Negative signal** — recovery introduces Bopomofo / CJK Compat
-         Ideographs (rare in real notes, common mojibake landing zones) →
-         keep `s`.
-
-    Ambiguous cases (no signals either way) still default to the recovered
-    form — backward-compatible with the master's primarily-Big5 corpus.
-    For known-GB18030 generators, prefer the per-file `author` marker check
-    in `load_xqf` to override this default unambiguously.
+    Hard gates:
+      - PUA in the original → always definite mojibake, prefer recovered
+        (no real chess text uses Private Use Area chars).
+      - Bopomofo / CJK Compat in the recovered version (and not in original)
+        → recovery worsened things, stick with original.
     """
     if not s:
         return s
-    if _has_simplified_only_char(s) and not _has_pua(s):
-        return s
+    pua = _has_pua(s)
     try:
         recovered = s.encode("gb18030").decode("big5")
     except (UnicodeEncodeError, UnicodeDecodeError):
         return s
+    if pua and not _has_pua(recovered):
+        return recovered
     if _has_negative_signal(recovered) and not _has_negative_signal(s):
         return s
-    return recovered
+    s_score = _vocab_score(s)
+    r_score = _vocab_score(recovered)
+    if r_score > s_score:
+        return recovered
+    return s
 
 
 # Files our own tools generate are guaranteed-GB18030; the loader skips Big5
@@ -393,22 +443,35 @@ def load_xqf(path: Path):
 
 
 def save_xqf(path: Path, data: dict):
-    """Write JSON tree back to `path` as XQF v0x0A, taking .bak first.
-
-    Backup policy (open question #3 = yes):
-      - If `path` exists, copy it to `path + '.bak'` BEFORE writing.
-      - Overwrites any previous .bak — we keep ONE generation, not history.
-        Master can copy the bak out manually if a deeper history is wanted.
+    """Write JSON tree back to `path` as XQF v0x0A.
 
     Author field is stamped with 'cb_editor' (short — XQF author field is
     only 15 bytes) so `load_xqf` knows the file is guaranteed-GB18030 and
     skips the Big5 recovery heuristic on next read.
     """
     book = json_to_book(data)
-    if path.exists():
-        bak = path.with_suffix(path.suffix + ".bak")
-        bak.write_bytes(path.read_bytes())
     writer = PatchedXQFWriter(book)
     writer.set_author("cb_editor")
     writer.set_result(_RESULT_STR_TO_INT.get(book.info.get("result", "*"), 0))
+    writer.save(str(path))
+
+
+def create_xqf(path: Path, title: str) -> None:
+    """Write a fresh XQF at `path` with the standard initial position and
+    the supplied title. No moves, no annote — caller (editor) edits from there.
+
+    Header fields other than title default to empty strings; PatchedXQFWriter's
+    parent __init__ KeyErrors if any of _XQF_HEADER_KEYS is missing, so we
+    populate them all up-front.
+    """
+    # ChessBoard() with no FEN is an EMPTY board — use FULL_INIT_FEN to get
+    # the standard initial position.
+    book = Book(ChessBoard(FULL_INIT_FEN))
+    for k in _XQF_HEADER_KEYS:
+        book.info[k] = ""
+    book.info["title"] = title
+    book.info["result"] = "*"
+    writer = PatchedXQFWriter(book)
+    writer.set_author("cb_editor")
+    writer.set_result(0)
     writer.save(str(path))

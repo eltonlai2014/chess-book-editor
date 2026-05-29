@@ -428,6 +428,9 @@ async function loadFileTree() {
   if (tree.error) { $("#fileTree").textContent = "錯誤：" + tree.error; return; }
   $("#fileTree").innerHTML = "";
   $("#fileTree").appendChild(renderDir(tree));
+  // Tree loaded → user can create a new file under it.
+  const newBtn = $("#newXqfBtn");
+  if (newBtn) newBtn.disabled = false;
 }
 
 function updateRootDisplay(root) {
@@ -593,7 +596,7 @@ function renderPlyRow(item) {
   if (hasSiblings) {
     const m = document.createElement("span");
     m.className = "plyMark";
-    m.textContent = "★";
+    m.textContent = "分支";
     m.title = "本步有其他走法";
     row.appendChild(m);
   }
@@ -601,7 +604,7 @@ function renderPlyRow(item) {
     const a = document.createElement("span");
     a.className = "plyMark";
     a.title = node.annote;
-    a.textContent = "✎";
+    a.textContent = "注解";
     row.appendChild(a);
   }
   row.onclick = () => navigateTo(path);
@@ -787,6 +790,73 @@ function applyMetaEdits() {
   if (changed) setStatus("資訊已更新（記得存檔）", "ok");
 }
 
+// ---------- new-XQF dialog ----------
+// Opens an empty XQF at <root>[/subdir]/<filename>. Backend sanitises the
+// filename and refuses to overwrite an existing file (409).
+
+function openNewModal() {
+  // Pre-fill subdir with the parent folder of the currently-open file, so
+  // master typically just types a title and presses 建立.
+  const cur = EDITOR.currentPath || "";
+  const lastSlash = cur.lastIndexOf("/");
+  const defaultSubdir = lastSlash > 0 ? cur.slice(0, lastSlash) : "";
+  $("#newField-title").value = "";
+  $("#newField-subdir").value = defaultSubdir;
+  $("#newField-filename").value = "";
+  $("#newModal").hidden = false;
+  $("#newField-title").focus();
+}
+
+function closeNewModal() {
+  $("#newModal").hidden = true;
+}
+
+async function submitNewXqf() {
+  const title = $("#newField-title").value.trim();
+  if (!title) {
+    setStatus("標題不可為空", "err");
+    $("#newField-title").focus();
+    return;
+  }
+  const body = {
+    title,
+    subdir: $("#newField-subdir").value.trim(),
+    filename: $("#newField-filename").value.trim(),
+  };
+  setStatus("建立中…");
+  try {
+    const r = await fetch("/api/xqf/new", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const resp = await r.json();
+    if (!r.ok || resp.error) {
+      setStatus(resp.error || "建立失敗", "err");
+      return;
+    }
+    closeNewModal();
+    // Refresh tree, then open the new file the same way auto-open does.
+    await loadFileTree();
+    const newLi = Array.from(document.querySelectorAll("#fileTree li.file"))
+      .find((li) => li.dataset.rel === resp.path);
+    // Expand ancestor <ul>s so the new file is visible.
+    if (newLi) {
+      let el = newLi.parentElement;
+      const treeRoot = document.getElementById("fileTree");
+      while (el && el !== treeRoot) {
+        if (el.tagName === "UL") el.style.display = "";
+        el = el.parentElement;
+      }
+      newLi.scrollIntoView({ block: "nearest" });
+    }
+    await selectFile(resp.path, newLi || null);
+    setStatus(`已建立 ${resp.path}`, "ok");
+  } catch (e) {
+    setStatus("建立失敗：" + e.message, "err");
+  }
+}
+
 // ---------- nav button handlers ----------
 
 function navFirst() { navigateTo([]); }
@@ -876,7 +946,7 @@ async function save() {
     });
     const resp = await r.json();
     if (resp.error) throw new Error(resp.error);
-    setStatus(`已儲存（備份：${resp.bak}）`, "ok");
+    setStatus("已儲存", "ok");
   } catch (e) {
     setStatus("儲存失敗：" + e.message, "err");
   }
@@ -893,11 +963,10 @@ function applyBoardTheme(name) {
 // ---------- keyboard ----------
 
 window.addEventListener("keydown", (e) => {
-  // Esc closes the metadata modal from anywhere.
-  if (e.key === "Escape" && !$("#metaModal").hidden) {
-    closeMetaModal();
-    e.preventDefault();
-    return;
+  // Esc closes any open modal from anywhere.
+  if (e.key === "Escape") {
+    if (!$("#metaModal").hidden) { closeMetaModal(); e.preventDefault(); return; }
+    if (!$("#newModal").hidden)  { closeNewModal();  e.preventDefault(); return; }
   }
   // Don't intercept other keys while typing in form controls
   // (textarea for annote, inputs in the metadata modal).
@@ -929,6 +998,16 @@ $("#metaCancel").onclick = closeMetaModal;
 $("#metaOk").onclick = applyMetaEdits;
 $("#metaModal").addEventListener("click", (e) => {
   if (e.target.id === "metaModal") closeMetaModal();  // click backdrop to close
+});
+$("#newXqfBtn").onclick = openNewModal;
+$("#newCancel").onclick = closeNewModal;
+$("#newOk").onclick = submitNewXqf;
+$("#newModal").addEventListener("click", (e) => {
+  if (e.target.id === "newModal") closeNewModal();
+});
+// Enter inside any new-XQF field submits.
+$("#newModal").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { submitNewXqf(); e.preventDefault(); }
 });
 $("#navFirst").onclick = navFirst;
 $("#navPrev").onclick = navPrev;

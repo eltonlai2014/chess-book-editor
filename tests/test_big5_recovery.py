@@ -93,6 +93,33 @@ def test_recover_fixes_genuine_big5_mojibake():
     )
 
 
+def test_recover_preserves_trad_chess_vocab():
+    """Traditional Chinese chess annotations stored as GB18030 must NOT be
+    mis-recovered as Big5 — the old default-to-recovered behaviour turned
+    '正著' into '淏翍'. Vocab scoring is what stops this now.
+
+    These are real annotations from
+    D:\\Elton\\TestArea\\chess-book\\AI\\順包\\順包兩頭蛇對雙橫車.xqf
+    (cchess decodes them correctly as GB18030; recovery used to wreck them).
+    """
+    cases = [
+        "正著",
+        "亮左車",
+        "黑方反先",
+        "紅方得子占優",
+        "還原成過宮砲變例",
+        "黑方殘局優勢",
+        "雙方均勢",
+        "雲庫打分 -201",
+        "曾經純人認為的正著之一",
+        "軟件時代不推薦",
+        "好棋",
+    ]
+    for s in cases:
+        out = _maybe_recover_big5(s)
+        assert out == s, f"trad annote got wrecked: {s!r} -> {out!r}"
+
+
 def test_recover_rejects_false_positive_with_bopomofo():
     """If recovery produces bopomofo, it's a known false positive — keep original."""
     # Craft a string where GB-encode-then-Big5-decode yields bopomofo.
