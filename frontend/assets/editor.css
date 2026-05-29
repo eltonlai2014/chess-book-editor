@@ -559,11 +559,23 @@ h2.panelHead > span { flex: 1 1 auto; }
   background: var(--accent-soft);
   border: 1px solid rgba(212, 160, 67, 0.25);
   border-radius: var(--radius-sm);
+  /* boardPane uses align-items:center on its column flex, so without
+     align-self:stretch this row takes its natural content width and
+     overflows the 568px pane — the pick button gets clipped off-screen. */
+  align-self: stretch;
+  min-width: 0;
 }
 .evalDbRow #evalDbPath {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   min-width: 0;
+  cursor: help;
+}
+.evalDbRow #evalDbPickBtn {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 1px 6px;
+  line-height: 1.4;
 }
 .evalDbRow.warn {
   color: var(--err);

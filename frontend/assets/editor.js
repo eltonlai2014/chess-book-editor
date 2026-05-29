@@ -584,8 +584,10 @@ async function fetchEvalDbInfo() {
   renderEvalDbRow();
 }
 
-// Render the small DB-path chip above #evalLine. Shows current path + a
-// per-depth count summary when wired; flips to a warning style when missing.
+// Render the small DB-path chip above #evalLine. Shows the DB filename + a
+// short total-positions / cdb-count summary in the visible row, with the
+// full path + per-depth breakdown in the hover title so the chip never
+// outgrows the 568px boardPane.
 function renderEvalDbRow() {
   const pathEl = $("#evalDbPath");
   const row = pathEl ? pathEl.parentElement : null;
@@ -594,19 +596,24 @@ function renderEvalDbRow() {
   const p = info.path || "";
   if (!info.exists) {
     row.classList.add("warn");
-    pathEl.textContent = "📊 評估資料庫未連線" + (p ? `（${p}）` : "");
+    pathEl.textContent = "📊 評估資料庫未連線（點 📁 選擇）";
     pathEl.title = p || "尚未設定資料庫位置";
     return;
   }
   row.classList.remove("warn");
   const byDepth = info.evals_by_depth || {};
-  const depthSummary = Object.keys(byDepth)
+  const totalEvals = Object.values(byDepth).reduce((a, b) => a + b, 0);
+  const cdb = info.chessdb_rows || 0;
+  // Visible line — filename, total positions, cdb count. Compact.
+  const fname = p.split(/[\\/]/).pop() || p;
+  const cdbCell = cdb ? `  ·  雲庫 ${cdb.toLocaleString()}` : "";
+  pathEl.textContent = `📊 ${fname}  ·  ${totalEvals.toLocaleString()} 局面${cdbCell}`;
+  // Tooltip — full path + per-depth breakdown so power users still see it.
+  const depthDetail = Object.keys(byDepth)
     .sort((a, b) => Number(a) - Number(b))
-    .map(d => `d${d}=${byDepth[d].toLocaleString()}`)
-    .join(" ");
-  const cdb = info.chessdb_rows ? `  雲庫=${info.chessdb_rows.toLocaleString()}` : "";
-  pathEl.textContent = `📊 ${p}  ·  ${depthSummary}${cdb}`;
-  pathEl.title = p;
+    .map(d => `d${d}: ${byDepth[d].toLocaleString()}`)
+    .join("　");
+  pathEl.title = `${p}\n${depthDetail}`;
 }
 
 // Native file picker for evalDb. POSTs the chosen path, refreshes the row
