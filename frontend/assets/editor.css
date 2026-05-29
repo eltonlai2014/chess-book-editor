@@ -545,6 +545,32 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 #annoteBox::placeholder { color: var(--text-faint); font-style: italic; }
 
+/* DB path strip — small monospace chip above the eval line. Mirrors the
+   file-pane rootPath chip so the "what data is wired" reads as one pattern. */
+.evalDbRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 3px 4px 3px 8px;
+  font-size: 11px;
+  font-family: "SF Mono", "Consolas", monospace;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(212, 160, 67, 0.25);
+  border-radius: var(--radius-sm);
+}
+.evalDbRow #evalDbPath {
+  flex: 1 1 auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.evalDbRow.warn {
+  color: var(--err);
+  background: rgba(217, 112, 112, 0.10);
+  border-color: rgba(217, 112, 112, 0.30);
+}
+
 /* Engine eval strip — read-only from chess-book-ai's positions.db. Sits
    below the navBar, single line, scroll-on-overflow so long cdb suggestions
    don't break layout. */

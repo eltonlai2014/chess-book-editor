@@ -581,6 +581,64 @@ async function fetchEvalDbInfo() {
   } catch (_) {
     EDITOR.evalDbInfo = { exists: false };
   }
+  renderEvalDbRow();
+}
+
+// Render the small DB-path chip above #evalLine. Shows current path + a
+// per-depth count summary when wired; flips to a warning style when missing.
+function renderEvalDbRow() {
+  const pathEl = $("#evalDbPath");
+  const row = pathEl ? pathEl.parentElement : null;
+  if (!pathEl || !row) return;
+  const info = EDITOR.evalDbInfo || {};
+  const p = info.path || "";
+  if (!info.exists) {
+    row.classList.add("warn");
+    pathEl.textContent = "📊 評估資料庫未連線" + (p ? `（${p}）` : "");
+    pathEl.title = p || "尚未設定資料庫位置";
+    return;
+  }
+  row.classList.remove("warn");
+  const byDepth = info.evals_by_depth || {};
+  const depthSummary = Object.keys(byDepth)
+    .sort((a, b) => Number(a) - Number(b))
+    .map(d => `d${d}=${byDepth[d].toLocaleString()}`)
+    .join(" ");
+  const cdb = info.chessdb_rows ? `  雲庫=${info.chessdb_rows.toLocaleString()}` : "";
+  pathEl.textContent = `📊 ${p}  ·  ${depthSummary}${cdb}`;
+  pathEl.title = p;
+}
+
+// Native file picker for evalDb. POSTs the chosen path, refreshes the row
+// + the per-file eval cache, re-renders the strip for the active ply.
+async function pickEvalDb() {
+  const btn = $("#evalDbPickBtn");
+  if (btn) btn.disabled = true;
+  setStatus("選擇評估資料庫…");
+  try {
+    const r = await fetch("/api/eval/pick-db", { method: "POST" });
+    const resp = await r.json();
+    if (resp.error) { setStatus("選擇失敗：" + resp.error, "err"); return; }
+    if (!resp.ok) { setStatus(""); return; }  // user cancelled
+    const set = await fetch("/api/eval/db", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: resp.path }),
+    });
+    const setResp = await set.json();
+    if (setResp.error) { setStatus("設定失敗：" + setResp.error, "err"); return; }
+    EDITOR.evalDbInfo = setResp.info || { exists: true, path: setResp.path };
+    EDITOR.evalDbInfo.path = setResp.path;
+    renderEvalDbRow();
+    await fetchEvalsForFile();
+    renderEvalLine();
+    renderMoveList();   // trap / brilliant markers re-evaluate against the new DB
+    setStatus("已更新評估資料庫", "ok");
+  } catch (e) {
+    setStatus("選擇失敗：" + e.message, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function fetchEvalsForFile() {
@@ -1257,6 +1315,9 @@ $("#board").addEventListener("click", (e) => {
 
 // Root directory picker — opens native Windows folder dialog.
 $("#rootPickBtn").onclick = pickRoot;
+
+// Eval DB picker — opens native file dialog (positions.db / .sqlite).
+$("#evalDbPickBtn").onclick = pickEvalDb;
 
 // Board theme picker. Initial value applied in boot() after PREFS load.
 const themeSel = $("#boardThemeSel");

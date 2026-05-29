@@ -11,6 +11,10 @@ Local-only by design (binds 127.0.0.1), no auth:
     GET  /api/xqf/root                 -> {root}
     POST /api/xqf/root  body {path}    -> persist new library root to prefs
     POST /api/xqf/pick-root            -> {ok, path?} via native folder picker
+    GET  /api/eval/info                -> {path, exists, evals_by_depth?, chessdb_rows?}
+    POST /api/eval/pick-db             -> {ok, path?} via native file picker
+    POST /api/eval/db    body {path}   -> persist new eval DB path to prefs
+    POST /api/eval/batch body {fens:[...]} -> {fen:{d12?,d22?,d28?,d32?,cdb?}}
     GET  /api/preferences              -> prefs dict
     POST /api/preferences body {...}   -> shallow-merge into prefs
 
@@ -371,6 +375,83 @@ def eval_info():
     (graceful degradation when the AI repo's positions.db is missing).
     """
     return jsonify(eval_db_info(_get_eval_db()))
+
+
+@app.post("/api/eval/pick-db")
+def pick_eval_db_dialog():
+    """Native open-file dialog for selecting a SQLite eval database.
+
+    Same subprocess + tkinter pattern as `/api/xqf/pick-root`, but uses
+    askopenfilename and filters to .db / .sqlite. Returns
+    {ok: true, path} on selection; {ok: false} on cancel.
+    """
+    code = (
+        "import os, sys, tkinter as tk\n"
+        "from tkinter import filedialog\n"
+        "sys.stdout.reconfigure(encoding='utf-8')\n"
+        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+        "p = filedialog.askopenfilename("
+        "title=os.environ.get('DIALOG_TITLE',''),"
+        "initialdir=os.environ.get('INITIAL_DIR','') or None,"
+        "filetypes=(("
+        "'SQLite databases','*.db *.sqlite *.sqlite3'"
+        "),('All files','*.*')))\n"
+        "print(p or '')\n"
+    )
+    cur = _get_eval_db()
+    env = {
+        **os.environ,
+        "DIALOG_TITLE": "選擇引擎評估資料庫 (positions.db)",
+        "INITIAL_DIR": str(cur.parent if cur.exists() else cur.parent.parent),
+        "PYTHONIOENCODING": "utf-8",
+    }
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            timeout=300,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "選擇對話框逾時"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    chosen = proc.stdout.decode("utf-8", errors="replace").strip()
+    if not chosen:
+        return jsonify({"ok": False})
+    return jsonify({"ok": True, "path": chosen})
+
+
+@app.post("/api/eval/db")
+def set_eval_db():
+    """Persist a new eval DB path to preferences.json.
+
+    Validates the file exists, is a file (not dir), and looks like a SQLite
+    DB (we try opening it read-only and reading evals table info — if either
+    fails, refuse). Doesn't enforce any depth-set so future schema additions
+    don't break this endpoint.
+    """
+    body = request.get_json(silent=True) or {}
+    raw = (body.get("path") or "").strip().strip('"').strip("'")
+    if not raw:
+        return jsonify({"error": "path is required"}), 400
+    try:
+        p = Path(raw).expanduser().resolve()
+    except Exception as e:
+        return jsonify({"error": f"invalid path: {e}"}), 400
+    if not p.exists():
+        return jsonify({"error": f"檔案不存在：{p}"}), 400
+    if not p.is_file():
+        return jsonify({"error": f"不是檔案：{p}"}), 400
+    info = eval_db_info(p)
+    if info.get("error"):
+        return jsonify({"error": f"無法開啟 SQLite：{info['error']}"}), 400
+    if "evals_by_depth" not in info:
+        return jsonify({"error": "該檔案沒有 evals 表（不是相容的評估資料庫）"}), 400
+    prefs = _read_prefs()
+    prefs["evalDbPath"] = str(p)
+    _write_prefs(prefs)
+    return jsonify({"ok": True, "path": str(p), "info": info})
 
 
 @app.post("/api/eval/batch")
