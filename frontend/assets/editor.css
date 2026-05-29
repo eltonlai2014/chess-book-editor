@@ -493,6 +493,22 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
+/* Trap / brilliant row highlight — matches chess-book-ai's amber-trap +
+   violet-brilliant convention. Border-left replaces the active accent only
+   when the row is NOT active, so navigation highlight still wins visually. */
+.plyLine.ply-trap:not(.active)      { border-left-color: #c0763a; background: rgba(192, 118, 58, 0.08); }
+.plyLine.ply-brilliant:not(.active) { border-left-color: #9b7cd9; background: rgba(155, 124, 217, 0.08); }
+.plyMark-trap {
+  border-color: #c0763a !important;
+  color: #e09864 !important;
+  background: rgba(192, 118, 58, 0.12);
+}
+.plyMark-brilliant {
+  border-color: #9b7cd9 !important;
+  color: #b8a0e8 !important;
+  background: rgba(155, 124, 217, 0.12);
+}
 .initLine {
   color: var(--text-faint);
   font-style: italic;
@@ -528,6 +544,34 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-color: var(--line);
 }
 #annoteBox::placeholder { color: var(--text-faint); font-style: italic; }
+
+/* Engine eval strip — read-only from chess-book-ai's positions.db. Sits
+   below the navBar, single line, scroll-on-overflow so long cdb suggestions
+   don't break layout. */
+#evalLine {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: baseline;
+  min-height: 28px;
+}
+#evalLine .evalNote { font-style: italic; }
+#evalLine .evalCell { white-space: nowrap; }
+#evalLine .evalLabel {
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+#evalLine .evalScore { color: var(--text); font-variant-numeric: tabular-nums; }
+#evalLine .evalBest .evalMove { color: var(--accent-strong); }
+#evalLine .evalCdb { color: var(--text); }
 
 /* 本步的所有走法 */
 #varPicker {

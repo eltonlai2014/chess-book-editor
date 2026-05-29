@@ -18,6 +18,11 @@ const EDITOR = {
   activePath: [],     // index path into roots[][.children]... — [] = init position
   selectedSquare: null,  // "h2" when user has selected a from-square via click
   legalTargets: [],   // list of dest iccs ("e2",...) for currently selected piece
+  // Read-only eval data from chess-book-ai's positions.db. Loaded by
+  // fetchEvalsForFile() after each selectFile. {fen -> {d12?,d22?,d28?,d32?,cdb?}}.
+  // Empty object when the DB is missing or the file's FENs aren't in it.
+  evalsByFen: {},
+  evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
 };
 
 // Per-theme editor colours for selection halo + legal-destination markers.
@@ -533,8 +538,144 @@ async function selectFile(rel, liEl) {
     setStatus("已載入", "ok");
     // Remember for next session — boot() reopens this file automatically.
     savePreference("lastFile", rel);
+    // Eval lookup is fire-and-forget: don't block file load on it. When it
+    // resolves, re-render so #evalLine populates.
+    fetchEvalsForFile().then(() => renderEvalLine());
   } catch (e) {
     setStatus("載入失敗：" + e.message, "err");
+  }
+}
+
+// ---------- eval data (read-only from chess-book-ai's positions.db) ----------
+// On boot we ping /api/eval/info to see if the DB is wired up. On every file
+// load, we walk the whole tree, derive each node's pre-move FEN via applyIccs
+// (same in-browser xiangqi mover board.js ships with), and POST one batch
+// request. Results are stored fen-keyed so refreshActive() is sync — no
+// per-navigation network roundtrip.
+
+function collectAllFens() {
+  // BFS over the whole tree, applying iccs from init_fen onward. Returns the
+  // de-duplicated set of pre-move FENs reachable from any node. Init position
+  // is included so we can look up the "before move 1" eval too.
+  if (!EDITOR.data) return [];
+  const seen = new Set();
+  seen.add(EDITOR.data.init_fen);
+  const stack = [{ fen: EDITOR.data.init_fen, children: EDITOR.data.roots || [] }];
+  while (stack.length) {
+    const { fen, children } = stack.pop();
+    for (const node of children) {
+      const next = applyIccs(fen, node.iccs);
+      if (!seen.has(next)) {
+        seen.add(next);
+        stack.push({ fen: next, children: node.children || [] });
+      }
+    }
+  }
+  return [...seen];
+}
+
+async function fetchEvalDbInfo() {
+  try {
+    const r = await fetch("/api/eval/info");
+    EDITOR.evalDbInfo = await r.json();
+  } catch (_) {
+    EDITOR.evalDbInfo = { exists: false };
+  }
+}
+
+async function fetchEvalsForFile() {
+  EDITOR.evalsByFen = {};
+  if (!EDITOR.data || !EDITOR.evalDbInfo || !EDITOR.evalDbInfo.exists) return;
+  const fens = collectAllFens();
+  if (fens.length === 0) return;
+  try {
+    const r = await fetch("/api/eval/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fens }),
+    });
+    const body = await r.json();
+    EDITOR.evalsByFen = body.evals || {};
+  } catch (_) {
+    EDITOR.evalsByFen = {};
+  }
+}
+
+// Format a centipawn / mate score for the current eval cell.
+function fmtEvalScore(entry) {
+  if (!entry) return "—";
+  if (entry.mate != null) return entry.mate > 0 ? `#+${entry.mate}` : `#${entry.mate}`;
+  if (entry.score == null) return "—";
+  const sign = entry.score > 0 ? "+" : "";
+  return `${sign}${entry.score}`;
+}
+
+// Translate a single ICCS move under `fen` to traditional Chinese via the
+// existing /api/xqf/move-info endpoint, lightly cached. We use this to label
+// the engine's best move (e.g. "車１平６ (a7f7)") without hard-coding any
+// xiangqi notation rules in the browser.
+const NOTATION_CACHE = new Map();
+async function notationFor(fen, iccs) {
+  const k = fen + "|" + iccs;
+  if (NOTATION_CACHE.has(k)) return NOTATION_CACHE.get(k);
+  try {
+    const r = await fetch("/api/xqf/move-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, iccs }),
+    });
+    const body = await r.json();
+    const out = body.ok ? body.notation : null;
+    NOTATION_CACHE.set(k, out);
+    return out;
+  } catch (_) {
+    NOTATION_CACHE.set(k, null);
+    return null;
+  }
+}
+
+async function renderEvalLine() {
+  const el = $("#evalLine");
+  if (!el) return;
+  el.innerHTML = "";
+  if (!EDITOR.data) return;
+  if (!EDITOR.evalDbInfo || !EDITOR.evalDbInfo.exists) {
+    el.innerHTML = `<span class="evalNote">引擎資料未連線</span>`;
+    return;
+  }
+  const fen = currentFen();
+  const entry = EDITOR.evalsByFen[fen];
+  if (!entry || Object.keys(entry).length === 0) {
+    el.innerHTML = `<span class="evalNote">此局面未分析</span>`;
+    return;
+  }
+
+  const cells = [];
+  for (const d of [12, 22, 28, 32]) {
+    const e = entry[`d${d}`];
+    if (!e) continue;
+    cells.push(`<span class="evalCell"><span class="evalLabel">深${d}</span> <span class="evalScore">${fmtEvalScore(e)}</span></span>`);
+  }
+  // Prefer deepest available eval's best move for the suggestion line.
+  const deepest = entry.d32 || entry.d28 || entry.d22 || entry.d12;
+  const bestIccs = deepest && deepest.best_iccs;
+  let bestHtml = "";
+  if (bestIccs) {
+    bestHtml = `<span class="evalCell evalBest"><span class="evalLabel">建議</span> <span class="evalMove" data-iccs="${bestIccs}">${bestIccs}</span></span>`;
+  }
+  if (entry.cdb && entry.cdb.best) {
+    const b = entry.cdb.best;
+    const wr = b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—";
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> ${b.iccs} (${wr})</span>`);
+  }
+  el.innerHTML = cells.join("") + bestHtml;
+
+  // Async: replace bestIccs with its traditional-Chinese notation when ready.
+  if (bestIccs) {
+    notationFor(fen, bestIccs).then((notation) => {
+      const span = el.querySelector(`.evalMove[data-iccs="${bestIccs}"]`);
+      if (span && notation) span.textContent = `${notation} (${bestIccs})`;
+    });
   }
 }
 
@@ -546,22 +687,89 @@ function currentLine() {
   let nodes = EDITOR.data.roots || [];
   const pathSoFar = [];
   let ply = 1;
+  // Track pre-move FEN as we walk so each ply item carries it. Required for
+  // computing per-ply loss against the eval DB without re-walking later.
+  let fen = EDITOR.data.init_fen;
   for (const idx of EDITOR.activePath) {
     const node = nodes[idx];
     if (!node) break;
     pathSoFar.push(idx);
-    out.push({ node, path: pathSoFar.slice(), ply, hasSiblings: nodes.length > 1 });
+    out.push({ node, path: pathSoFar.slice(), ply, fen, hasSiblings: nodes.length > 1 });
+    fen = applyIccs(fen, node.iccs);
     nodes = node.children || [];
     ply++;
   }
   while (nodes.length > 0) {
     const node = nodes[0];
     pathSoFar.push(0);
-    out.push({ node, path: pathSoFar.slice(), ply, hasSiblings: nodes.length > 1 });
+    out.push({ node, path: pathSoFar.slice(), ply, fen, hasSiblings: nodes.length > 1 });
+    fen = applyIccs(fen, node.iccs);
     nodes = node.children || [];
     ply++;
   }
   return out;
+}
+
+// ---------- per-ply loss + trap/brilliant detection ----------
+// Mirrors chess-book-ai's site_builder/render_site.py:
+//   _ply_loss(fen_before, fen_after) = score_cp(before) + score_cp(after)
+// Both POV-relative — that's why the SUM (not the diff) gives the mover-cp loss.
+// Thresholds and SKIP_OPENING_PLIES must stay in sync with render_site.py.
+
+const SKIP_OPENING_PLIES = 15;     // skip plies 1..15; trap/brilliant from ply 16
+const TRAP_SHALLOW_MAX  = 50;      // shallow says "fine"
+const TRAP_DEEP_MIN     = 100;     // deep says "blunder"
+const TRAP_DEEP_MAX     = 2000;    // sanity cap
+const BRILLIANT_MIN     = 50;
+const BRILLIANT_MAX     = 300;
+
+function scoreCp(e) {
+  if (!e) return null;
+  if (e.mate != null) {
+    const m = e.mate;
+    return m > 0 ? 30000 - Math.abs(m) : -(30000 - Math.abs(m));
+  }
+  return typeof e.score === "number" ? e.score : null;
+}
+
+function plyLossAt(items, i, depthKey) {
+  // Loss the mover at items[i] took, measured at the given depth (e.g. "d22").
+  if (i < 0 || i >= items.length - 1) return null;
+  const a = EDITOR.evalsByFen[items[i].fen];
+  const b = EDITOR.evalsByFen[items[i + 1].fen];
+  if (!a || !b) return null;
+  const sa = scoreCp(a[depthKey]);
+  const sb = scoreCp(b[depthKey]);
+  if (sa == null || sb == null) return null;
+  return sa + sb;
+}
+
+// Classify a ply: returns "trap" | "brilliant" | null. Mirrors render_site.py's
+// compute_game_stats (trap, with d22 + d28 rules) and _compute_brilliants.
+function plyVerdict(items, i) {
+  if (items[i].ply <= SKIP_OPENING_PLIES) return null;
+  const sLoss = plyLossAt(items, i, "d12");
+  const dLoss = plyLossAt(items, i, "d22");
+  const vdLoss = plyLossAt(items, i, "d28");
+
+  // Trap rule A: shallow says fine, d22 says blunder.
+  const trapA = (sLoss != null && sLoss < TRAP_SHALLOW_MAX
+                 && dLoss != null && dLoss > TRAP_DEEP_MIN && dLoss < TRAP_DEEP_MAX);
+  // Trap rule B: shallow says fine, d22 missed it, d28 catches it.
+  const trapB = (!trapA
+                 && sLoss != null && sLoss < TRAP_SHALLOW_MAX
+                 && vdLoss != null && vdLoss > TRAP_DEEP_MIN && vdLoss < TRAP_DEEP_MAX);
+  if (trapA || trapB) {
+    return { kind: "trap", sLoss, dLoss, vdLoss, source: trapA ? "d22" : "d28" };
+  }
+  // Brilliant: deep says mover GAINED 50-300 cp (i.e. negative loss in band).
+  if (dLoss != null) {
+    const gain = -dLoss;
+    if (gain >= BRILLIANT_MIN && gain <= BRILLIANT_MAX) {
+      return { kind: "brilliant", gain, sLoss, dLoss, vdLoss };
+    }
+  }
+  return null;
 }
 
 function renderMoveList() {
@@ -569,18 +777,20 @@ function renderMoveList() {
   list.innerHTML = "";
   // No "（開局）" pseudo-row — master prefers a clean numbered list. To get
   // back to the initial position, use |◀ button or Home key.
-  for (const item of currentLine()) {
-    list.appendChild(renderPlyRow(item));
-  }
+  const items = currentLine();
+  items.forEach((item, i) => {
+    list.appendChild(renderPlyRow(item, plyVerdict(items, i)));
+  });
 }
 
-function renderPlyRow(item) {
+function renderPlyRow(item, verdict) {
   const { node, path, ply, hasSiblings } = item;
   const isFirstOfPair = (ply % 2 === 1);
   const pairNo = Math.ceil(ply / 2);
 
   const row = document.createElement("div");
   row.className = "plyLine" + (isFirstOfPair ? "" : " black");
+  if (verdict) row.classList.add("ply-" + verdict.kind);
   row.dataset.pathkey = path.join("/");
 
   const numEl = document.createElement("span");
@@ -593,6 +803,22 @@ function renderPlyRow(item) {
   txtEl.textContent = node.notation || node.iccs;
   row.appendChild(txtEl);
 
+  if (verdict) {
+    const v = document.createElement("span");
+    v.className = "plyMark plyMark-" + verdict.kind;
+    if (verdict.kind === "trap") {
+      v.textContent = "⚠";
+      const parts = [`陷阱（${verdict.source}）`];
+      if (verdict.sLoss != null) parts.push(`淺失分 ${verdict.sLoss}`);
+      if (verdict.dLoss != null) parts.push(`深失分 ${verdict.dLoss}`);
+      if (verdict.vdLoss != null) parts.push(`d28 失分 ${verdict.vdLoss}`);
+      v.title = parts.join(" · ");
+    } else {
+      v.textContent = "✨";
+      v.title = `妙手 · 深算多賺 ${verdict.gain} cp`;
+    }
+    row.appendChild(v);
+  }
   if (hasSiblings) {
     const m = document.createElement("span");
     m.className = "plyMark";
@@ -664,6 +890,8 @@ function refreshActive() {
   const next = node ? (node.children || [])[0] : (EDITOR.data && EDITOR.data.roots && EDITOR.data.roots[0]);
   $("#navNext").disabled = !next;
   $("#navLast").disabled = !next;
+
+  renderEvalLine();
 }
 
 function renderVarPicker() {
@@ -1133,6 +1361,8 @@ async function tryAutoLoadLastFile() {
     document.documentElement.dataset.board = savedTheme;
   }
   setupSplitters();
-  await loadFileTree();
+  // Parallelisable on boot — eval info is independent of the XQF tree fetch
+  // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.
+  await Promise.all([fetchEvalDbInfo(), loadFileTree()]);
   await tryAutoLoadLastFile();
 })();

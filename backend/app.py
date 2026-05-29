@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -41,12 +42,19 @@ from backend.xqf_service import (  # noqa: E402
     sanitise_filename,
     save_xqf,
 )
+from backend.eval_service import db_info as eval_db_info, lookup_batch as eval_lookup_batch  # noqa: E402
 
 
 # Fallback when preferences.json has no xqfRoot — matches master's primary
 # machine. On other machines, user sets the actual root via UI (POST /api/xqf/root)
 # and it persists to preferences.json.
 DEFAULT_XQF_ROOT = Path(r"D:\Elton\TestArea\chess-book")
+# Default eval database path: sibling chess-book-ai repo's migrated SQLite.
+# Overridden via preferences key ``evalDbPath`` (set from UI later if needed).
+DEFAULT_EVAL_DB = (
+    Path(__file__).resolve().parent.parent.parent
+    / "chess-book-ai" / "output" / "positions.db"
+)
 FRONTEND_ROOT = Path(__file__).resolve().parent.parent / "frontend"
 PREFS_PATH = Path(__file__).resolve().parent.parent / "preferences.json"
 
@@ -340,6 +348,54 @@ def new_xqf():
     except Exception as e:
         return jsonify({"error": f"建立失敗：{e}"}), 500
     return jsonify({"ok": True, "path": rel})
+
+
+def _get_eval_db() -> Path:
+    """Resolve current eval DB path. Pref override > default sibling repo."""
+    prefs = _read_prefs()
+    custom = prefs.get("evalDbPath")
+    if custom:
+        try:
+            p = Path(custom).expanduser().resolve()
+            return p
+        except Exception:
+            pass
+    return DEFAULT_EVAL_DB.resolve()
+
+
+@app.get("/api/eval/info")
+def eval_info():
+    """Report whether the eval DB is wired up and what's in it.
+
+    Used by the UI on boot to decide whether to show eval columns at all
+    (graceful degradation when the AI repo's positions.db is missing).
+    """
+    return jsonify(eval_db_info(_get_eval_db()))
+
+
+@app.post("/api/eval/batch")
+def eval_batch():
+    """Batch-lookup evals for a list of FENs.
+
+    Body: {fens: [str, ...]}
+    Returns: {db_path, evals: {fen: {d12?, d22?, d28?, d32?, cdb?}}}
+
+    Missing FENs map to ``{}``. Missing depths are absent from the per-fen
+    dict (so the frontend can use ``'d22' in entry`` as a presence check).
+    """
+    body = request.get_json(silent=True) or {}
+    fens = body.get("fens") or []
+    if not isinstance(fens, list):
+        return jsonify({"error": "fens must be an array"}), 400
+    # Reject obviously-bogus input early; SQLite would handle it fine but
+    # rejecting here gives a clearer error.
+    fens = [f for f in fens if isinstance(f, str) and f]
+    db = _get_eval_db()
+    try:
+        evals = eval_lookup_batch(db, fens)
+    except sqlite3.DatabaseError as e:
+        return jsonify({"error": f"eval db read failed: {e}"}), 500
+    return jsonify({"db_path": str(db), "evals": evals})
 
 
 @app.post("/api/xqf/save")

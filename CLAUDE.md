@@ -56,6 +56,25 @@ py -m venv .venv
   `assets/board.js` + `applyIccs` from chess-book-ai's `site_builder/assets/`,
   accept drift. Long-term: extract shared `xiangqi-board-lib`.
 
+## Eval data integration (2026-05-29)
+
+This repo consumes engine evals + chessdb winrates from chess-book-ai's
+`output/positions.db` (SQLite). See [../chess-book-ai/SQLITE_EVAL_DB.md](../chess-book-ai/SQLITE_EVAL_DB.md)
+for the full design and schema.
+
+- **Strictly read-only.** `backend/eval_service.py` opens the DB with URI mode
+  `?mode=ro`. Never INSERT/UPDATE — the AI repo's pipeline owns the file.
+- **Default path**: `../chess-book-ai/output/positions.db` (sibling). Override
+  via `preferences.json` key `evalDbPath`.
+- **Trap / brilliant thresholds** in `editor.js` (`SKIP_OPENING_PLIES`,
+  `TRAP_SHALLOW_MAX`, `TRAP_DEEP_MIN`, `BRILLIANT_MIN`, `BRILLIANT_MAX`)
+  **must stay in sync with `chess-book-ai/site_builder/render_site.py`**.
+  Same goes for the `_ply_loss` formula. There's a sanity-check script:
+  `backend/test_trap_spotcheck.py`.
+- **FEN format compatibility** (must remain `<board> <w|b>`, no move counters):
+  `backend/test_eval_integration.py` measures hit rate against the DB and
+  will tank to ~0% if either side's FEN serialiser drifts.
+
 ## Gotchas
 
 - **Don't `pip install --upgrade cchess` globally.** chess-book-ai uses the
