@@ -7,10 +7,13 @@ Guidance for Claude Code when working in this repo.
 Browser-based XQF editor. Pairs with [chess-book-ai](../chess-book-ai/)
 (opening-book analyser + static site) but is intentionally separate:
 
+Both repos analyse — the split is **breadth vs depth**, not "analyse vs edit":
+
 | | chess-book-ai | this repo |
 |---|---|---|
-| Purpose | Analyse XQF, surface engine-vs-book traps | **Edit** XQF (moves, variations, annotes) |
-| Backend | None (batch Python → static HTML) | Flask/FastAPI for POST /xqf/save |
+| Emphasis | **Breadth** — batch-scan the library, surface problem points | **Depth** — drill into a specific position; input + deep study + annotation |
+| Purpose | Analyse XQF en masse, surface engine-vs-book traps | **Edit + deeply analyse** XQF (moves, variations, annotes, targeted engine study) |
+| Backend | None (batch Python → static HTML) | Flask/FastAPI for POST /xqf/save + live engine SSE |
 | Deploy | GitHub Pages (public) | Local-only tool |
 | cchess | old install (read_xqf.py only) | new install + `vendor/io_xqf_patched.py` |
 
@@ -50,8 +53,17 @@ py -m venv .venv
 
 ## When to break out of this repo
 
-- **Analysis features** (depth-22 engine eval, trap detection, traps.html) →
-  chess-book-ai. Don't pull pikafish/engine code into this repo.
+- **Breadth-analysis** — batch sweeps that scan the whole library to *find*
+  problem points (trap detection, depth-22 eval sweep over many games,
+  traps.html). That machinery + positions.db live in chess-book-ai; don't
+  duplicate the batch pipeline here.
+- **Depth-analysis is this repo's job, not an exception.** Drilling into the
+  *one* position the user is studying — live interactive engine analysis,
+  evaluation, annotation — is core to the editor. `GET /api/engine/analyze`
+  (SSE) *execs* an existing pikafish binary (no source/build copied here) to
+  stream depth/score/PV; strictly **ephemeral**, nothing persisted (contrast
+  positions.db). Binary via `preferences.json` `pikafishPath` (default sibling
+  `chess-book-ai/engine/Windows/pikafish-avx2.exe`); UI chip in the file pane.
 - **Board rendering code reuse** → currently a TODO. When the UI starts, copy
   `assets/board.js` + `applyIccs` from chess-book-ai's `site_builder/assets/`,
   accept drift. Long-term: extract shared `xiangqi-board-lib`.

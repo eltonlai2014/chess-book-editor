@@ -34,16 +34,9 @@
     <aside id="filePane">
       <h2 class="panelHead">
         <span>檔案</span>
+        <button id="settingsBtn" class="iconBtn" title="設定（根目錄／評估庫／引擎）">⚙</button>
         <button id="newXqfBtn" class="iconBtn" title="新增棋譜" disabled>➕ 新增</button>
       </h2>
-      <div class="rootPath">
-        <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
-        <button id="rootPickBtn" title="選擇目錄…">📁</button>
-      </div>
-      <div class="evalDbRow evalDbRowSide">
-        <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
-        <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
-      </div>
       <div id="fileTree">載入中…</div>
     </aside>
     <div class="splitter splitter-v" data-resize="filePane" data-pref="splitFileW"></div>
@@ -75,9 +68,23 @@
           <textarea id="annoteBox" placeholder="（無註解，可在此輸入）"></textarea>
         </div>
         <div class="splitter splitter-h" data-resize="rpAnnote" data-pref="splitAnnoteH" data-direction="row"></div>
-        <div class="rpSection rpVars">
-          <h2 class="panelHead"><span>本步的所有走法</span></h2>
-          <div id="varPicker"></div>
+        <div id="rpVars" class="rpSection rpVars">
+          <div class="rpTabs" role="tablist">
+            <button id="rpTabVars"   class="rpTab active" data-tab="vars"   role="tab">本步的所有走法</button>
+            <button id="rpTabEngine" class="rpTab"        data-tab="engine" role="tab">🐟 引擎分析</button>
+          </div>
+          <div id="rpVarsBody" class="rpTabBody" data-tab="vars">
+            <div id="varPicker"></div>
+          </div>
+          <div id="rpEngineBody" class="rpTabBody" data-tab="engine" hidden>
+            <div class="engineBar">
+              <button id="engineToggleBtn" class="iconBtn engineToggle" title="開始 / 停止即時分析">▶ 開始分析</button>
+              <button id="engineClearBtn" class="iconBtn" title="清除分析歷程">🗑 清除</button>
+              <button id="engineExportBtn" class="iconBtn" title="複製分析歷程到剪貼簿">⧉ 導出</button>
+              <span id="engineState" class="engineState">尚未開始</span>
+            </div>
+            <div id="engineHistory" class="engineHistory"></div>
+          </div>
         </div>
       </div>
     </aside>
@@ -136,6 +143,40 @@
       <div class="modalActions">
         <button id="newCancel">取消</button>
         <button id="newOk" class="primary">建立</button>
+      </div>
+    </div>
+  </div>
+  <!-- Settings dialog. Holds the rarely-changed paths (library root / eval DB /
+       Pikafish), moved out of the file pane to free vertical space. IDs + chip
+       classes preserved so the existing render/picker JS works unchanged. -->
+  <div id="settingsModal" class="modal" hidden>
+    <div class="modalDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <h3 id="settingsTitle">設定</h3>
+      <div class="settingsForm">
+        <div class="settingRow">
+          <label>棋譜根目錄</label>
+          <div class="rootPath">
+            <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
+            <button id="rootPickBtn" title="選擇目錄…">📁</button>
+          </div>
+        </div>
+        <div class="settingRow">
+          <label>評估資料庫（唯讀）</label>
+          <div class="evalDbRow evalDbRowSide">
+            <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
+            <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
+          </div>
+        </div>
+        <div class="settingRow">
+          <label>皮卡魚引擎（即時分析）</label>
+          <div class="evalDbRow evalDbRowSide engineRowSide">
+            <span id="enginePath" title="皮卡魚引擎執行檔位置（即時分析用）">🐟 載入中…</span>
+            <button id="enginePickBtn" class="iconBtn" title="選擇皮卡魚引擎執行檔…">📁</button>
+          </div>
+        </div>
+      </div>
+      <div class="modalActions">
+        <button id="settingsClose" class="primary">完成</button>
       </div>
     </div>
   </div>

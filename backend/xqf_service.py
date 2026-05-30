@@ -405,6 +405,43 @@ def compute_move_info(fen: str, iccs: str) -> dict:
     return {"notation": notation, "side": side}
 
 
+def pv_to_chinese(fen: str, uci_moves, limit: int = 16) -> list:
+    """Replay a UCI principal variation on `fen`, return each move's
+    traditional-Chinese notation. Pikafish move coords are identical to our
+    iccs (files a-i, ranks 0-9), so each token feeds straight into the same
+    replay path as `compute_move_info`. Stops at the first illegal/unparseable
+    move (engine PVs are legal; guard anyway). Used only for live display."""
+    out = []
+    if not fen or not uci_moves:
+        return out
+    try:
+        board = ChessBoard(fen)
+    except Exception:
+        return out
+    for uci in uci_moves[:limit]:
+        if not uci or len(uci) < 4:
+            break
+        try:
+            move_from, move_to = iccs2pos(uci[:4])
+            fench = board.get_fench(move_from)
+            if fench == "." or fench is None:
+                break
+            board.set_move_side(get_fench_color(fench))
+            if not board.is_valid_move(move_from, move_to):
+                break
+            move = board.move(move_from, move_to)
+            try:
+                notation = move.to_text(fmt="chinese", traditional=True)
+            except Exception:
+                notation = move.to_iccs()
+            if move.move_side == SIDE_BLACK:
+                notation = notation.replace("砲", "包")
+            out.append(notation)
+        except Exception:
+            break
+    return out
+
+
 def compute_legal_targets(fen: str, from_sq: str) -> list:
     """Return a list of legal destination square iccs (e.g. ['e2','e3',...])
     for the piece on `from_sq` under `fen`. Empty list if no piece or no

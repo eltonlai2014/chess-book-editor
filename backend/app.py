@@ -15,6 +15,9 @@ Local-only by design (binds 127.0.0.1), no auth:
     POST /api/eval/pick-db             -> {ok, path?} via native file picker
     POST /api/eval/db    body {path}   -> persist new eval DB path to prefs
     POST /api/eval/batch body {fens:[...]} -> {fen:{d12?,d22?,d28?,d32?,cdb?}}
+    GET  /api/engine/info              -> {path, exists, ok?, name?} (UCI handshake)
+    POST /api/engine/pick              -> {ok, path?} via native file picker
+    POST /api/engine/path body {path}  -> persist Pikafish path to prefs
     GET  /api/preferences              -> prefs dict
     POST /api/preferences body {...}   -> shallow-merge into prefs
 
@@ -31,12 +34,13 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Make `vendor` importable when running this file directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from flask import Flask, jsonify, request, send_from_directory  # noqa: E402
+from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context  # noqa: E402
 
 from backend.xqf_service import (  # noqa: E402
     compute_legal_targets,
@@ -47,6 +51,7 @@ from backend.xqf_service import (  # noqa: E402
     save_xqf,
 )
 from backend.eval_service import db_info as eval_db_info, lookup_batch as eval_lookup_batch  # noqa: E402
+from backend.xqf_service import pv_to_chinese  # noqa: E402
 
 
 # Fallback when preferences.json has no xqfRoot — matches master's primary
@@ -58,6 +63,15 @@ DEFAULT_XQF_ROOT = Path(r"D:\Elton\TestArea\chess-book")
 DEFAULT_EVAL_DB = (
     Path(__file__).resolve().parent.parent.parent
     / "chess-book-ai" / "output" / "positions.db"
+)
+# Default Pikafish engine: sibling chess-book-ai repo ships several microarch
+# builds — avx2 is the broadest-compatible modern default. Overridden via
+# preferences key ``pikafishPath`` (user picks the build matching their CPU).
+# We only ever *run* this binary live; the engine source/build stays in the AI
+# repo (see CLAUDE.md), and analysis is ephemeral (never persisted).
+DEFAULT_PIKAFISH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "chess-book-ai" / "engine" / "Windows" / "pikafish-avx2.exe"
 )
 FRONTEND_ROOT = Path(__file__).resolve().parent.parent / "frontend"
 PREFS_PATH = Path(__file__).resolve().parent.parent / "preferences.json"
@@ -454,6 +468,271 @@ def set_eval_db():
     return jsonify({"ok": True, "path": str(p), "info": info})
 
 
+# ---------- Pikafish engine config -------------------------------------------
+# Just the config slot here (path chip + picker + persistence), mirroring the
+# eval DB. Live UCI streaming/analysis is a separate, later increment.
+
+def _get_pikafish() -> Path:
+    """Resolve current Pikafish path. Pref override > default sibling build."""
+    prefs = _read_prefs()
+    custom = prefs.get("pikafishPath")
+    if custom:
+        try:
+            return Path(custom).expanduser().resolve()
+        except Exception:
+            pass
+    return DEFAULT_PIKAFISH.resolve()
+
+
+def _pikafish_info(p: Path) -> dict:
+    """Report whether the engine is wired up. When present, do a short UCI
+    handshake (``uci``/``quit``) to surface the engine's ``id name`` so the
+    chip confirms it's a real, runnable Pikafish rather than just any file.
+    Runs with cwd=binary dir so the engine finds its sibling ``*.nnue``."""
+    info = {"path": str(p), "exists": p.exists() and p.is_file()}
+    if not info["exists"]:
+        return info
+    try:
+        proc = subprocess.run(
+            [str(p)],
+            input="uci\nquit\n",
+            capture_output=True,
+            text=True,
+            timeout=8,
+            cwd=str(p.parent),
+        )
+        out = proc.stdout or ""
+        info["ok"] = "uciok" in out
+        for line in out.splitlines():
+            if line.startswith("id name"):
+                info["name"] = line[len("id name"):].strip()
+                break
+    except Exception as e:
+        info["ok"] = False
+        info["error"] = str(e)
+    return info
+
+
+@app.get("/api/engine/info")
+def engine_info():
+    """Report whether the Pikafish engine is configured + a quick handshake."""
+    return jsonify(_pikafish_info(_get_pikafish()))
+
+
+@app.post("/api/engine/pick")
+def pick_engine_dialog():
+    """Native open-file dialog for selecting the Pikafish executable.
+
+    Same subprocess + tkinter pattern as `/api/eval/pick-db`, filtered to .exe.
+    Returns {ok: true, path} on selection; {ok: false} on cancel.
+    """
+    code = (
+        "import os, sys, tkinter as tk\n"
+        "from tkinter import filedialog\n"
+        "sys.stdout.reconfigure(encoding='utf-8')\n"
+        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+        "p = filedialog.askopenfilename("
+        "title=os.environ.get('DIALOG_TITLE',''),"
+        "initialdir=os.environ.get('INITIAL_DIR','') or None,"
+        "filetypes=(("
+        "'Pikafish 執行檔','pikafish*.exe'"
+        "),('執行檔','*.exe'),('All files','*.*')))\n"
+        "print(p or '')\n"
+    )
+    cur = _get_pikafish()
+    env = {
+        **os.environ,
+        "DIALOG_TITLE": "選擇皮卡魚引擎執行檔 (pikafish*.exe)",
+        "INITIAL_DIR": str(cur.parent if cur.parent.exists() else cur.parent.parent),
+        "PYTHONIOENCODING": "utf-8",
+    }
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            timeout=300,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "選擇對話框逾時"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    chosen = proc.stdout.decode("utf-8", errors="replace").strip()
+    if not chosen:
+        return jsonify({"ok": False})
+    return jsonify({"ok": True, "path": chosen})
+
+
+@app.post("/api/engine/path")
+def set_engine_path():
+    """Persist a new Pikafish path to preferences.json after validating it
+    exists, is a file, and survives a UCI handshake (refuse non-engines)."""
+    body = request.get_json(silent=True) or {}
+    raw = (body.get("path") or "").strip().strip('"').strip("'")
+    if not raw:
+        return jsonify({"error": "path is required"}), 400
+    try:
+        p = Path(raw).expanduser().resolve()
+    except Exception as e:
+        return jsonify({"error": f"invalid path: {e}"}), 400
+    if not p.exists():
+        return jsonify({"error": f"檔案不存在：{p}"}), 400
+    if not p.is_file():
+        return jsonify({"error": f"不是檔案：{p}"}), 400
+    info = _pikafish_info(p)
+    if not info.get("ok"):
+        detail = info.get("error") or "未回應 uciok"
+        return jsonify({"error": f"不是可用的 UCI 引擎：{detail}"}), 400
+    prefs = _read_prefs()
+    prefs["pikafishPath"] = str(p)
+    _write_prefs(prefs)
+    return jsonify({"ok": True, "path": str(p), "info": info})
+
+
+def _safe_int(v, default: int = 0) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_info_line(line: str, flip: int, fen: str) -> dict | None:
+    """Parse one UCI ``info ... pv ...`` line into a display event. ``flip``
+    converts the engine's side-to-move score into red POV (matches the eval
+    DB / #evalLine convention). ``fen`` is the editor FEN used to render the
+    PV in Chinese."""
+    toks = line.split()
+    info: dict = {}
+    pv: list = []
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if t == "depth" and i + 1 < len(toks):
+            info["depth"] = _safe_int(toks[i + 1]); i += 2
+        elif t == "seldepth" and i + 1 < len(toks):
+            info["seldepth"] = _safe_int(toks[i + 1]); i += 2
+        elif t == "nps" and i + 1 < len(toks):
+            info["nps"] = _safe_int(toks[i + 1]); i += 2
+        elif t == "time" and i + 1 < len(toks):
+            info["time_ms"] = _safe_int(toks[i + 1]); i += 2
+        elif t == "score" and i + 2 < len(toks):
+            kind, val = toks[i + 1], _safe_int(toks[i + 2])
+            if kind == "mate":
+                info["mate"] = val * flip
+            else:
+                info["cp"] = val * flip
+            i += 3
+        elif t == "wdl" and i + 3 < len(toks):
+            w, d2, l = _safe_int(toks[i + 1]), _safe_int(toks[i + 2]), _safe_int(toks[i + 3])
+            # wdl is side-to-move POV (per-mille). For red-POV display, swap
+            # win/loss when black is to move (flip < 0).
+            if flip < 0:
+                w, l = l, w
+            info["wdl"] = [w, d2, l]
+            i += 4
+        elif t == "pv":
+            pv = toks[i + 1:]
+            break
+        else:
+            i += 1
+    if "depth" not in info:
+        return None
+    info["pv"] = pv_to_chinese(fen, pv, limit=16)
+    info["bestUci"] = pv[0] if pv else None
+    return info
+
+
+@app.get("/api/engine/analyze")
+def engine_analyze():
+    """SSE stream of live Pikafish analysis for one position.
+
+    Ephemeral by design: spawns an engine, streams per-depth depth/score/pv
+    events, and is killed when the client closes the EventSource (GeneratorExit
+    on the next yield) or ``bestmove`` arrives. Nothing is persisted.
+
+    Query: fen (required), depth (0=infinite), movetime ms (0=infinite).
+    """
+    fen = (request.args.get("fen") or "").strip()
+    if not fen:
+        return jsonify({"error": "fen is required"}), 400
+    depth = _safe_int(request.args.get("depth"), 0)
+    movetime = _safe_int(request.args.get("movetime"), 0)
+    engine = _get_pikafish()
+    if not (engine.exists() and engine.is_file()):
+        return jsonify({"error": "皮卡魚引擎未設定（請先在檔案窗格選擇）"}), 400
+
+    parts = fen.split()
+    board_part = parts[0]
+    side = parts[1] if len(parts) > 1 else "w"
+    full_fen = f"{board_part} {side} - - 0 1"   # Pikafish wants a 6-field FEN
+    flip = -1 if side == "b" else 1
+
+    def gen():
+        proc = subprocess.Popen(
+            [str(engine)],
+            cwd=str(engine.parent),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+
+        def send(cmd: str) -> None:
+            proc.stdin.write(cmd + "\n")
+            proc.stdin.flush()
+
+        try:
+            send("uci")
+            send("setoption name Threads value 4")
+            send("setoption name Hash value 128")
+            send("setoption name UCI_ShowWDL value true")
+            send("isready")
+            send(f"position fen {full_fen}")
+            if depth > 0:
+                send(f"go depth {depth}")
+            elif movetime > 0:
+                send(f"go movetime {movetime}")
+            else:
+                send("go infinite")
+            last_emit = 0.0
+            last_depth = -1
+            for line in proc.stdout:
+                line = line.strip()
+                if line.startswith("bestmove"):
+                    bits = line.split()
+                    bm = bits[1] if len(bits) > 1 else ""
+                    yield "data: " + json.dumps({"done": True, "bestmove": bm}, ensure_ascii=False) + "\n\n"
+                    break
+                if not (line.startswith("info ") and " pv " in line and " depth " in line):
+                    continue
+                ev = _parse_info_line(line, flip, fen)
+                if ev is None:
+                    continue
+                now = time.monotonic()
+                # One event per completed depth, plus a 150ms heartbeat so nps/
+                # time still tick on long single-depth searches. Avoids flooding.
+                if ev["depth"] != last_depth or (now - last_emit) >= 0.15:
+                    last_depth = ev["depth"]
+                    last_emit = now
+                    yield "data: " + json.dumps(ev, ensure_ascii=False) + "\n\n"
+        finally:
+            try:
+                send("quit")
+            except Exception:
+                pass
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    return Response(
+        stream_with_context(gen()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/eval/batch")
 def eval_batch():
     """Batch-lookup evals for a list of FENs.
@@ -497,4 +776,6 @@ def save():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5174, debug=True)
+    # threaded=True so a long-lived SSE analysis stream doesn't block other
+    # requests (page, move-info, a second analyze after navigation).
+    app.run(host="127.0.0.1", port=5174, debug=True, threaded=True)

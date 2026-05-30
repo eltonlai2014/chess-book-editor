@@ -513,6 +513,13 @@ h2 {
 
 /* ---------- left: file tree ---------- */
 #filePane { padding: 0; overflow: auto; }
+/* Settings dialog: stack labelled rows; chips fill the dialog width (drop the
+   file-pane side margins they no longer live under). */
+.settingsForm { display: flex; flex-direction: column; gap: 14px; }
+.settingRow { display: flex; flex-direction: column; gap: 5px; }
+.settingRow > label { font-size: 12px; color: var(--text-muted); }
+.settingsForm .rootPath,
+.settingsForm .evalDbRowSide { margin: 0; }
 .rootPath {
   display: flex;
   align-items: center;
@@ -535,7 +542,8 @@ h2 {
 /* Sidebar chip pick buttons — ghost base + hover come from button system;
    here only the chip-specific size + rounded shape. */
 .rootPath #rootPickBtn,
-.evalDbRowSide #evalDbPickBtn {
+.evalDbRowSide #evalDbPickBtn,
+.evalDbRowSide #enginePickBtn {
   flex: 0 0 auto;
   min-width: 30px;
   height: 28px;
@@ -549,7 +557,8 @@ h2 {
   font-size: 11px;
   padding: 7px 10px;
 }
-.evalDbRowSide #evalDbPath {
+.evalDbRowSide #evalDbPath,
+.evalDbRowSide #enginePath {
   font-family: "SF Mono", "Consolas", monospace;
 }
 #fileTree ul {
@@ -750,55 +759,68 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .rpMoves     { flex: 0 0 360px; min-width: 200px; }   /* resizable via splitter */
 .rpRightCol  { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; overflow: hidden; }
-.rpAnnote    {
-  flex: 0 0 280px;          /* resizable height via splitter */
+/* 注解 — fixed-ish height, resizable via the splitter below it (original). */
+.rpAnnote {
+  flex: 0 0 280px;
   min-height: 100px;
   display: flex; flex-direction: column;
 }
-.rpVars      { flex: 1 1 0; min-height: 80px; background: var(--bg-2); }
-/* When current ply has no siblings, hide vars + its splitter; annote takes all */
-/* When no variations at current ply: hide vars + its splitter, let annote
-   fill. !important needed to override the inline flex-basis the user may
-   have set by dragging the annote splitter. */
-#rightPane.noVars .rpAnnote                  { flex: 1 1 auto !important; }
-#rightPane.noVars .splitter-h,
-#rightPane.noVars .rpVars                    { display: none; }
-
-#rpMoves, .rpRightCol, .rpAnnote, .rpVars {
-  background: transparent;
-}
-.rpAnnote,
+/* 走法 + 引擎分析 share the lower section through a tab strip; 注解 stays
+   above as its own resizable section (master prefers the original stack). */
 .rpVars {
-  padding-left: 0;
-  padding-right: 0;
-  overflow-x: hidden;
-  /* .rpSection sets scrollbar-gutter: stable to keep the moveList layout
-     steady. Here the textarea / varPicker rarely scroll the section itself,
-     so reserving 10px on the right just creates a visible gap at the
-     header underline. `auto` releases it — scrollbar shows only when
-     genuinely needed. */
+  flex: 1 1 0;
+  min-height: 80px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
   scrollbar-gutter: auto;
 }
-.rpAnnote > .panelHead,
-.rpVars > .panelHead {
-  /* These sections strip the .rpSection side padding (see block above), so
-     the negative -14 / -24 horizontal margins inherited from .rpSection >
-     .panelHead would push the header sideways out of place. Reset to 0 so
-     the header box sits flush within the section box — the underline then
-     reaches both outer borders edge-to-edge. */
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 16px;
-  padding-right: 16px;
-  width: 100%;
-  box-sizing: border-box;
+#rpMoves, .rpRightCol, .rpAnnote, .rpVars { background: transparent; }
+.rpAnnote { padding-left: 0; padding-right: 0; overflow-x: hidden; scrollbar-gutter: auto; }
+.rpAnnote > .panelHead {
+  margin-left: 0; margin-right: 0;
+  padding-left: 16px; padding-right: 16px;
+  width: 100%; box-sizing: border-box;
 }
-#annoteBox,
-#varPicker {
-  margin-left: 16px;
-  margin-right: 16px;
-  max-width: calc(100% - 32px);
+#annoteBox { margin-left: 16px; margin-right: 16px; max-width: calc(100% - 32px); }
+
+.rpTabs { flex: 0 0 auto; display: flex; gap: 4px; margin-bottom: 10px; }
+.rpTab {
+  flex: 0 0 auto; padding: 6px 12px;
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+  background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.06), transparent);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
+  border-radius: 9px; cursor: pointer; transition: var(--btn-transition);
 }
+.rpTab:hover:not(.active) { color: var(--accent-strong); border-color: rgba(var(--accent-strong-rgb), 0.28); }
+.rpTab.active {
+  color: var(--bg-1);
+  background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.95), rgba(var(--accent-strong-rgb), 0.82));
+  border-color: rgba(var(--accent-strong-rgb), 0.55);
+}
+.rpTabBody { flex: 1 1 0; min-height: 0; overflow: auto; }
+.rpTabBody[hidden] { display: none; }
+
+/* 引擎分析 — control bar + scrolling history (newest on top, Pikafish-style). */
+#rpEngineBody { display: flex; flex-direction: column; gap: 8px; }
+.engineBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 0 auto; }
+.engineToggle { min-width: 92px; }
+.engineBar .iconBtn { height: 30px; border-radius: 999px; font-size: 13px; padding: 0 12px; }
+.engineState { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+.engineHistory { flex: 1 1 0; min-height: 0; overflow: auto; }
+.engEntry { padding: 6px 2px; border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.10); }
+.engEntry:first-child .engMeta .engBig { color: #fff1d8; }
+.engMeta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--text-muted); }
+.engMeta .engBig { color: var(--accent-strong); font-weight: 700; font-variant-numeric: tabular-nums; }
+.engMeta .wdlW, .engMeta .wdlD, .engMeta .wdlL { font-variant-numeric: tabular-nums; }
+.engMeta .wdlW { color: #74c79b; }   /* 勝 — green */
+.engMeta .wdlD { color: var(--text-faint); }  /* 和 — muted */
+.engMeta .wdlL { color: #e08a90; }   /* 負 — red */
+.engPv {
+  margin-top: 3px;
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
+  font-size: 14px; line-height: 1.7; color: var(--text);
+}
+.varEmpty { color: var(--text-faint); font-style: italic; padding: 6px 2px; }
 
 /* 棋譜 panel header */
 .moveListHeader { margin-bottom: 10px; }
@@ -1109,8 +1131,13 @@ h2.panelHead > span { flex: 1 1 auto; }
     linear-gradient(180deg, rgba(37,33,28,0.98), rgba(28,25,21,0.98));
   box-shadow: 0 18px 48px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.04);
 }
-.confirmDialog h3 {
+/* Higher specificity (two classes) so these win over .modalDialog h3
+   regardless of source order — confirmDialog has the larger top padding. */
+.modalDialog.confirmDialog h3 {
+  margin-top: -20px;
   margin-bottom: 12px;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
 }
 .confirmMessage {
   color: var(--text);
@@ -1128,13 +1155,24 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-radius: 999px;
 }
 .modalDialog h3 {
-  margin: 0 0 14px 0;
-  font-size: 17px;
+  /* Full-bleed header strip: negative margins pull the title out through the
+     dialog's 18/22px padding so the band + divider reach all edges (matches
+     the 檔案/棋譜 panel headers). Defined by a slightly-raised surface + a
+     clean accent divider, NOT a saturated colour fill — the gold title carries
+     the accent. .confirmDialog overrides the top metrics below for its larger
+     20px padding + 16px radius. */
+  margin: -18px -22px 14px;
+  padding: 13px 22px 10px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--accent-strong);
   letter-spacing: 0.02em;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--line-strong);
+  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.28);
+  background:
+    linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.10), rgba(var(--accent-strong-rgb), 0.035)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0));
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
 }
 .metaForm {
   display: grid;

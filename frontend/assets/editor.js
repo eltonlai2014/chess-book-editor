@@ -23,6 +23,8 @@ const EDITOR = {
   // Empty object when the DB is missing or the file's FENs aren't in it.
   evalsByFen: {},
   evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
+  engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
+  engineAnalysis: { es: null, running: false, fen: null, history: [] },  // live SSE analysis
 };
 
 // Per-theme editor colours for selection halo + legal-destination markers.
@@ -733,6 +735,71 @@ async function pickEvalDb() {
   }
 }
 
+// ---- Pikafish engine config chip (live-analysis source, not persisted) ----
+async function fetchEngineInfo() {
+  try {
+    const r = await fetch("/api/engine/info");
+    EDITOR.engineInfo = await r.json();
+  } catch (_) {
+    EDITOR.engineInfo = { exists: false };
+  }
+  renderEngineRow();
+}
+
+// Render the 🐟 engine chip below the eval-DB chip. Shows the engine's UCI
+// id-name when the handshake succeeded, else the filename + a warning state.
+function renderEngineRow() {
+  const pathEl = $("#enginePath");
+  const row = pathEl ? pathEl.parentElement : null;
+  if (!pathEl || !row) return;
+  const info = EDITOR.engineInfo || {};
+  const p = info.path || "";
+  if (!info.exists) {
+    row.classList.add("warn");
+    pathEl.textContent = "🐟 皮卡魚引擎未設定（點 📁 選擇）";
+    pathEl.title = p || "尚未設定引擎位置";
+    return;
+  }
+  const fname = p.split(/[\\/]/).pop() || p;
+  if (!info.ok) {
+    row.classList.add("warn");
+    pathEl.textContent = `🐟 ${fname}（無法握手）`;
+    pathEl.title = `${p}\n${info.error || "未回應 uciok"}`;
+    return;
+  }
+  row.classList.remove("warn");
+  pathEl.textContent = `🐟 ${info.name || fname}`;
+  pathEl.title = `${p}\n${info.name || ""}`.trim();
+}
+
+// Native file picker for the Pikafish executable. POSTs the chosen path,
+// which is validated via a UCI handshake server-side before persisting.
+async function pickEngine() {
+  const btn = $("#enginePickBtn");
+  if (btn) btn.disabled = true;
+  setStatus("選擇皮卡魚引擎…");
+  try {
+    const r = await fetch("/api/engine/pick", { method: "POST" });
+    const resp = await r.json();
+    if (resp.error) { setStatus("選擇失敗：" + resp.error, "err"); return; }
+    if (!resp.ok) { setStatus(""); return; }  // user cancelled
+    const set = await fetch("/api/engine/path", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: resp.path }),
+    });
+    const setResp = await set.json();
+    if (setResp.error) { setStatus("設定失敗：" + setResp.error, "err"); return; }
+    EDITOR.engineInfo = setResp.info || { exists: true, ok: true, path: setResp.path };
+    renderEngineRow();
+    setStatus("已更新皮卡魚引擎", "ok");
+  } catch (e) {
+    setStatus("選擇失敗：" + e.message, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function fetchEvalsForFile() {
   EDITOR.evalsByFen = {};
   if (!EDITOR.data || !EDITOR.evalDbInfo || !EDITOR.evalDbInfo.exists) return;
@@ -797,6 +864,11 @@ async function notationFor(fen, iccs) {
 }
 
 async function renderEvalLine() {
+  // Analysis is position-specific: if the board moved, drop the stale stream.
+  const ea = EDITOR.engineAnalysis;
+  if (ea.running && ea.fen && ea.fen !== analysisFen()) {
+    stopAnalysis("局面已變，請重新分析");
+  }
   const el = $("#evalLine");
   if (!el) return;
   el.innerHTML = "";
@@ -1060,7 +1132,6 @@ function refreshActive() {
 function renderVarPicker() {
   const path = EDITOR.activePath;
   const picker = $("#varPicker");
-  const rightPane = $("#rightPane");
   picker.innerHTML = "";
   let opts, activeIdx;
   if (path.length === 0) {
@@ -1071,10 +1142,9 @@ function renderVarPicker() {
     activeIdx = path[path.length - 1];
   }
   if (opts.length <= 1) {
-    rightPane.classList.add("noVars");  // CSS makes 注解 span both rows
+    picker.innerHTML = `<div class="varEmpty">此步無其他分支</div>`;
     return;
   }
-  rightPane.classList.remove("noVars");
   const letters = "ABCDEFGHIJKLMN";
   const parentPath = path.length === 0 ? [] : path.slice(0, -1);
   opts.forEach((opt, i) => {
@@ -1395,6 +1465,7 @@ function ensureUiThemePicker() {
 window.addEventListener("keydown", (e) => {
   // Esc closes any open modal from anywhere.
   if (e.key === "Escape") {
+    if (!$("#settingsModal").hidden) { closeSettingsModal(); e.preventDefault(); return; }
     if (!$("#metaModal").hidden) { closeMetaModal(); e.preventDefault(); return; }
     if (!$("#newModal").hidden)  { closeNewModal();  e.preventDefault(); return; }
   }
@@ -1420,6 +1491,161 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------- right-column tabs + live Pikafish analysis ----------
+
+function switchRpTab(tab) {
+  document.querySelectorAll(".rpTab").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
+  document.querySelectorAll(".rpTabBody").forEach((p) => {
+    p.hidden = p.dataset.tab !== tab;
+  });
+}
+
+function fmtEngineScore(ev) {
+  if (ev.mate != null) {
+    const m = Number(ev.mate);
+    return (m > 0 ? "#+" : "#-") + Math.abs(m);
+  }
+  if (ev.cp == null) return "—";
+  return (ev.cp > 0 ? "+" : "") + ev.cp;
+}
+
+// WDL is per-mille (win/draw/loss summing to 1000), already red POV.
+function fmtWdl(wdl) {
+  if (!wdl || wdl.length < 3) return "";
+  const pct = (x) => (x / 10).toFixed(1);
+  return `勝 ${pct(wdl[0])}%　和 ${pct(wdl[1])}%　負 ${pct(wdl[2])}%`;
+}
+
+// Same numbers as fmtWdl but as colour-coded spans for the inline meta row.
+function fmtWdlHtml(wdl) {
+  if (!wdl || wdl.length < 3) return "";
+  const pct = (x) => (x / 10).toFixed(1);
+  return `<span class="wdlW">勝 ${pct(wdl[0])}%</span>`
+       + `<span class="wdlD">和 ${pct(wdl[1])}%</span>`
+       + `<span class="wdlL">負 ${pct(wdl[2])}%</span>`;
+}
+
+// Record one streamed event into the history (newest depth on top, Pikafish
+// style). Same-depth heartbeats update the top row in place; a new depth
+// prepends a fresh row. Values are already red-POV + Chinese from the backend.
+function recordEngineEvent(ev) {
+  if (ev.done) return;
+  const h = EDITOR.engineAnalysis.history;
+  const entry = {
+    depth: ev.depth, cp: ev.cp, mate: ev.mate, wdl: ev.wdl,
+    time_ms: ev.time_ms, pv: ev.pv || [],
+  };
+  if (h.length && h[0].depth === entry.depth) h[0] = entry;
+  else h.unshift(entry);
+  renderEngineHistory();
+}
+
+function renderEngineHistory() {
+  const box = $("#engineHistory");
+  if (!box) return;
+  const h = EDITOR.engineAnalysis.history;
+  if (!h.length) { box.innerHTML = `<div class="varEmpty">尚無分析結果</div>`; return; }
+  box.innerHTML = h.map((e) => {
+    const t = e.time_ms ? (e.time_ms / 1000).toFixed(1) + "s" : "—";
+    const pv = (e.pv || []).join("　");
+    return `<div class="engEntry">`
+      + `<div class="engMeta">`
+      +   `<span>深度 <b class="engBig">${e.depth}</b></span>`
+      +   `<span>紅分 <b class="engBig">${fmtEngineScore(e)}</b></span>`
+      +   `<span>耗時 ${t}</span>`
+      +   fmtWdlHtml(e.wdl)
+      + `</div>`
+      + (pv ? `<div class="engPv">${pv}</div>` : "")
+      + `</div>`;
+  }).join("");
+}
+
+function clearAnalysisHistory() {
+  EDITOR.engineAnalysis.history = [];
+  renderEngineHistory();
+}
+
+// Export the full history as plain text via the clipboard — the natural feed
+// into the 注解 box or notes. Header carries the analysed position's FEN.
+function exportAnalysisHistory() {
+  const h = EDITOR.engineAnalysis.history;
+  if (!h.length) { setStatus("無分析歷程可導出", "err"); return; }
+  const fen = EDITOR.engineAnalysis.fen || currentFen() || "";
+  const body = h.map((e) => {
+    const t = e.time_ms ? (e.time_ms / 1000).toFixed(1) + "s" : "—";
+    const wdl = fmtWdl(e.wdl);
+    let head = `深度 ${e.depth}　紅分 ${fmtEngineScore(e)}　耗時 ${t}`;
+    if (wdl) head += `　${wdl}`;
+    const pv = (e.pv || []).join(" ");
+    return pv ? head + "\n" + pv : head;
+  }).join("\n");
+  const text = `局面 FEN: ${fen}\n\n${body}\n`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => setStatus("已複製分析歷程到剪貼簿", "ok"),
+      () => setStatus("複製失敗", "err"),
+    );
+  } else {
+    setStatus("瀏覽器不支援剪貼簿", "err");
+  }
+}
+
+// The engine should evaluate the position the *active move was chosen from*
+// (i.e. one ply back), so its best-move/eval judges that move. At the initial
+// position (no parent) we analyse the initial position itself.
+function analysisFen() {
+  const path = EDITOR.activePath;
+  if (!path || path.length === 0) return currentFen();
+  return fenAndLastIccsFor(path.slice(0, -1)).fen;
+}
+
+function stopAnalysis(stateText) {
+  const a = EDITOR.engineAnalysis;
+  if (a.es) { try { a.es.close(); } catch (_) {} }
+  a.es = null;
+  a.running = false;
+  a.fen = null;
+  const btn = $("#engineToggleBtn");
+  if (btn) btn.textContent = "▶ 開始分析";
+  const st = $("#engineState");
+  if (st && stateText != null) st.textContent = stateText;
+}
+
+function startAnalysis() {
+  switchRpTab("engine");
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) {
+    $("#engineState").textContent = "引擎未設定（請在檔案窗格選 🐟）";
+    return;
+  }
+  const fen = analysisFen();
+  if (!fen) { $("#engineState").textContent = "尚未載入棋譜"; return; }
+  stopAnalysis(null);
+  const a = EDITOR.engineAnalysis;
+  a.fen = fen;
+  a.running = true;
+  a.history = [];
+  renderEngineHistory();
+  $("#engineState").textContent = "分析中…";
+  $("#engineToggleBtn").textContent = "■ 停止";
+  const es = new EventSource("/api/engine/analyze?fen=" + encodeURIComponent(fen));
+  a.es = es;
+  es.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (_) { return; }
+    if (ev.error) { stopAnalysis("錯誤：" + ev.error); return; }
+    recordEngineEvent(ev);
+    if (ev.done) stopAnalysis("完成");
+  };
+  es.onerror = () => { stopAnalysis("連線中斷"); };
+}
+
+function toggleAnalysis() {
+  if (EDITOR.engineAnalysis.running) stopAnalysis("已停止");
+  else startAnalysis();
+}
+
 // ---------- boot ----------
 
 $("#saveBtn").onclick = save;
@@ -1434,6 +1660,14 @@ $("#newCancel").onclick = closeNewModal;
 $("#newOk").onclick = submitNewXqf;
 $("#newModal").addEventListener("click", (e) => {
   if (e.target.id === "newModal") closeNewModal();
+});
+// Settings dialog (paths moved out of the file pane to save space).
+function openSettingsModal() { $("#settingsModal").hidden = false; }
+function closeSettingsModal() { $("#settingsModal").hidden = true; }
+$("#settingsBtn").onclick = openSettingsModal;
+$("#settingsClose").onclick = closeSettingsModal;
+$("#settingsModal").addEventListener("click", (e) => {
+  if (e.target.id === "settingsModal") closeSettingsModal();
 });
 // Enter inside any new-XQF field submits.
 $("#newModal").addEventListener("keydown", (e) => {
@@ -1462,6 +1696,15 @@ $("#rootPickBtn").onclick = pickRoot;
 
 // Eval DB picker — opens native file dialog (positions.db / .sqlite).
 $("#evalDbPickBtn").onclick = pickEvalDb;
+// Pikafish engine picker — opens native file dialog (pikafish*.exe).
+$("#enginePickBtn").onclick = pickEngine;
+// Right-column tabs + live-analysis toggle.
+document.querySelectorAll(".rpTab").forEach((b) => {
+  b.addEventListener("click", () => switchRpTab(b.dataset.tab));
+});
+$("#engineToggleBtn").onclick = toggleAnalysis;
+$("#engineClearBtn").onclick = clearAnalysisHistory;
+$("#engineExportBtn").onclick = exportAnalysisHistory;
 reorderEvalRows();
 
 // Board theme picker. Initial value applied in boot() after PREFS load.
@@ -1581,6 +1824,6 @@ async function tryAutoLoadLastFile() {
   setupSplitters();
   // Parallelisable on boot — eval info is independent of the XQF tree fetch
   // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.
-  await Promise.all([fetchEvalDbInfo(), loadFileTree()]);
+  await Promise.all([fetchEvalDbInfo(), fetchEngineInfo(), loadFileTree()]);
   await tryAutoLoadLastFile();
 })();
