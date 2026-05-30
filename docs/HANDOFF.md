@@ -206,6 +206,105 @@ In rough priority order:
    the patch exists.
 4. `CLAUDE.md` — steady-state guidance (still accurate).
 
+## Editor.css layout notes (session 4 follow-up)
+
+This repo's editor layout is now much more sensitive to **container
+ownership** (who owns scroll / padding / sticky) than to any single
+header rule. If future UI work touches header alignment, scrollbars, or
+panel chrome, start here first.
+
+### 1. Main layout ownership
+
+- `main` is a 3-column flex layout: `#filePane` / `#boardPane` /
+  `#rightPane`
+- Splitter drag resizes by mutating `flex-basis`, not width/height
+- `#filePane` owns its own scrolling
+- `#boardPane` is mostly fixed-width presentation; it is not the place
+  to add nested scroll containers lightly
+- `#rightPane` is only the wrapper; its child sections own actual scroll
+  behaviour
+
+### 2. Right column scroll rule (important)
+
+- `#rpMoves` is the **single scroll container** for the move list area
+- `#moveList` should stay flow content, not become a second scrollable
+  box again
+- This is load-bearing for:
+  - sticky `棋譜` header
+  - scrollbar alignment with the card edge
+  - avoiding header/scrollbar width drift
+
+If a future change re-adds `overflow:auto` to `#moveList`, expect the
+old alignment problems to come back.
+
+### 3. Header systems
+
+There are currently **two related but not identical** header patterns:
+
+- `h2.panelHead`
+  - used by `檔案`, `棋譜`, `注解`, `本步的所有走法`
+  - visual rule = section chrome header with gold bottom line
+- `#fileTitle`
+  - centre-board file title
+  - visually brought closer to the panel-header system, but still its
+    own selector because it is centred and belongs to `#boardPane`
+
+Do not assume that changing `h2.panelHead` automatically fixes
+`#fileTitle`; inspect them separately.
+
+### 4. Layout tokens worth checking first
+
+When alignment looks "off", inspect these before patching literal px:
+
+- `--rp-pad-x` — right-panel horizontal padding
+- `--rp-pad-y` — right-panel vertical padding
+- `--board-pad-x` — board-pane horizontal padding
+- `--header-pad-x` — header text inset
+- `--scrollbar-w` — scrollbar width assumption
+
+If one of these changes, header lines / sticky behaviour / content-box
+alignment can all shift together.
+
+### 5. Button system
+
+Buttons are now grouped by intent rather than per-section styling:
+
+- `primary` — filled gold action
+- `outline` — standard header / modal secondary button
+- `ghost` — light glass button (nav, icon buttons, pickers, promote)
+- `danger` — red destructive hover treatment layered on icon buttons
+
+Prefer extending this system over adding a new one-off button style.
+
+### 6. Right-side sections (`注解` / `本步的所有走法`)
+
+These two sections are particularly sensitive because:
+
+- their header line should visually align with the card interior
+- their content boxes (`#annoteBox`, `#varPicker`) have their own inner
+  margins / widths
+- small width hacks (`calc(...)`) tend to create horizontal overflow or
+  fake alignment fixes
+
+If they drift again, first inspect:
+
+- section padding
+- `box-sizing`
+- who owns overflow-x / overflow-y
+- whether the width fix is trying to compensate for the wrong parent
+
+### 7. Practical debugging order for future UI tweaks
+
+If the issue is visual alignment:
+
+1. Check **who owns scroll**
+2. Check **which container owns padding**
+3. Check **box-sizing / width / max-width**
+4. Only then patch the child component
+
+This repo has already proven that patching a header in isolation often
+creates a second bug somewhere else.
+
 ## Master's working preferences (running notes)
 
 From sessions 1 + 2:
