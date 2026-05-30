@@ -112,6 +112,47 @@ function setStatus(text, cls) {
   s.className = cls || "";
 }
 
+function showConfirmDialog(message, title = "請確認") {
+  return new Promise((resolve) => {
+    const modal = $("#confirmModal");
+    const titleEl = $("#confirmTitle");
+    const msgEl = $("#confirmMessage");
+    const okBtn = $("#confirmOk");
+    const cancelBtn = $("#confirmCancel");
+    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
+      resolve(window.confirm(message));
+      return;
+    }
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    modal.hidden = false;
+
+    const cleanup = () => {
+      modal.hidden = true;
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKeydown);
+    };
+    const onOk = () => { cleanup(); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+    const onBackdrop = (e) => {
+      if (e.target.id === "confirmModal") onCancel();
+    };
+    const onKeydown = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      else if (e.key === "Enter") { e.preventDefault(); onOk(); }
+    };
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKeydown);
+    cancelBtn.focus();
+  });
+}
+
 // ---------- path / tree helpers ----------
 
 function nodeAt(path) {
@@ -336,7 +377,7 @@ async function tryAddMove(fromSq, toSq) {
     });
     const resp = await r.json();
     if (resp.error) { setStatus(resp.error, "err"); return; }
-    const outcome = insertMoveAt(EDITOR.activePath, {
+    const outcome = await insertMoveAt(EDITOR.activePath, {
       iccs,
       notation: resp.notation,
       side: resp.side,
@@ -370,7 +411,7 @@ function countDescendants(node) {
 // 本步可選 picker, then call this. The initial position (activePath = [])
 // can't be deleted — there's no node there. Confirms before destroying any
 // subtree (one or more descendant moves).
-function deleteCurrentMove() {
+async function deleteCurrentMove() {
   if (!EDITOR.data || EDITOR.activePath.length === 0) return;
   const node = nodeAt(EDITOR.activePath);
   if (!node) return;
@@ -379,7 +420,8 @@ function deleteCurrentMove() {
   const prompt = desc > 0
     ? `『${label}』之後還有 ${desc} 步走法／分支，全部一併刪除？`
     : `確定刪除『${label}』？`;
-  if (!window.confirm(prompt)) return;
+  const ok = await showConfirmDialog(prompt, "刪除走法");
+  if (!ok) return;
 
   const parentPath = EDITOR.activePath.slice(0, -1);
   const idx = EDITOR.activePath[EDITOR.activePath.length - 1];
@@ -435,7 +477,7 @@ function promoteToMain(parentPath, siblingIdx) {
 // move a sibling variation. Matches XQStudio behaviour and the JSON shape
 // documented in xqf_service.py.
 // Returns: "added" | "existing" | "cancelled"
-function insertMoveAt(parentPath, newNode) {
+async function insertMoveAt(parentPath, newNode) {
   let siblings;
   if (parentPath.length === 0) {
     if (!EDITOR.data.roots) EDITOR.data.roots = [];
@@ -455,8 +497,9 @@ function insertMoveAt(parentPath, newNode) {
   if (siblings.length > 0) {
     const existingLabels = siblings.map((c) => c.notation || c.iccs).join("、");
     const newLabel = newNode.notation || newNode.iccs;
-    const ok = window.confirm(
+    const ok = await showConfirmDialog(
       `此步已有續著：${existingLabels}\n新增『${newLabel}』為分支走法？`,
+      "新增分支",
     );
     if (!ok) { clearSelection(); refreshActive(); return "cancelled"; }
   }

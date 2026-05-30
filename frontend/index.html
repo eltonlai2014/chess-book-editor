@@ -71,12 +71,12 @@
       <div class="splitter splitter-v" data-resize="rpMoves" data-pref="splitMovesW"></div>
       <div class="rpRightCol">
         <div id="rpAnnote" class="rpSection rpAnnote">
-          <h2>注解</h2>
+          <h2 class="panelHead"><span>注解</span></h2>
           <textarea id="annoteBox" placeholder="（無註解，可在此輸入）"></textarea>
         </div>
         <div class="splitter splitter-h" data-resize="rpAnnote" data-pref="splitAnnoteH" data-direction="row"></div>
         <div class="rpSection rpVars">
-          <h2>本步的所有走法</h2>
+          <h2 class="panelHead"><span>本步的所有走法</span></h2>
           <div id="varPicker"></div>
         </div>
       </div>
@@ -84,6 +84,17 @@
   </main>
   <!-- Hidden control board.js looks up for red/black perspective. -->
   <input type="checkbox" id="redPerspective" checked style="display:none">
+
+  <div id="confirmModal" class="modal confirmModal" hidden>
+    <div class="modalDialog confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+      <h3 id="confirmTitle">請確認</h3>
+      <div id="confirmMessage" class="confirmMessage"></div>
+      <div class="modalActions confirmActions">
+        <button id="confirmCancel">取消</button>
+        <button id="confirmOk" class="primary">確定</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Metadata edit dialog. Hidden by default; opened via #metaBtn. -->
   <div id="metaModal" class="modal" hidden>
