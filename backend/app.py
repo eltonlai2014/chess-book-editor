@@ -637,7 +637,7 @@ def _parse_info_line(line: str, flip: int, fen: str) -> dict | None:
             i += 1
     if "depth" not in info:
         return None
-    info["pv"] = pv_to_chinese(fen, pv, limit=16)
+    info["pv"] = pv_to_chinese(fen, pv, limit=64)
     info["bestUci"] = pv[0] if pv else None
     return info
 

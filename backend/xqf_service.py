@@ -405,7 +405,7 @@ def compute_move_info(fen: str, iccs: str) -> dict:
     return {"notation": notation, "side": side}
 
 
-def pv_to_chinese(fen: str, uci_moves, limit: int = 16) -> list:
+def pv_to_chinese(fen: str, uci_moves, limit: int = 64) -> list:
     """Replay a UCI principal variation on `fen`, return each move's
     traditional-Chinese notation. Pikafish move coords are identical to our
     iccs (files a-i, ranks 0-9), so each token feeds straight into the same
