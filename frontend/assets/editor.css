@@ -24,14 +24,18 @@
   --text-muted:  #a8a094;
   --text-faint:  #6e675c;
 
-  /* Accents */
-  --accent:        #d4a043;   /* gold (gilded board) */
-  --accent-strong: #e8b75c;
-  --accent-soft:   rgba(212, 160, 67, 0.15);
-  --red:           #c0392b;   /* cinnabar (red side) */
-  --info:          #5fa8d6;   /* selected highlight */
-  --ok:            #7ec47e;
-  --err:           #d97070;
+  /* Accents — `*-rgb` triples mirror `*` hex values for use in rgba(). Change
+     both when retuning a theme; they're a pair. */
+  --accent:            #d4a043;   /* gold (gilded board) */
+  --accent-rgb:        212, 160, 67;
+  --accent-strong:     #e8b75c;
+  --accent-strong-rgb: 232, 183, 92;
+  --accent-soft:       rgba(var(--accent-rgb), 0.15);
+  --red:               #c0392b;   /* cinnabar (red side) */
+  --info:              #5fa8d6;   /* selected highlight */
+  --ok:                #7ec47e;
+  --err:               #d97070;
+  --err-rgb:           217, 112, 112;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
@@ -40,6 +44,23 @@
   --radius-sm: 3px;
   --radius:    5px;
   --radius-lg: 8px;
+
+  /* === Layout magic numbers ===
+     Centralised here so the panel-header negative-margin trick (calc the
+     side margin = -(--rp-pad-x), right adds --scrollbar-w to span the gutter)
+     stays in sync if any one value moves. */
+  --rp-pad-x:       14px;    /* .rpSection horizontal padding */
+  --rp-pad-y:       12px;    /* .rpSection vertical padding */
+  --board-pad-x:    12px;    /* #boardPane horizontal padding */
+  --header-pad-x:   16px;    /* inset between section border and header text */
+  --scrollbar-w:    10px;    /* matches *::-webkit-scrollbar { width: 10px } */
+
+  /* === Button system tokens === */
+  --btn-radius:       8px;
+  --btn-transition:   background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+  --btn-glass-bg:     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  --btn-gold-hover-bg: linear-gradient(180deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.06));
+  --btn-danger-hover-bg: linear-gradient(180deg, rgba(var(--err-rgb), 0.18), rgba(var(--err-rgb), 0.08));
 }
 
 html[data-ui-theme="ember"] {
@@ -54,8 +75,10 @@ html[data-ui-theme="ember"] {
   --text-muted: #a8a094;
   --text-faint: #6e675c;
   --accent: #d4a043;
+  --accent-rgb: 212, 160, 67;
   --accent-strong: #e8b75c;
-  --accent-soft: rgba(212, 160, 67, 0.15);
+  --accent-strong-rgb: 232, 183, 92;
+  --accent-soft: rgba(var(--accent-rgb), 0.15);
   --info: #5fa8d6;
 }
 
@@ -71,8 +94,10 @@ html[data-ui-theme="jade"] {
   --text-muted: #a2b7af;
   --text-faint: #6f857c;
   --accent: #6bb89c;
+  --accent-rgb: 107, 184, 156;
   --accent-strong: #8ad4b7;
-  --accent-soft: rgba(107, 184, 156, 0.16);
+  --accent-strong-rgb: 138, 212, 183;
+  --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #7fc4d6;
 }
 
@@ -88,8 +113,10 @@ html[data-ui-theme="ink"] {
   --text-muted: #a5b0c0;
   --text-faint: #738196;
   --accent: #7aa2f7;
+  --accent-rgb: 122, 162, 247;
   --accent-strong: #9ab8ff;
-  --accent-soft: rgba(122, 162, 247, 0.16);
+  --accent-strong-rgb: 154, 184, 255;
+  --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #8bd5ca;
 }
 
@@ -105,8 +132,10 @@ html[data-ui-theme="plum"] {
   --text-muted: #b8a6c0;
   --text-faint: #83728c;
   --accent: #c38cff;
+  --accent-rgb: 195, 140, 255;
   --accent-strong: #d7aefe;
-  --accent-soft: rgba(195, 140, 255, 0.16);
+  --accent-strong-rgb: 215, 174, 254;
+  --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #8ecae6;
 }
 
@@ -122,8 +151,10 @@ html[data-ui-theme="copper"] {
   --text-muted: #b9a397;
   --text-faint: #8a7468;
   --accent: #c47a4d;
+  --accent-rgb: 196, 122, 77;
   --accent-strong: #dd9362;
-  --accent-soft: rgba(196, 122, 77, 0.16);
+  --accent-strong-rgb: 221, 147, 98;
+  --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #9fc0d1;
 }
 
@@ -139,8 +170,10 @@ html[data-ui-theme="pineash"] {
   --text-muted: #afb1ad;
   --text-faint: #7a807b;
   --accent: #aeb49e;
+  --accent-rgb: 174, 180, 158;
   --accent-strong: #c7ccb8;
-  --accent-soft: rgba(174, 180, 158, 0.14);
+  --accent-strong-rgb: 199, 204, 184;
+  --accent-soft: rgba(var(--accent-rgb), 0.14);
   --info: #8fb2bf;
 }
 
@@ -169,6 +202,112 @@ html, body {
 }
 *::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
 
+/* ===== Button system =================================================
+   Three intents — primary / outline / ghost — share the rules below.
+   Targets keep their existing selectors so the HTML doesn't need to change.
+
+     primary  — filled gold; lead action (儲存, 建立, 套用)
+     outline  — bg-3 + line-strong border; neutral default
+     ghost    — transparent + glass highlight + faint gold border;
+                used for icon buttons, nav row, chips, promote pill
+
+   Hover language:
+     primary  → brighter gold + brighter text
+     outline  → bg-4 + accent border + accent-strong text
+     ghost    → gold-soft bg + accent border + accent-strong text + lift -1px
+
+   Variant-specific sizing (padding, font, border-radius shape) stays in
+   each section's own block below.
+   ===================================================================== */
+
+/* --- Primary (filled gold) --- */
+#saveBtn:not(:disabled),
+.modalActions button.primary {
+  background: var(--accent);
+  color: #2a1f0a;
+  border: 1px solid var(--accent-strong);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--btn-transition);
+}
+#saveBtn:not(:disabled):hover,
+.modalActions button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: #1a1305;
+  border-color: var(--accent-strong);
+}
+
+/* --- Outline (bg-3 + bordered, neutral) --- */
+.actions button,
+.modalActions button {
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  transition: var(--btn-transition);
+}
+.actions button:hover:not(:disabled),
+.modalActions button:hover:not(:disabled) {
+  background: var(--bg-4);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.actions button:active:not(:disabled),
+.modalActions button:active:not(:disabled) { background: var(--bg-2); }
+.actions button:disabled,
+.modalActions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --- Ghost (transparent + glass + faint gold border) --- */
+#navBar button,
+.iconBtn,
+.rootPath #rootPickBtn,
+.evalDbRowSide #evalDbPickBtn,
+.varOpt .varPromote {
+  background: var(--btn-glass-bg);
+  color: var(--text-muted);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
+  border-radius: var(--btn-radius);
+  cursor: pointer;
+  line-height: 1;
+  transition: var(--btn-transition);
+}
+#navBar button:hover:not(:disabled),
+.iconBtn:hover:not(:disabled):not(.danger),
+.rootPath #rootPickBtn:hover:not(:disabled),
+.evalDbRowSide #evalDbPickBtn:hover:not(:disabled),
+.varOpt .varPromote:hover {
+  background: var(--btn-gold-hover-bg);
+  color: var(--accent-strong);
+  border-color: rgba(var(--accent-strong-rgb), 0.24);
+  transform: translateY(-1px);
+}
+#navBar button:disabled,
+.iconBtn:disabled,
+.rootPath #rootPickBtn:disabled,
+.evalDbRowSide #evalDbPickBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+#navBar button:active:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.10);
+  color: var(--accent);
+  transform: translateY(0);
+}
+
+/* --- Danger modifier (on .iconBtn) --- */
+.iconBtn.danger:hover:not(:disabled) {
+  background: var(--btn-danger-hover-bg);
+  color: var(--err);
+  border-color: rgba(var(--err-rgb), 0.40);
+  transform: translateY(-1px);
+}
+.iconBtn.danger:active:not(:disabled) {
+  background: rgba(var(--err-rgb), 0.18);
+  color: var(--err);
+  transform: translateY(0);
+}
+
 /* ---------- header ---------- */
 header {
   display: flex;
@@ -196,36 +335,9 @@ header h1::before {
   vertical-align: -1px;
 }
 
+/* .actions = header right-side controls (theme picker, view toggle, meta /
+   save buttons, status). Button styling lives in the button system above. */
 .actions { display: flex; gap: 14px; align-items: center; }
-.actions button {
-  background: var(--bg-3);
-  color: var(--text);
-  border: 1px solid var(--line-strong);
-  padding: 6px 14px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-.actions button:hover:not(:disabled) {
-  background: var(--bg-4);
-  border-color: var(--accent);
-  color: var(--accent-strong);
-}
-.actions button:active:not(:disabled) { background: var(--bg-2); }
-.actions button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-#saveBtn:not(:disabled) {
-  background: var(--accent);
-  color: #2a1f0a;
-  border-color: var(--accent-strong);
-  font-weight: 600;
-}
-#saveBtn:not(:disabled):hover {
-  background: var(--accent-strong);
-  color: #1a1305;
-}
 
 .boardThemePicker {
   display: inline-flex; align-items: center; gap: 8px;
@@ -326,7 +438,7 @@ main {
   gap: 10px;
   padding: 10px;
   background:
-    radial-gradient(circle at top center, rgba(212,160,67,0.05), transparent 38%),
+    radial-gradient(circle at top center, rgba(var(--accent-rgb), 0.05), transparent 38%),
     linear-gradient(180deg, #191611 0%, var(--bg-1) 100%);
 }
 #filePane  { flex: 0 0 250px; min-width: 180px; }
@@ -335,12 +447,20 @@ main {
 #rpMoves {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Owns the scroll container so the scrollbar sits at the card border.
+     The sticky panelHead stickies to this — works because we're its
+     nearest scrollable ancestor. */
+  overflow: auto;
+  /* No padding-y: header sits flush at the top, #moveList carries its
+     own top inset. Avoids `margin-top: calc(-1 * var(--rp-pad-y))` on
+     the sticky header, which interacts badly with flex column + sticky. */
+  padding-top: 0;
+  padding-bottom: 0;
 }
 aside, section {
   overflow: hidden;
   background: linear-gradient(180deg, rgba(47,42,35,0.55) 0%, rgba(29,26,22,0.92) 100%);
-  border: 1px solid rgba(232, 183, 92, 0.12);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 12px;
   box-shadow: 0 10px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02);
 }
@@ -399,8 +519,8 @@ h2 {
   gap: 6px;
   font-size: 11px;
   color: var(--accent);
-  background: linear-gradient(180deg, rgba(212,160,67,0.12), rgba(212,160,67,0.06));
-  border: 1px solid rgba(212, 160, 67, 0.22);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.06));
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   padding: 8px 8px 8px 10px;
   border-radius: 8px;
   margin: 0 12px 12px;
@@ -412,27 +532,18 @@ h2 {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   min-width: 0;
 }
-.rootPath #rootPickBtn {
+/* Sidebar chip pick buttons — ghost base + hover come from button system;
+   here only the chip-specific size + rounded shape. */
+.rootPath #rootPickBtn,
+.evalDbRowSide #evalDbPickBtn {
   flex: 0 0 auto;
   min-width: 30px;
   height: 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-  color: var(--text-muted);
-  border: 1px solid rgba(232,183,92,0.12);
-  border-radius: 9px;
   padding: 0 8px;
-  cursor: pointer;
+  border-radius: 9px;
   font-size: 13px;
-  line-height: 1;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
-.rootPath #rootPickBtn:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
-  color: var(--accent-strong);
-  border-color: rgba(232,183,92,0.24);
-  transform: translateY(-1px);
-}
-.rootPath #rootPickBtn:disabled { opacity: 0.4; cursor: wait; }
+.rootPath #rootPickBtn:disabled { cursor: wait; }
 .evalDbRowSide {
   margin: 0 12px 12px;
   font-size: 11px;
@@ -440,21 +551,6 @@ h2 {
 }
 .evalDbRowSide #evalDbPath {
   font-family: "SF Mono", "Consolas", monospace;
-}
-.evalDbRowSide #evalDbPickBtn {
-  min-width: 30px;
-  height: 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-  color: var(--text-muted);
-  border: 1px solid rgba(232,183,92,0.12);
-  border-radius: 9px;
-  padding: 0 8px;
-  line-height: 1;
-}
-.evalDbRowSide #evalDbPickBtn:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
-  color: var(--accent-strong);
-  border-color: rgba(232,183,92,0.24);
 }
 #fileTree ul {
   list-style: none;
@@ -484,24 +580,24 @@ h2 {
 }
 #fileTree li.dir > span.dirname:hover {
   color: var(--accent);
-  background: linear-gradient(90deg, rgba(212,160,67,0.12), rgba(212,160,67,0.04));
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.04));
 }
 #fileTree li.file:hover {
   background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
   color: var(--text);
 }
 #fileTree li.file.active {
-  background: linear-gradient(90deg, rgba(212,160,67,0.24), rgba(212,160,67,0.10));
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.24), rgba(var(--accent-rgb), 0.10));
   color: #fff2d8;
   border-left-color: var(--accent-strong);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(232,183,92,0.16);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.16);
 }
 
 /* ---------- centre: board + nav ---------- */
 #boardPane {
   display: flex; flex-direction: column; align-items: center;
-  padding: 12px 12px 14px;
+  padding: var(--rp-pad-y) var(--board-pad-x) 14px;
   overflow: hidden;
   width: 568px;
   background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
@@ -511,15 +607,18 @@ h2 {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.02em; text-transform: none;
-  margin: 0 0 12px;
-  padding: 14px 16px 10px;
+  /* Side margins cancel boardPane's --board-pad-x so the underline meets
+     the panel border, matching the 檔案/棋譜/注解 headers. padding-x bumps
+     to keep text in its original visual position. */
+  margin: 0 calc(-1 * var(--board-pad-x)) 12px;
+  padding: 14px calc(var(--board-pad-x) + var(--header-pad-x)) 10px;
   align-self: stretch;
   text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex: 0 0 auto;
-  border-bottom: 1px solid rgba(232, 183, 92, 0.12);
+  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
-  text-shadow: 0 0 18px rgba(232,183,92,0.10);
+  text-shadow: 0 0 18px rgba(var(--accent-strong-rgb), 0.10);
 }
 #board {
   margin: 4px 0 12px;
@@ -540,33 +639,20 @@ h2 {
   flex: 0 0 auto;
   padding: 10px 12px;
   background: linear-gradient(180deg, rgba(58,52,44,0.40), rgba(37,33,28,0.88));
-  border: 1px solid rgba(232, 183, 92, 0.12);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
+/* #navBar buttons inherit base + hover from the ghost variant. Slight
+   tweaks: monospace + bigger font for chess-notation glyphs, wider min-width
+   for square symbols, lighter color override (text not text-muted). */
 #navBar button {
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
   color: var(--text);
-  border: 1px solid rgba(232,183,92,0.10);
   padding: 6px 12px;
-  cursor: pointer;
-  border-radius: 8px;
   font-family: monospace; font-size: 15px;
   min-width: 44px;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
-#navBar button:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
-  border-color: rgba(232,183,92,0.24);
-  color: var(--accent-strong);
-  transform: translateY(-1px);
-}
-#navBar button:active:not(:disabled) {
-  background: rgba(212,160,67,0.10);
-  color: var(--accent);
-  transform: translateY(0);
-}
-#navBar button:disabled { opacity: 0.25; cursor: not-allowed; }
+#navBar button:disabled { opacity: 0.25; }   /* slightly more muted than other ghosts */
 
 /* Panel header with inline icon button (e.g. 棋譜 / 🗑) — keeps the small-caps
    title look but adds a flex baseline so the button sits flush with the rule. */
@@ -577,58 +663,62 @@ h2.panelHead {
   gap: 8px;
   margin: 0 0 12px;
   padding: 14px 16px 10px;
-  border-bottom: 1px solid rgba(232, 183, 92, 0.12);
+  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
+}
+/* Pull section headers out through .rpSection's inner padding so the
+   underline reaches the card border (gradient fills edge-to-edge, reading
+   as a header strip). Top corners follow the card's rounded edge.
+
+   side margins:
+     - left  = -(rp-pad-x) so the box covers the left padding zone
+     - right = -(rp-pad-x + scrollbar-w) — scrollbar-gutter:stable on
+       .rpSection reserves an extra strip on the right beyond padding
+   padding-x = rp-pad-x + header-pad-x — keeps content in its original
+       visual position (header-pad-x from the card border).
+
+   Background = an opaque base matching .rpSection's dark gradient + a
+   faint highlight on top. The opaque base is critical for #rpMoves
+   where the header is sticky and the moveList scrolls underneath. */
+#rpMoves > .panelHead,
+.rpSection > .panelHead {
+  margin-left: calc(-1 * var(--rp-pad-x));
+  margin-right: calc(-1 * (var(--rp-pad-x) + var(--scrollbar-w)));
+  padding: 14px calc(var(--rp-pad-x) + var(--header-pad-x)) 10px;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0)),
+    linear-gradient(180deg, rgba(44,38,31,1), rgba(27,24,20,1));
 }
 #rpMoves > .panelHead {
   position: sticky;
   top: 0;
   z-index: 2;
+  margin-top: 0;           /* #rpMoves padding-top: 0, so no offset needed */
   margin-bottom: 0;
-  padding: 14px 16px 10px;
-  width: 100%;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(232, 183, 92, 0.12);
-  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
+  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
 }
 .rpSection > .panelHead {
-  margin: 0 0 12px;
+  margin-top: calc(-1 * var(--rp-pad-y));
+  margin-bottom: 12px;
 }
 h2.panelHead > span { flex: 1 1 auto; }
+/* .iconBtn = small square button used inline in panel headers (🗑, ➕新增).
+   Ghost base + hover come from the button system above; here only the
+   sizing + the parent-h2 text-transform cancel. */
 .iconBtn {
   flex: 0 0 auto;
   min-width: 30px;
   height: 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-  color: var(--text-muted);
-  border: 1px solid rgba(232,183,92,0.12);
-  border-radius: 9px;
   padding: 0 8px;
+  border-radius: 9px;
   font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  text-transform: none;
+  text-transform: none;       /* cancel parent h2 small-caps inheritance */
   letter-spacing: normal;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
-.iconBtn:disabled { opacity: 0.25; cursor: not-allowed; }
-.iconBtn:hover:not(:disabled):not(.danger) {
-  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
-  color: var(--accent-strong);
-  border-color: rgba(232,183,92,0.24);
-  transform: translateY(-1px);
-}
-.iconBtn.danger:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(217,112,112,0.18), rgba(217,112,112,0.08));
-  color: var(--err);
-  border-color: rgba(217,112,112,0.40);
-  transform: translateY(-1px);
-}
-.iconBtn.danger:active:not(:disabled) {
-  background: rgba(217, 112, 112, 0.18);
-  color: var(--err);
-  transform: translateY(0);
-}
+.iconBtn:disabled { opacity: 0.25; }
 #moveInfo {
   margin-left: 12px;
   font-size: 13px;
@@ -647,12 +737,12 @@ h2.panelHead > span { flex: 1 1 auto; }
 
 /* ---------- right: 棋譜 | (注解 / 本步可選) — flex with splitters ---------- */
 .rpSection {
-  padding: 12px 14px;
+  padding: var(--rp-pad-y) var(--rp-pad-x);
   overflow: auto;
   scrollbar-gutter: stable;
   min-height: 0; min-width: 0;
   background: linear-gradient(180deg, rgba(44,38,31,0.94), rgba(27,24,20,0.98));
-  border: 1px solid rgba(232, 183, 92, 0.18);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   border-radius: 12px;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.03),
@@ -682,9 +772,22 @@ h2.panelHead > span { flex: 1 1 auto; }
   padding-left: 0;
   padding-right: 0;
   overflow-x: hidden;
+  /* .rpSection sets scrollbar-gutter: stable to keep the moveList layout
+     steady. Here the textarea / varPicker rarely scroll the section itself,
+     so reserving 10px on the right just creates a visible gap at the
+     header underline. `auto` releases it — scrollbar shows only when
+     genuinely needed. */
+  scrollbar-gutter: auto;
 }
 .rpAnnote > .panelHead,
 .rpVars > .panelHead {
+  /* These sections strip the .rpSection side padding (see block above), so
+     the negative -14 / -24 horizontal margins inherited from .rpSection >
+     .panelHead would push the header sideways out of place. Reset to 0 so
+     the header box sits flush within the section box — the underline then
+     reaches both outer borders edge-to-edge. */
+  margin-left: 0;
+  margin-right: 0;
   padding-left: 16px;
   padding-right: 16px;
   width: 100%;
@@ -709,16 +812,19 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-bottom: 1px solid var(--line);
 }
 
-/* 棋譜 list */
+/* 棋譜 list — flow content; the parent #rpMoves (.rpSection) owns the
+   scroll container so the scrollbar sits at the card border, not inset
+   12 + 14 px from it. Sticky panelHead still sticks because it stickies
+   to .rpSection, not to this child. Keep left padding for normal item
+   indent; drop right padding so items can use the freed-up space and
+   the scrollbar doesn't double-up against a phantom inner gutter. */
 #moveList {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  padding: 12px 12px 12px;
+  padding: 12px 0 12px 12px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
   font-size: 16px;
   line-height: 1.75;
-  scrollbar-gutter: stable;
 }
 .plyLine {
   display: flex; align-items: baseline; cursor: pointer;
@@ -731,11 +837,11 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .plyLine:hover { background: var(--bg-3); }
 .plyLine.active {
-  background: linear-gradient(90deg, rgba(212,160,67,0.22), rgba(212,160,67,0.08));
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
   border-left-color: var(--accent-strong);
   color: #fff4de;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(232,183,92,0.16);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.16);
 }
 .plyLine .plyNum {
   color: var(--text-faint);
@@ -758,7 +864,7 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 10px;
   flex: 0 0 auto;
   background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(232,183,92,0.18);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   color: var(--text-muted);
   padding: 1px 7px;
   border-radius: 999px;
@@ -799,7 +905,7 @@ h2.panelHead > span { flex: 1 1 auto; }
   width: 100%;
   background: linear-gradient(180deg, rgba(30,27,22,0.96), rgba(24,21,18,0.98));
   color: var(--text);
-  border: 1px solid rgba(232,183,92,0.14);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
   border-radius: 10px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
   font-size: 16px;
@@ -811,11 +917,11 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 #annoteBox:focus {
   outline: none;
-  border-color: rgba(232,183,92,0.40);
+  border-color: rgba(var(--accent-strong-rgb), 0.40);
   background: linear-gradient(180deg, rgba(42,37,30,0.98), rgba(27,24,20,0.98));
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.04),
-    0 0 0 3px rgba(212,160,67,0.10);
+    0 0 0 3px rgba(var(--accent-rgb), 0.10);
 }
 #annoteBox:disabled {
   color: var(--text-faint);
@@ -835,8 +941,8 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 11px;
   font-family: "SF Mono", "Consolas", monospace;
   color: var(--accent-strong);
-  background: linear-gradient(180deg, rgba(212,160,67,0.20), rgba(212,160,67,0.10));
-  border: 1px solid rgba(212, 160, 67, 0.30);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.10));
+  border: 1px solid rgba(var(--accent-rgb), 0.30);
   border-radius: 10px;
   /* boardPane uses align-items:center on its column flex, so without
      align-self:stretch this row takes its natural content width and
@@ -853,16 +959,12 @@ h2.panelHead > span { flex: 1 1 auto; }
   min-width: 0;
   cursor: help;
 }
-.evalDbRow #evalDbPickBtn {
-  flex: 0 0 auto;
-  font-size: 12px;
-  padding: 1px 6px;
-  line-height: 1.4;
-}
+/* Pick button: ghost base + sizing already come from the button system;
+   no per-chip overrides needed here anymore. */
 .evalDbRow.warn {
   color: var(--err);
-  background: rgba(217, 112, 112, 0.10);
-  border-color: rgba(217, 112, 112, 0.30);
+  background: rgba(var(--err-rgb), 0.10);
+  border-color: rgba(var(--err-rgb), 0.30);
 }
 
 /* Engine eval strip — read-only from chess-book-ai's positions.db. Sits
@@ -872,7 +974,7 @@ h2.panelHead > span { flex: 1 1 auto; }
   margin-top: 8px;
   padding: 10px 12px;
   background: linear-gradient(180deg, rgba(37,33,28,0.96), rgba(32,28,23,0.98));
-  border: 1px solid rgba(232, 183, 92, 0.12);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
   font-size: 13px;
   line-height: 1.45;
@@ -933,8 +1035,8 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 13px;
 }
 .varOpt.active {
-  background: linear-gradient(90deg, rgba(212,160,67,0.22), rgba(212,160,67,0.08));
-  border-color: rgba(232,183,92,0.16);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
+  border-color: rgba(var(--accent-strong-rgb), 0.16);
   border-left-color: var(--accent-strong);
   color: #fff1d8;
   box-shadow: none;
@@ -954,30 +1056,20 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .varOpt:not(.active) .varArrow { visibility: hidden; }
 
-/* "升主線" button — promotes a non-main-line variation to children[0].
-   Always rendered on non-main-line rows, hidden on the main line itself. */
+/* "升主線" pill — promotes a non-main-line variation to children[0].
+   Ghost base + hover come from the button system; here only the pill
+   shape + size + the inline-flex centring. */
 .varOpt .varPromote {
   margin-left: auto;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(232,183,92,0.18);
-  color: var(--text-muted);
   font-size: 11px;
   min-width: 52px;
   height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  cursor: pointer;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-.varOpt .varPromote:hover {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border-color: var(--accent);
 }
 .varOpt.active .varPromote,
 .varOpt.mainLine .varPromote { display: none; }
@@ -1011,9 +1103,9 @@ h2.panelHead > span { flex: 1 1 auto; }
   min-width: 0;
   padding: 20px 22px 16px;
   border-radius: 16px;
-  border: 1px solid rgba(232,183,92,0.18);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   background:
-    radial-gradient(circle at top, rgba(212,160,67,0.08), transparent 42%),
+    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.08), transparent 42%),
     linear-gradient(180deg, rgba(37,33,28,0.98), rgba(28,25,21,0.98));
   box-shadow: 0 18px 48px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.04);
 }
@@ -1083,34 +1175,9 @@ h2.panelHead > span { flex: 1 1 auto; }
   gap: 10px;
   margin-top: 16px;
 }
-.modalActions button {
-  background: var(--bg-3);
-  color: var(--text);
-  border: 1px solid var(--line-strong);
-  padding: 6px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-.modalActions button:hover:not(:disabled) {
-  background: var(--bg-4);
-  border-color: var(--accent);
-  color: var(--accent-strong);
-}
-.modalActions button:active:not(:disabled) { background: var(--bg-2); }
-.modalActions button:disabled { opacity: 0.4; cursor: not-allowed; }
-.modalActions button.primary {
-  background: var(--accent);
-  color: #2a1f0a;
-  border-color: var(--accent-strong);
-  font-weight: 600;
-}
-.modalActions button.primary:hover:not(:disabled) {
-  background: var(--accent-strong);
-  color: #1a1305;
-  border-color: var(--accent-strong);
-}
+/* Modal buttons inherit outline (default) + primary (.primary) from the
+   button system above; only width override (slightly wider padding). */
+.modalActions button { padding: 6px 16px; }
 
 /* ---------- focus rings (keyboard accessibility) ---------- */
 button:focus-visible,
