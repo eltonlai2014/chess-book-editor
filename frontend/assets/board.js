@@ -5,7 +5,7 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const PIECE_CHAR = {
-  K: "帥", A: "仕", B: "相", N: "傌", R: "俥", C: "炮", P: "兵",
+  K: "帥", A: "仕", B: "相", N: "傌", R: "俥", C: "砲", P: "兵",
   k: "將", a: "士", b: "象", n: "馬", r: "車", c: "包", p: "卒",
 };
 
@@ -234,7 +234,7 @@ function deltaSignClass(v) {
 // Piece-character fonts. The `text=` URL parameter restricts the Google Fonts
 // subset to the 14 piece glyphs + 楚河漢界, keeping the load <10KB even for
 // huge fonts like Ma Shan Zheng.
-const PIECE_CHARS_SUBSET = "帥仕相傌俥炮兵將士象馬車包卒楚河漢界";
+const PIECE_CHARS_SUBSET = "帥仕相傌俥砲兵將士象馬車包卒楚河漢界";
 
 // Piece-character font registry. Each entry is lazy-loaded via the `text=`
 // Google Fonts URL trick: only the 16 piece glyphs + 楚河漢界 ship, keeping

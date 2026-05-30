@@ -257,6 +257,19 @@ def recover_book_strings(book):
 
 # ---------- Book -> JSON ----------------------------------------------------
 
+# cchess's traditional notation uses one glyph set for both sides
+# (馬/士/象/車/將, and 砲 for cannons). Master's RED convention maps the piece
+# names to red forms — 馬→傌, 士→仕, 象→相, 車→俥, 將→帥 — matching the board
+# glyphs; only the cannon stays 砲 (not 炮). BLACK only swaps 砲→包.
+_RED_GLYPHS = str.maketrans({"馬": "傌", "士": "仕", "象": "相", "車": "俥", "將": "帥"})
+
+
+def _apply_side_glyphs(notation: str, is_red: bool) -> str:
+    if is_red:
+        return notation.translate(_RED_GLYPHS)
+    return notation.replace("砲", "包")
+
+
 def _node_to_json(move):
     """Recurse: serialise one Move and its subtree.
 
@@ -279,8 +292,7 @@ def _node_to_json(move):
     # common.py:91-92). Master's convention: red = 砲, black = 包. Apply on
     # black moves only.
     side = "black" if move.move_side == SIDE_BLACK else "red"
-    if side == "black":
-        notation = notation.replace("砲", "包")
+    notation = _apply_side_glyphs(notation, side == "red")
     return {
         "iccs": move.to_iccs(),
         "notation": notation,
@@ -400,8 +412,7 @@ def compute_move_info(fen: str, iccs: str) -> dict:
     except Exception:
         notation = move.to_iccs()
     side = "black" if move.move_side == SIDE_BLACK else "red"
-    if side == "black":
-        notation = notation.replace("砲", "包")
+    notation = _apply_side_glyphs(notation, side == "red")
     return {"notation": notation, "side": side}
 
 
@@ -434,8 +445,7 @@ def pv_to_chinese(fen: str, uci_moves, limit: int = 64) -> list:
                 notation = move.to_text(fmt="chinese", traditional=True)
             except Exception:
                 notation = move.to_iccs()
-            if move.move_side == SIDE_BLACK:
-                notation = notation.replace("砲", "包")
+            notation = _apply_side_glyphs(notation, move.move_side != SIDE_BLACK)
             out.append(notation)
         except Exception:
             break
