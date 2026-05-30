@@ -40,6 +40,10 @@
         <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
         <button id="rootPickBtn" title="選擇目錄…">📁</button>
       </div>
+      <div class="evalDbRow evalDbRowSide">
+        <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
+        <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
+      </div>
       <div id="fileTree">載入中…</div>
     </aside>
     <div class="splitter splitter-v" data-resize="filePane" data-pref="splitFileW"></div>
@@ -53,10 +57,6 @@
         <button id="navNext"   title="下一步 (→)">▶</button>
         <button id="navLast"   title="最末步 (End)">▶|</button>
         <span id="moveInfo"></span>
-      </div>
-      <div class="evalDbRow">
-        <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
-        <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
       </div>
       <div id="evalLine" title="來自 chess-book-ai 的引擎評估（唯讀）"></div>
     </section>

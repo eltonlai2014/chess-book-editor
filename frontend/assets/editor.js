@@ -98,10 +98,11 @@ function ensureBoardThemeOptions() {
 
 function reorderEvalRows() {
   const evalLine = $("#evalLine");
-  const evalDbRow = document.querySelector(".evalDbRow");
+  const evalDbRow = document.querySelector("#boardPane > .evalDbRow");
   if (!evalLine || !evalDbRow) return;
   const parent = evalLine.parentElement;
-  if (!parent || evalLine.previousElementSibling === evalDbRow) return;
+  if (!parent || evalDbRow.parentElement !== parent) return;
+  if (evalLine.previousElementSibling === evalDbRow) return;
   parent.insertBefore(evalLine, evalDbRow);
 }
 

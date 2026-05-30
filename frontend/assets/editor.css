@@ -409,21 +409,48 @@ h2 {
 }
 .rootPath #rootPickBtn {
   flex: 0 0 auto;
-  background: transparent;
+  min-width: 30px;
+  height: 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
   color: var(--text-muted);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 2px 6px;
+  border: 1px solid rgba(232,183,92,0.12);
+  border-radius: 9px;
+  padding: 0 8px;
   cursor: pointer;
   font-size: 13px;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  line-height: 1;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 .rootPath #rootPickBtn:hover:not(:disabled) {
-  background: var(--accent-soft);
+  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
   color: var(--accent-strong);
-  border-color: var(--accent);
+  border-color: rgba(232,183,92,0.24);
+  transform: translateY(-1px);
 }
 .rootPath #rootPickBtn:disabled { opacity: 0.4; cursor: wait; }
+.evalDbRowSide {
+  margin: 0 12px 12px;
+  font-size: 11px;
+  padding: 7px 10px;
+}
+.evalDbRowSide #evalDbPath {
+  font-family: "SF Mono", "Consolas", monospace;
+}
+.evalDbRowSide #evalDbPickBtn {
+  min-width: 30px;
+  height: 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  color: var(--text-muted);
+  border: 1px solid rgba(232,183,92,0.12);
+  border-radius: 9px;
+  padding: 0 8px;
+  line-height: 1;
+}
+.evalDbRowSide #evalDbPickBtn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
+  color: var(--accent-strong);
+  border-color: rgba(232,183,92,0.24);
+}
 #fileTree ul {
   list-style: none;
   padding-left: 14px;
@@ -550,33 +577,37 @@ h2.panelHead {
 h2.panelHead > span { flex: 1 1 auto; }
 .iconBtn {
   flex: 0 0 auto;
-  background: transparent;
+  min-width: 30px;
+  height: 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
   color: var(--text-muted);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 2px 8px;
+  border: 1px solid rgba(232,183,92,0.12);
+  border-radius: 9px;
+  padding: 0 8px;
   font-size: 13px;
+  line-height: 1;
   cursor: pointer;
-  /* Cancel the parent h2's uppercase + letter-spacing — the emoji + glyph
-     would otherwise pick up the small-caps treatment and look odd. */
   text-transform: none;
   letter-spacing: normal;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 .iconBtn:disabled { opacity: 0.25; cursor: not-allowed; }
 .iconBtn:hover:not(:disabled):not(.danger) {
-  background: var(--accent-soft);
+  background: linear-gradient(180deg, rgba(212,160,67,0.16), rgba(212,160,67,0.06));
   color: var(--accent-strong);
-  border-color: var(--accent);
+  border-color: rgba(232,183,92,0.24);
+  transform: translateY(-1px);
 }
 .iconBtn.danger:hover:not(:disabled) {
-  background: rgba(217, 112, 112, 0.15);
+  background: linear-gradient(180deg, rgba(217,112,112,0.18), rgba(217,112,112,0.08));
   color: var(--err);
-  border-color: var(--err);
+  border-color: rgba(217,112,112,0.40);
+  transform: translateY(-1px);
 }
 .iconBtn.danger:active:not(:disabled) {
-  background: rgba(217, 112, 112, 0.25);
+  background: rgba(217, 112, 112, 0.18);
   color: var(--err);
+  transform: translateY(0);
 }
 #moveInfo {
   margin-left: 12px;
