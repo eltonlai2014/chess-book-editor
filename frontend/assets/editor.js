@@ -24,7 +24,7 @@ const EDITOR = {
   evalsByFen: {},
   evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
-  engineAnalysis: { es: null, running: false, fen: null, history: [] },  // live SSE analysis
+  engineAnalysis: { es: null, running: false, fen: null, mode: null, history: [] },  // live SSE analysis
 };
 
 // Per-theme editor colours for selection halo + legal-destination markers.
@@ -866,8 +866,9 @@ async function notationFor(fen, iccs) {
 async function renderEvalLine() {
   // Analysis is position-specific: if the board moved, drop the stale stream.
   const ea = EDITOR.engineAnalysis;
-  if (ea.running && ea.fen && ea.fen !== analysisFen()) {
-    stopAnalysis("局面已變，請重新分析");
+  if (ea.running && ea.fen) {
+    const expected = ea.mode === "cur" ? currentFen() : analysisFen();
+    if (ea.fen !== expected) stopAnalysis("局面已變，請重新分析");
   }
   const el = $("#evalLine");
   if (!el) return;
@@ -1607,27 +1608,30 @@ function stopAnalysis(stateText) {
   a.es = null;
   a.running = false;
   a.fen = null;
+  a.mode = null;
   const btn = $("#engineToggleBtn");
-  if (btn) btn.textContent = "▶ 開始分析";
+  if (btn) btn.textContent = "▶ 分析前一步";
   const st = $("#engineState");
   if (st && stateText != null) st.textContent = stateText;
 }
 
-function startAnalysis() {
+// mode: "prev" = the position the active move was chosen from (judge the move);
+//       "cur"  = the position after the active move.
+function startAnalysis(fen, mode) {
   switchRpTab("engine");
   if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) {
     $("#engineState").textContent = "引擎未設定（請在檔案窗格選 🐟）";
     return;
   }
-  const fen = analysisFen();
   if (!fen) { $("#engineState").textContent = "尚未載入棋譜"; return; }
   stopAnalysis(null);
   const a = EDITOR.engineAnalysis;
   a.fen = fen;
+  a.mode = mode;
   a.running = true;
   a.history = [];
   renderEngineHistory();
-  $("#engineState").textContent = "分析中…";
+  $("#engineState").textContent = mode === "cur" ? "分析中（本步）…" : "分析中（前一步）…";
   $("#engineToggleBtn").textContent = "■ 停止";
   const es = new EventSource("/api/engine/analyze?fen=" + encodeURIComponent(fen));
   a.es = es;
@@ -1643,7 +1647,11 @@ function startAnalysis() {
 
 function toggleAnalysis() {
   if (EDITOR.engineAnalysis.running) stopAnalysis("已停止");
-  else startAnalysis();
+  else startAnalysis(analysisFen(), "prev");
+}
+
+function analyzeCurrentStep() {
+  startAnalysis(currentFen(), "cur");
 }
 
 // ---------- boot ----------
@@ -1703,6 +1711,7 @@ document.querySelectorAll(".rpTab").forEach((b) => {
   b.addEventListener("click", () => switchRpTab(b.dataset.tab));
 });
 $("#engineToggleBtn").onclick = toggleAnalysis;
+$("#engineCurBtn").onclick = analyzeCurrentStep;
 $("#engineClearBtn").onclick = clearAnalysisHistory;
 $("#engineExportBtn").onclick = exportAnalysisHistory;
 reorderEvalRows();
