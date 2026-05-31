@@ -823,9 +823,13 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .varEmpty { color: var(--text-faint); font-style: italic; padding: 6px 2px; }
 
-/* Inline icons (button bar + per-line actions). */
+/* Inline icons — one stroke set across the whole app. */
 .ico { width: 15px; height: 15px; flex: 0 0 auto; }
-.engineBar .iconBtn, .engDemo, .engAdd { display: inline-flex; align-items: center; gap: 5px; }
+/* Center icon (+ optional label) in every icon-bearing button. */
+.iconBtn, .engDemo, .engAdd,
+#navBar button, #metaBtn, #saveBtn, .rootPath #rootPickBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+}
 /* Per-line 演示 / 加入 — small pills on the right of each history row. */
 .engActions { display: inline-flex; gap: 6px; margin-left: auto; }
 .engDemo, .engAdd {

@@ -1126,7 +1126,7 @@ function refreshActive() {
   renderVarPicker();
 
   if (node) {
-    $("#moveInfo").textContent = `第 ${node.ply} 步：${node.notation}（${node.iccs}）`;
+    $("#moveInfo").textContent = `第 ${node.ply} 步：${node.notation}`;
   } else {
     $("#moveInfo").textContent = "初始局面";
   }
@@ -1519,6 +1519,15 @@ const ICON = {
   branch: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
   ai: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg>',
   pause: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  info: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+  save: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>',
+  plus: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>',
+  settings: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>',
+  folder: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+  skipBack: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/></svg>',
+  skipFwd: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>',
+  chevL: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  chevR: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
 };
 function iconLabel(icon, label) {
   return (ICON[icon] || "") + `<span>${label}</span>`;
@@ -1850,6 +1859,24 @@ $("#engineClearBtn").innerHTML = iconLabel("trash", "清除");
 $("#engineExportBtn").innerHTML = iconLabel("clipboard", "導出");
 $("#rpTabVars").innerHTML = iconLabel("branch", "走法");
 $("#rpTabEngine").innerHTML = iconLabel("ai", "引擎分析");
+// Unify the rest of the system's buttons on the same icon set.
+$("#metaBtn").innerHTML = iconLabel("info", "賽事資訊");
+$("#saveBtn").innerHTML = iconLabel("save", "儲存");
+$("#newXqfBtn").innerHTML = iconLabel("plus", "新增");
+$("#settingsBtn").innerHTML = ICON.settings;
+$("#navDelete").innerHTML = ICON.trash;
+$("#navFirst").innerHTML = ICON.skipBack;
+$("#navPrev").innerHTML = ICON.chevL;
+$("#navBranch").innerHTML = iconLabel("branch", "分支");
+$("#navNext").innerHTML = ICON.chevR;
+$("#navLast").innerHTML = ICON.skipFwd;
+$("#rootPickBtn").innerHTML = ICON.folder;
+$("#evalDbPickBtn").innerHTML = ICON.folder;
+$("#enginePickBtn").innerHTML = ICON.folder;
+$("#demoFirst").innerHTML = ICON.skipBack;
+$("#demoPrev").innerHTML = ICON.chevL;
+$("#demoNext").innerHTML = ICON.chevR;
+$("#demoLast").innerHTML = ICON.skipFwd;
 // Per-line 演示 / 加入 (event-delegated; the history list re-renders often).
 $("#engineHistory").addEventListener("click", (e) => {
   const entryEl = e.target.closest(".engEntry");
