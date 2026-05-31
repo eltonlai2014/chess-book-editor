@@ -893,24 +893,35 @@ async function renderEvalLine() {
     cells.push(`<span class="evalCell"><span class="evalLabel">深${d}</span> <span class="evalScore">${fmtEvalScore(e, fen)}</span>${suffix}</span>`);
   }
   // Prefer deepest available eval's best move for the suggestion line.
+  // Both 建議 and 雲庫 show the Chinese move notation (not the ICCS code),
+  // resolved async via /api/xqf/move-info (legal moves from this fen).
   const deepest = entry.d32 || entry.d28 || entry.d22 || entry.d12;
   const bestIccs = deepest && deepest.best_iccs;
   let bestHtml = "";
   if (bestIccs) {
-    bestHtml = `<span class="evalCell evalBest"><span class="evalLabel">建議</span> <span class="evalMove" data-iccs="${bestIccs}">${bestIccs}</span></span>`;
+    bestHtml = `<span class="evalCell evalBest"><span class="evalLabel">建議</span> <span class="evalMove" data-iccs="${bestIccs}">…</span></span>`;
   }
+  let cdbIccs = null;
   if (entry.cdb && entry.cdb.best) {
     const b = entry.cdb.best;
+    cdbIccs = b.iccs;
     const wr = b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—";
-    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> ${b.iccs} (${wr})</span>`);
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${wr})</span>`);
   }
   el.innerHTML = cells.join("") + bestHtml;
 
-  // Async: replace bestIccs with its traditional-Chinese notation when ready.
+  // Fill in the Chinese notations when ready (fall back to the code only if
+  // conversion genuinely fails).
   if (bestIccs) {
     notationFor(fen, bestIccs).then((notation) => {
       const span = el.querySelector(`.evalMove[data-iccs="${bestIccs}"]`);
-      if (span && notation) span.textContent = `${notation} (${bestIccs})`;
+      if (span) span.textContent = notation || bestIccs;
+    });
+  }
+  if (cdbIccs) {
+    notationFor(fen, cdbIccs).then((notation) => {
+      const span = el.querySelector(`.evalMove[data-cdb-iccs="${cdbIccs}"]`);
+      if (span) span.textContent = notation || cdbIccs;
     });
   }
 }
@@ -1158,7 +1169,7 @@ function renderVarPicker() {
     L.textContent = letters[i] + ".";
     row.appendChild(L);
     const t = document.createElement("span");
-    t.textContent = `${opt.notation}　(${opt.iccs})`;
+    t.textContent = opt.notation;
     row.appendChild(t);
     if (i === activeIdx) {
       const arrow = document.createElement("span");
