@@ -638,6 +638,9 @@ def _parse_info_line(line: str, flip: int, fen: str) -> dict | None:
     if "depth" not in info:
         return None
     info["pv"] = pv_to_chinese(fen, pv, limit=64)
+    # Keep UCI aligned 1:1 with the Chinese list (pv_to_chinese stops at the
+    # first illegal move) so demo/add-to-tree never desync.
+    info["pvUci"] = pv[:len(info["pv"])]
     info["bestUci"] = pv[0] if pv else None
     return info
 

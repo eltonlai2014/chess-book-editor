@@ -147,6 +147,29 @@
       </div>
     </div>
   </div>
+  <!-- Engine-PV demo dialog: replays one analysis line on its own board,
+       manually or auto (configurable interval). Read-only; closes without
+       touching the move tree (use 加入 for that). -->
+  <div id="demoModal" class="modal" hidden>
+    <div class="modalDialog demoDialog" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
+      <h3 id="demoTitle">變化例演示</h3>
+      <svg id="demoBoard" viewBox="0 0 540 600" width="414" height="460"></svg>
+      <div id="demoMoveInfo" class="demoMoveInfo">起始局面</div>
+      <div class="demoControls">
+        <button id="demoFirst" class="iconBtn" title="回起點">⏮</button>
+        <button id="demoPrev"  class="iconBtn" title="上一步">◀</button>
+        <button id="demoPlay"  class="iconBtn" title="自動播放 / 暫停"></button>
+        <button id="demoNext"  class="iconBtn" title="下一步">▶</button>
+        <button id="demoLast"  class="iconBtn" title="到結尾">⏭</button>
+        <label class="demoInterval">間隔
+          <input id="demoInterval" type="number" min="0.2" max="10" step="0.1" value="2"> 秒
+        </label>
+      </div>
+      <div class="modalActions">
+        <button id="demoClose" class="primary">關閉</button>
+      </div>
+    </div>
+  </div>
   <!-- Settings dialog. Holds the rarely-changed paths (library root / eval DB /
        Pikafish), moved out of the file pane to free vertical space. IDs + chip
        classes preserved so the existing render/picker JS works unchanged. -->

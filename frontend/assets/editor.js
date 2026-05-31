@@ -24,7 +24,8 @@ const EDITOR = {
   evalsByFen: {},
   evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
-  engineAnalysis: { es: null, running: false, fen: null, mode: null, history: [] },  // live SSE analysis
+  engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
+  demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // 演示 playback state
 };
 
 // Per-theme editor colours for selection halo + legal-destination markers.
@@ -1477,6 +1478,7 @@ function ensureUiThemePicker() {
 window.addEventListener("keydown", (e) => {
   // Esc closes any open modal from anywhere.
   if (e.key === "Escape") {
+    if (!$("#demoModal").hidden) { closeDemo(); e.preventDefault(); return; }
     if (!$("#settingsModal").hidden) { closeSettingsModal(); e.preventDefault(); return; }
     if (!$("#metaModal").hidden) { closeMetaModal(); e.preventDefault(); return; }
     if (!$("#newModal").hidden)  { closeNewModal();  e.preventDefault(); return; }
@@ -1504,6 +1506,23 @@ window.addEventListener("keydown", (e) => {
 });
 
 // ---------- right-column tabs + live Pikafish analysis ----------
+
+// Inline Lucide-style stroke icons (MIT) — local, no CDN, theme-coloured via
+// currentColor. Used for the analysis button bar + per-line actions.
+const ICON = {
+  rewind: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 19 2 12 11 5 11 19"/><polygon points="22 19 13 12 22 5 22 19"/></svg>',
+  play: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+  stop: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>',
+  trash: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  clipboard: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
+  demo: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8"/></svg>',
+  branch: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
+  ai: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg>',
+  pause: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+};
+function iconLabel(icon, label) {
+  return (ICON[icon] || "") + `<span>${label}</span>`;
+}
 
 function switchRpTab(tab) {
   document.querySelectorAll(".rpTab").forEach((b) => {
@@ -1545,9 +1564,11 @@ function fmtWdlHtml(wdl) {
 function recordEngineEvent(ev) {
   if (ev.done) return;
   const h = EDITOR.engineAnalysis.history;
+  const a0 = EDITOR.engineAnalysis;
   const entry = {
     depth: ev.depth, cp: ev.cp, mate: ev.mate, wdl: ev.wdl,
-    time_ms: ev.time_ms, pv: ev.pv || [],
+    time_ms: ev.time_ms, pv: ev.pv || [], pvUci: ev.pvUci || [],
+    fen: a0.fen, path: a0.startPath,   // start position + tree path for demo / 加入
   };
   if (h.length && h[0].depth === entry.depth) h[0] = entry;
   else h.unshift(entry);
@@ -1562,12 +1583,17 @@ function renderEngineHistory() {
   box.innerHTML = h.map((e) => {
     const t = e.time_ms ? (e.time_ms / 1000).toFixed(1) + "s" : "—";
     const pv = (e.pv || []).join("　");
-    return `<div class="engEntry">`
+    const canPlay = (e.pvUci || []).length > 0;
+    return `<div class="engEntry" data-depth="${e.depth}">`
       + `<div class="engMeta">`
       +   `<span>深度 <b class="engBig">${e.depth}</b></span>`
       +   `<span>紅分 <b class="engBig">${fmtEngineScore(e)}</b></span>`
       +   `<span>耗時 ${t}</span>`
       +   fmtWdlHtml(e.wdl)
+      + (canPlay ? `<span class="engActions">`
+      +   `<button class="engDemo" title="在彈出棋盤上演示這條變化例">${iconLabel("demo", "演示")}</button>`
+      +   `<button class="engAdd" title="把這條變化例加入棋譜分支">${iconLabel("branch", "加入")}</button>`
+      + `</span>` : "")
       + `</div>`
       + (pv ? `<div class="engPv">${pv}</div>` : "")
       + `</div>`;
@@ -1621,7 +1647,7 @@ function stopAnalysis(stateText) {
   a.fen = null;
   a.mode = null;
   const btn = $("#engineToggleBtn");
-  if (btn) btn.textContent = "▶ 分析前一步";
+  if (btn) btn.innerHTML = iconLabel("ai", "前一步");
   const st = $("#engineState");
   if (st && stateText != null) st.textContent = stateText;
 }
@@ -1639,11 +1665,13 @@ function startAnalysis(fen, mode) {
   const a = EDITOR.engineAnalysis;
   a.fen = fen;
   a.mode = mode;
+  // Tree path the PV branches from: the active node (cur) or its parent (prev).
+  a.startPath = mode === "cur" ? [...EDITOR.activePath] : EDITOR.activePath.slice(0, -1);
   a.running = true;
   a.history = [];
   renderEngineHistory();
   $("#engineState").textContent = mode === "cur" ? "分析中（本步）…" : "分析中（前一步）…";
-  $("#engineToggleBtn").textContent = "■ 停止";
+  $("#engineToggleBtn").innerHTML = iconLabel("stop", "停止");
   const es = new EventSource("/api/engine/analyze?fen=" + encodeURIComponent(fen));
   a.es = es;
   es.onmessage = (e) => {
@@ -1663,6 +1691,96 @@ function toggleAnalysis() {
 
 function analyzeCurrentStep() {
   startAnalysis(currentFen(), "cur");
+}
+
+// ---------- 演示: replay one PV line on a popup board ----------
+function renderDemo() {
+  const d = EDITOR.demo;
+  if (!d.fens.length) return;
+  const lastIccs = d.idx > 0 ? d.lastIccs[d.idx - 1] : null;
+  drawBoard($("#demoBoard"), d.fens[d.idx], lastIccs, null);
+  const info = $("#demoMoveInfo");
+  if (info) {
+    info.textContent = d.idx === 0
+      ? `起始局面（共 ${d.lastIccs.length} 步）`
+      : `第 ${d.idx} / ${d.lastIccs.length} 步：${d.notations[d.idx - 1] || ""}`;
+  }
+}
+
+function demoStopPlay() {
+  const d = EDITOR.demo;
+  if (d.timer) { clearInterval(d.timer); d.timer = null; }
+  const b = $("#demoPlay");
+  if (b) { b.innerHTML = ICON.demo; b.title = "自動播放"; }
+}
+
+function demoGo(idx) {
+  const d = EDITOR.demo;
+  d.idx = Math.max(0, Math.min(idx, d.fens.length - 1));
+  renderDemo();
+  if (d.idx >= d.fens.length - 1) demoStopPlay();
+}
+
+function demoTogglePlay() {
+  const d = EDITOR.demo;
+  if (d.timer) { demoStopPlay(); return; }
+  if (d.idx >= d.fens.length - 1) demoGo(0);   // restart from the top
+  const sec = parseFloat($("#demoInterval").value) || 2;
+  const b = $("#demoPlay");
+  if (b) { b.innerHTML = ICON.pause; b.title = "暫停"; }
+  d.timer = setInterval(() => {
+    if (d.idx >= d.fens.length - 1) { demoStopPlay(); return; }
+    demoGo(d.idx + 1);
+  }, Math.max(200, sec * 1000));
+}
+
+function openDemo(entry) {
+  const moves = entry.pvUci || [];
+  if (!moves.length || !entry.fen) { setStatus("此變化例無走子可演示", "err"); return; }
+  const fens = [entry.fen];
+  for (const u of moves) fens.push(applyIccs(fens[fens.length - 1], u));
+  EDITOR.demo = { fens, notations: entry.pv || [], lastIccs: moves, idx: 0, timer: null };
+  $("#demoModal").hidden = false;
+  demoStopPlay();   // ensure the play button shows ▶ (not a stale ⏸)
+  renderDemo();
+}
+
+function closeDemo() {
+  demoStopPlay();
+  $("#demoModal").hidden = true;
+}
+
+// ---------- 加入: merge a PV line into the move tree as a branch ----------
+async function addPvLine(entry) {
+  const moves = entry.pvUci || [];
+  if (!moves.length) { setStatus("此變化例無走子可加入", "err"); return; }
+  if (!EDITOR.data) { setStatus("尚未載入棋譜", "err"); return; }
+  const ok = await showConfirmDialog(
+    `將引擎變化例（${moves.length} 步）自此局面加入棋譜分支？\n已存在的著法會沿用，不重複建立。`,
+    "加入變化例",
+  );
+  if (!ok) return;
+  const startSide = (entry.fen.trim().split(/\s+/)[1] || "w") === "w" ? "red" : "black";
+  let path = Array.isArray(entry.path) ? [...entry.path] : [];
+  let added = 0;
+  for (let i = 0; i < moves.length; i++) {
+    const iccs = moves[i];
+    const notation = (entry.pv && entry.pv[i]) || iccs;
+    const side = (i % 2 === 0) ? startSide : (startSide === "red" ? "black" : "red");
+    const siblings = path.length === 0
+      ? (EDITOR.data.roots || (EDITOR.data.roots = []))
+      : (nodeAt(path).children || (nodeAt(path).children = []));
+    let idx = siblings.findIndex((n) => n.iccs === iccs);
+    if (idx < 0) {
+      siblings.push({ iccs, notation, side, ply: path.length + 1, annote: "", children: [] });
+      idx = siblings.length - 1;
+      added++;
+    }
+    path = path.concat([idx]);
+  }
+  clearSelection();
+  navigateTo(path);   // jump to the end of the added line
+  setStatus(added > 0 ? `已加入 ${added} 步（記得儲存）` : "該變化例已存在於棋譜中", "ok");
 }
 
 // ---------- boot ----------
@@ -1725,6 +1843,30 @@ $("#engineToggleBtn").onclick = toggleAnalysis;
 $("#engineCurBtn").onclick = analyzeCurrentStep;
 $("#engineClearBtn").onclick = clearAnalysisHistory;
 $("#engineExportBtn").onclick = exportAnalysisHistory;
+// Icon + concise label for the analysis button bar.
+$("#engineToggleBtn").innerHTML = iconLabel("ai", "前一步");
+$("#engineCurBtn").innerHTML = iconLabel("ai", "本步");
+$("#engineClearBtn").innerHTML = iconLabel("trash", "清除");
+$("#engineExportBtn").innerHTML = iconLabel("clipboard", "導出");
+$("#rpTabVars").innerHTML = iconLabel("branch", "走法");
+$("#rpTabEngine").innerHTML = iconLabel("ai", "引擎分析");
+// Per-line 演示 / 加入 (event-delegated; the history list re-renders often).
+$("#engineHistory").addEventListener("click", (e) => {
+  const entryEl = e.target.closest(".engEntry");
+  if (!entryEl) return;
+  const entry = EDITOR.engineAnalysis.history.find((x) => x.depth === Number(entryEl.dataset.depth));
+  if (!entry) return;
+  if (e.target.closest(".engDemo")) openDemo(entry);
+  else if (e.target.closest(".engAdd")) addPvLine(entry);
+});
+// 演示 dialog controls.
+$("#demoFirst").onclick = () => demoGo(0);
+$("#demoPrev").onclick  = () => demoGo(EDITOR.demo.idx - 1);
+$("#demoNext").onclick  = () => demoGo(EDITOR.demo.idx + 1);
+$("#demoLast").onclick  = () => demoGo(EDITOR.demo.fens.length - 1);
+$("#demoPlay").onclick  = demoTogglePlay;
+$("#demoClose").onclick = closeDemo;
+$("#demoModal").addEventListener("click", (e) => { if (e.target.id === "demoModal") closeDemo(); });
 reorderEvalRows();
 
 // Board theme picker. Initial value applied in boot() after PREFS load.
