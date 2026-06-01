@@ -118,68 +118,78 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 功能 | 函式:行 |
 |---|---|
 | 全域狀態 | `EDITOR`:15 |
-| 主題色盤 | `EDITOR_THEME_COLORS`:37 / `UI_THEMES`:45 |
-| 節點定位 | `nodeAt`:161 / `siblingsAt`:173 / `fenAndLastIccsFor`:180 |
-| 目前 FEN / 主線收集 | `currentFen`:214 / `currentLine`:932 / `collectAllFens`:644 |
-| 導航 + 全畫面刷新 | `navigateTo`:1090 / `refreshActive`:1098 |
-| 導航鍵 | `navFirst`:1336 / `navPrev`:1337 / `navNext`:1341 / `navLast`:1351 / `navToNearestBranch`:1374 |
+| 主題色盤 | `EDITOR_THEME_COLORS`:39 / `UI_THEMES`:47 |
+| 節點定位 | `nodeAt`:172 / `siblingsAt`:184 / `fenAndLastIccsFor`:191 |
+| 目前 FEN / 主線收集 | `currentFen`:225 / `currentLine`:970 / `collectAllFens`:664 |
+| 導航 + 全畫面刷新 | `navigateTo`:1128 / `refreshActive`:1136 |
+| 導航鍵 | `navFirst`:1543 / `navPrev`:1544 / `navNext`:1548 / `navLast`:1558 / `navToNearestBranch`:1581 |
 
 **走子輸入（點選盤面）**
 | 功能 | 函式:行 |
 |---|---|
-| 透明 overlay + 點擊路由 | `installBoardOverlay`:232 / `onSquareClick`:314 |
-| 選子/清選/嘗試走子 | `selectSquare`:349 / `clearSelection`:341 / `tryAddMove`:371 |
-| 插入/刪除/升主線 | `insertMoveAt`:483 / `deleteCurrentMove`:417 / `promoteToMain`:448 |
+| 透明 overlay + 點擊路由 | `installBoardOverlay`:243 / `onSquareClick`:325 |
+| 選子/清選/嘗試走子 | `selectSquare`:360 / `clearSelection`:352 / `tryAddMove`:382 |
+| 插入/刪除/升主線 | `insertMoveAt`:494 / `deleteCurrentMove`:428 / `promoteToMain`:459 |
 
 **棋譜列 / 注解 / 走法分支**
 | 功能 | 函式:行 |
 |---|---|
-| 棋譜列 + 單步列（含 trap/brilliant 判定） | `renderMoveList`:1023 / `renderPlyRow`:1034 / `plyVerdict`:997 / `plyLossAt`:983 |
-| 走法選擇器（同層分支，無 ICCS） | `renderVarPicker`:1145 |
-| 注解編輯（即時同步 data） | `commitAnnoteEdit`:1205 |
+| 棋譜列 + 單步列（含 trap/brilliant 判定） | `renderMoveList`:1061 / `renderPlyRow`:1072 / `plyVerdict`:1035 / `plyLossAt`:1021 |
+| 走法選擇器（同層分支，無 ICCS） | `renderVarPicker`:1352 |
+| 注解編輯（即時同步 data） | `commitAnnoteEdit`:1412 |
+
+**棋盤箭頭提示（畫在 `<g class="arrowLayer">`，獨立刷新）**
+| 功能 | 函式:行 |
+|---|---|
+| 主控：分支(綠,編號) + 引擎雙箭頭(藍最佳/橙回應) | `updateBoardArrows`:1302 |
+| 畫單支箭頭（描邊+本體） / 編號徽章（最後畫=最上層） | `boardArrow`:1200 / `boardArrowBadge`:1243 |
+| 每主題箭頭色盤 / 取目前主題色 | `ARROW_THEMES`:1289 / `arrowPalette`:1298（寬度`ARROW_WIDTH`:1296、透明度`ARROW_OPACITY`:1297） |
 
 **評估列（唯讀，來自 positions.db）**
 | 功能 | 函式:行 |
 |---|---|
-| 取本檔評估 / 畫評估列 | `fetchEvalsForFile`:804 / `renderEvalLine`:867 |
-| 分數格式 / 著法查詢 | `fmtEvalScore`:825 / `notationFor`:848 |
+| 取本檔評估 / 畫評估列 | `fetchEvalsForFile`:842 / `renderEvalLine`:905 |
+| 分數格式 / 著法查詢 | `fmtEvalScore`:863 / `notationFor`:886 |
 
 **即時引擎分析（SSE）—— 引擎分析 tab**
 | 功能 | 函式:行 |
 |---|---|
-| tab 切換 | `switchRpTab`:1536 |
-| 起/停分析（開 EventSource） | `startAnalysis`:1666 / `stopAnalysis`:1651 / `toggleAnalysis`:1696 |
-| 分析「前一步」局面 / 「本步」局面 | `analysisFen`:1645 / `analyzeCurrentStep`:1701 |
-| 收事件→歷程（最新在上） | `recordEngineEvent`:1573 / `renderEngineHistory`:1587 |
-| 清除 / 導出歷程 | `clearAnalysisHistory`:1612 / `exportAnalysisHistory`:1619 |
-| 分數/WDL 格式 | `fmtEngineScore`:1545 / `fmtWdl`:1555 / `fmtWdlHtml`:1562 |
+| tab 切換 | `switchRpTab`:1743 |
+| 起/停分析（開 EventSource） | `startAnalysis`:1875 / `stopAnalysis`:1859 / `toggleAnalysis`:1905 |
+| 分析「前一步」局面 / 「本步」局面 | `analysisFen`:1853 / `analyzeCurrentStep`:1910 |
+| 收事件→歷程（最新在上，並更新藍箭頭） | `recordEngineEvent`:1780 / `renderEngineHistory`:1795 |
+| 清除 / 導出歷程 | `clearAnalysisHistory`:1820 / `exportAnalysisHistory`:1827 |
+| 分數/WDL 格式 | `fmtEngineScore`:1752 / `fmtWdl`:1762 / `fmtWdlHtml`:1769 |
 
 **變化例演示 dialog（單行 PV 重播）**
 | 功能 | 函式:行 |
 |---|---|
-| 開/關 dialog（用 applyIccs 串 fens） | `openDemo`:1746 / `closeDemo`:1757 |
-| 畫 / 跳步 / 自動播放 | `renderDemo`:1706 / `demoGo`:1726 / `demoTogglePlay`:1733 / `demoStopPlay`:1719 |
-| **把 PV 加進走子樹** | `addPvLine`:1763 |
+| 開/關 dialog（用 applyIccs 串 fens） | `openDemo`:1955 / `closeDemo`:1966 |
+| 畫 / 跳步 / 自動播放 | `renderDemo`:1915 / `demoGo`:1935 / `demoTogglePlay`:1942 / `demoStopPlay`:1928 |
+| **把 PV 加進走子樹** | `addPvLine`:1972 |
 
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |
 |---|---|
-| 偏好讀寫 | `loadPreferences`:61 / `savePreference`:68 |
-| 設定 dialog | `openSettingsModal`:1811 / `closeSettingsModal`:1812 |
-| 根目錄 chip / 選擇 | `updateRootDisplay`:529 / `pickRoot`:540 / `applyRoot`:557 |
-| 評估 DB chip / 選擇 | `fetchEvalDbInfo`:665 / `renderEvalDbRow`:679 / `pickEvalDb`:709 |
-| 引擎 chip / 選擇 | `fetchEngineInfo`:740 / `renderEngineRow`:752 / `pickEngine`:778 |
-| 賽事資訊 / 新增棋譜 dialog | `openMetaModal`:1230 / `applyMetaEdits`:1248 ／ `openNewModal`:1271 / `submitNewXqf`:1288 |
-| 自訂確認 dialog | `showConfirmDialog`:118 |
+| 偏好讀寫（伺服器 preferences.json） | `loadPreferences`:63 / `savePreference`:70 |
+| localStorage「最後可用」備份 + 開機回復提示 | `LS_KEYS`/`lsGet`/`lsSet`:86–88 / `recoverSettingsFromLocalStorage`:2211 |
+| 設定 dialog | `openSettingsModal`:2020 / `closeSettingsModal`:2021 |
+| 根目錄 chip / 選擇 / 套用 | `updateRootDisplay`:542 / `pickRoot`:554 / `applyRoot`:571 |
+| 評估 DB chip / 選擇 / 套用(共用) | `fetchEvalDbInfo`:685 / `renderEvalDbRow`:699 / `pickEvalDb`:730 / `applyEvalDbPath`:750 |
+| 引擎 chip / 選擇 / 套用(共用) | `fetchEngineInfo`:769 / `renderEngineRow`:781 / `pickEngine`:808 / `applyEnginePath`:828 |
+| 賽事資訊 / 新增棋譜 dialog | `openMetaModal`:1437 / `applyMetaEdits`:1455 ／ `openNewModal`:1478 / `submitNewXqf`:1495 |
+| 自訂確認 dialog（回 Promise<bool>） | `showConfirmDialog`:129 |
+
+> chip 渲染（`updateRootDisplay`/`renderEvalDbRow`/`renderEngineRow`）在路徑**驗證有效**時 `lsSet` 鏡射到 localStorage；切換 XQF 檔（`selectFile`:624）或切目錄（`applyRoot`:571）會 `stopAnalysis`+`clearAnalysisHistory` 清掉引擎歷程。
 
 **主題 / 版面 / icon / 啟動**
 | 功能 | 函式:行 |
 |---|---|
-| icon 字典 / 帶標籤 | `ICON`:1512 / `iconLabel`:1532 |
-| 棋盤主題 / 視角 / UI 主題 | `applyBoardTheme`:1431 / `applyBoardPerspective`:1437 / `applyUiTheme`:1445 |
-| splitter 拖曳（flex-basis） | `setupSplitters`:1925 |
-| 開機自動載入上次檔案 | `tryAutoLoadLastFile`:1978 |
-| **事件綁定 / icon 注入（boot）** | editor.js **1813–1914**（所有 `.onclick`、`innerHTML=ICON…`、tab/demo 綁定都在這） |
+| icon 字典 / 帶標籤 | `ICON`:1719 / `iconLabel`:1739 |
+| 棋盤主題 / 視角 / UI 主題（換主題→refreshActive→重畫箭頭） | `applyBoardTheme`:1638 / `applyBoardPerspective`:1644 / `applyUiTheme`:1652 |
+| splitter 拖曳（flex-basis） | `setupSplitters`:2134 |
+| 開機自動載入上次檔案 | `tryAutoLoadLastFile`:2187 |
+| **事件綁定 / icon 注入（boot）** | editor.js **2022–2133**（所有 `.onclick`、`innerHTML=ICON…`、tab/demo 綁定都在這） |
 
 ### HTML 結構（frontend/index.html）
 
@@ -204,9 +214,11 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 
 ## 4. 改功能時的起手式
 
-- **加按鈕** → `ICON` map(1512) 加圖示 → boot 段(1813–1888) 綁 `.onclick` + `innerHTML=iconLabel(...)`。禁 emoji。
+- **加按鈕** → `ICON` map(1719) 加圖示 → boot 段(2022–2133) 綁 `.onclick` + `innerHTML=iconLabel(...)`。禁 emoji。
 - **加 API** → app.py 加 `@app.get/post` → 邏輯放 xqf_service / eval_service，路由只做 IO+驗證。
 - **改著法顯示** → 一律經 `_apply_side_glyphs`(xqf_service:267)；UI 端不要再拼字形。
 - **改面板尺寸/版面** → splitter `data-pref` + `setupSplitters`；尺寸自動進 PREFS。
 - **動分析串流** → 後端 `_parse_info_line` 解析、`engine_analyze` 串流；前端 `startAnalysis`/`renderEngineHistory` 消費。改欄位兩邊都要動。
 - **動分數/WDL 約定** → 改 `_parse_info_line` 的 flip/WDL 互換，前端 `fmtEngineScore`/`fmtWdlHtml` 同步。
+- **改棋盤箭頭（色/寬/編號位置）** → 全在 `updateBoardArrows`/`boardArrow`/`boardArrowBadge`；色盤 `ARROW_THEMES` 一主題一行。SVG 無 z-index，疊放靠文件順序——編號最後畫才壓得住線。
+- **加棋盤主題** → board.js `BOARD_STYLES` 加一筆 + editor.js `ARROW_THEMES` 補對應箭頭色 + `EDITOR_THEME_COLORS` 補選取/落點色 + `ensureBoardThemeOptions` 加選項。

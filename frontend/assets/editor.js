@@ -26,6 +26,8 @@ const EDITOR = {
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
   engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
   demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // 演示 playback state
+  rootOk: true,       // false when the configured library root is missing (drives LS recovery)
+  rootPath: "",       // last root reported by the server (valid or not)
 };
 
 // Per-theme editor colours for selection halo + legal-destination markers.
@@ -75,6 +77,15 @@ async function savePreference(key, value) {
     });
   } catch (_) {}
 }
+
+// Browser-local backup of the three "last known good" config paths. Mirrors
+// the server-side preferences.json but survives a wiped/relocated prefs file,
+// so if the configured path goes missing we can offer to restore it on boot.
+// Written by the chip renderers whenever a path validates; read by
+// recoverSettingsFromLocalStorage().
+const LS_KEYS = { root: "xqfRoot", evalDb: "evalDbPath", engine: "pikafishPath" };
+function lsGet(k) { try { return localStorage.getItem(k) || ""; } catch (_) { return ""; } }
+function lsSet(k, v) { try { if (v) localStorage.setItem(k, v); } catch (_) {} }
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -517,8 +528,10 @@ async function insertMoveAt(parentPath, newNode) {
 async function loadFileTree() {
   const r = await fetch("/api/xqf/list");
   const tree = await r.json();
+  EDITOR.rootPath = tree.root || "";
   if (tree.root) updateRootDisplay(tree.root);
-  if (tree.error) { $("#fileTree").textContent = "錯誤：" + tree.error; return; }
+  if (tree.error) { EDITOR.rootOk = false; $("#fileTree").textContent = "錯誤：" + tree.error; return; }
+  EDITOR.rootOk = true;
   $("#fileTree").innerHTML = "";
   $("#fileTree").appendChild(renderDir(tree));
   // Tree loaded → user can create a new file under it.
@@ -531,6 +544,7 @@ function updateRootDisplay(root) {
   if (!el) return;
   el.textContent = "📂 " + root;
   el.title = root;
+  lsSet(LS_KEYS.root, root);   // remember last-good root for boot recovery
 }
 
 // ---------- root directory picker ----------
@@ -569,6 +583,8 @@ async function applyRoot(path) {
   EDITOR.data = null;
   EDITOR.activePath = [];
   clearSelection();
+  stopAnalysis("尚未開始");
+  clearAnalysisHistory();
   $("#saveBtn").disabled = true;
   $("#metaBtn").disabled = true;
   $("#fileTitle").textContent = "尚未載入";
@@ -617,6 +633,10 @@ async function selectFile(rel, liEl) {
     EDITOR.data = data;
     EDITOR.activePath = [];
     clearSelection();
+    // New file → the old analysis no longer applies. Stop any running stream
+    // and wipe the history so the 引擎分析 tab starts clean.
+    stopAnalysis("尚未開始");
+    clearAnalysisHistory();
     const fileName = rel.split("/").pop();
     $("#fileTitle").textContent = fileName;
     $("#fileTitle").title = rel;  // full path on hover
@@ -689,6 +709,7 @@ function renderEvalDbRow() {
     return;
   }
   row.classList.remove("warn");
+  lsSet(LS_KEYS.evalDb, p);   // remember last-good DB path for boot recovery
   const byDepth = info.evals_by_depth || {};
   const totalEvals = Object.values(byDepth).reduce((a, b) => a + b, 0);
   const cdb = info.chessdb_rows || 0;
@@ -715,25 +736,33 @@ async function pickEvalDb() {
     const resp = await r.json();
     if (resp.error) { setStatus("選擇失敗：" + resp.error, "err"); return; }
     if (!resp.ok) { setStatus(""); return; }  // user cancelled
-    const set = await fetch("/api/eval/db", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: resp.path }),
-    });
-    const setResp = await set.json();
-    if (setResp.error) { setStatus("設定失敗：" + setResp.error, "err"); return; }
-    EDITOR.evalDbInfo = setResp.info || { exists: true, path: setResp.path };
-    EDITOR.evalDbInfo.path = setResp.path;
-    renderEvalDbRow();
-    await fetchEvalsForFile();
-    renderEvalLine();
-    renderMoveList();   // trap / brilliant markers re-evaluate against the new DB
-    setStatus("已更新評估資料庫", "ok");
+    await applyEvalDbPath(resp.path);
   } catch (e) {
     setStatus("選擇失敗：" + e.message, "err");
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+// POST a DB path, refresh the chip + per-file eval cache. Shared by the picker
+// and boot recovery. renderEvalDbRow() mirrors the validated path to
+// localStorage on success. Returns true when the DB was set.
+async function applyEvalDbPath(path) {
+  const set = await fetch("/api/eval/db", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  const setResp = await set.json();
+  if (setResp.error) { setStatus("設定失敗：" + setResp.error, "err"); return false; }
+  EDITOR.evalDbInfo = setResp.info || { exists: true, path: setResp.path };
+  EDITOR.evalDbInfo.path = setResp.path || path;
+  renderEvalDbRow();
+  await fetchEvalsForFile();
+  renderEvalLine();
+  renderMoveList();   // trap / brilliant markers re-evaluate against the new DB
+  setStatus("已更新評估資料庫", "ok");
+  return true;
 }
 
 // ---- Pikafish engine config chip (live-analysis source, not persisted) ----
@@ -769,6 +798,7 @@ function renderEngineRow() {
     return;
   }
   row.classList.remove("warn");
+  lsSet(LS_KEYS.engine, p);   // remember last-good engine path for boot recovery
   pathEl.textContent = `🐟 ${info.name || fname}`;
   pathEl.title = `${p}\n${info.name || ""}`.trim();
 }
@@ -784,21 +814,29 @@ async function pickEngine() {
     const resp = await r.json();
     if (resp.error) { setStatus("選擇失敗：" + resp.error, "err"); return; }
     if (!resp.ok) { setStatus(""); return; }  // user cancelled
-    const set = await fetch("/api/engine/path", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: resp.path }),
-    });
-    const setResp = await set.json();
-    if (setResp.error) { setStatus("設定失敗：" + setResp.error, "err"); return; }
-    EDITOR.engineInfo = setResp.info || { exists: true, ok: true, path: setResp.path };
-    renderEngineRow();
-    setStatus("已更新皮卡魚引擎", "ok");
+    await applyEnginePath(resp.path);
   } catch (e) {
     setStatus("選擇失敗：" + e.message, "err");
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+// POST an engine path (server validates via UCI handshake), refresh the chip.
+// Shared by the picker and boot recovery; renderEngineRow() mirrors a working
+// path to localStorage. Returns true when the engine handshake succeeded.
+async function applyEnginePath(path) {
+  const set = await fetch("/api/engine/path", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  const setResp = await set.json();
+  if (setResp.error) { setStatus("設定失敗：" + setResp.error, "err"); return false; }
+  EDITOR.engineInfo = setResp.info || { exists: true, ok: true, path: setResp.path };
+  renderEngineRow();
+  setStatus("已更新皮卡魚引擎", "ok");
+  return true;
 }
 
 async function fetchEvalsForFile() {
@@ -1101,6 +1139,7 @@ function refreshActive() {
   // board.js drawBoard signature: drawBoard(svg, fen, bookMove, engineMove)
   drawBoard($("#board"), fen, lastIccs, null);
   installBoardOverlay($("#board"));   // click rects + selection halo on top
+  updateBoardArrows();                // branch hints + live engine best-move
 
   renderMoveList();
 
@@ -1140,6 +1179,174 @@ function refreshActive() {
   $("#navLast").disabled = !next;
 
   renderEvalLine();
+}
+
+// ---------- board move-hint arrows ----------
+// Drawn in their own <g class="arrowLayer"> so engine heartbeats can refresh
+// them without re-running the (heavier) piece + click-rect render. screenX/Y
+// read board.js's CURRENT_REDP, latched by the most recent drawBoard, so these
+// honour the active perspective. Hint kinds (palette in ARROW):
+//   jade  — every continuation from the current position when it branches
+//           (≥2 children), numbered 1.. (1 = main line) to match the list.
+//   azure — the engine's current best move (PV ply 1).
+//   rose  — the engine's predicted reply (PV ply 2).
+// The engine arrows only show while it's thinking AND the analysed position is
+// the one on the board, so they map to the right pieces; in "前一步" mode the
+// board shows the after-position, so no engine arrows there by design.
+// Draw one arrow into `layer`. A dark casing is laid down first, the coloured
+// arrow on top — that outline keeps it legible on wood / stone / dark slate
+// alike. The numbered badge is drawn separately (boardArrowBadge) in a final
+// pass so an overlapping arrow's line can never cover another arrow's number.
+function boardArrow(layer, iccs, opts) {
+  const c = iccsToCoord(iccs);
+  if (!c) return;
+  const fx = screenX(c.from.col), fy = screenY(c.from.row);
+  const tx = screenX(c.to.col),   ty = screenY(c.to.row);
+  const dx = tx - fx, dy = ty - fy;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const px = -uy, py = ux;                       // perpendicular for arrowhead corners
+  const w = opts.width || 5, op = opts.opacity != null ? opts.opacity : 0.9;
+  const headLen = w * 2.3, headHalf = w * 1.5;
+  const sx = fx + ux * 18, sy = fy + uy * 18;    // start just outside the source piece
+  const ex = tx, ey = ty;                        // tip lands on the destination intersection
+                                                 // (short one-step moves stay visible)
+  // One stroke+head pass; called twice (casing, then colour).
+  const pass = (color, lw, hl, hh, opacity) => {
+    const bx = ex - ux * hl, by = ey - uy * hl;  // arrowhead base centre
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", sx); line.setAttribute("y1", sy);
+    line.setAttribute("x2", bx); line.setAttribute("y2", by);
+    line.setAttribute("stroke", color);
+    line.setAttribute("stroke-width", lw);
+    line.setAttribute("stroke-linecap", "round");
+    line.setAttribute("stroke-opacity", opacity);
+    line.style.pointerEvents = "none";
+    layer.appendChild(line);
+    const head = document.createElementNS(SVG_NS, "polygon");
+    head.setAttribute("points",
+      `${ex},${ey} ${bx + px * hh},${by + py * hh} ${bx - px * hh},${by - py * hh}`);
+    head.setAttribute("fill", color);
+    head.setAttribute("fill-opacity", opacity);
+    head.style.pointerEvents = "none";
+    layer.appendChild(head);
+  };
+  pass("rgba(20,16,10,0.45)", w + 3, headLen + 2.5, headHalf + 2, 0.45);
+  pass(opts.color, w, headLen, headHalf, op);
+}
+
+// Numbered badge at an arrow's midpoint. SVG has no z-index — paint order is
+// document order — so updateBoardArrows() calls this for every branch AFTER all
+// arrow lines are laid down, guaranteeing no line can cover a number. When two
+// collinear branches would land their badges on the same spot, the dupes are
+// nudged a touch along the arrow so both numbers stay readable.
+function boardArrowBadge(layer, iccs, label, color, nudge) {
+  const c = iccsToCoord(iccs);
+  if (!c) return;
+  const fx = screenX(c.from.col), fy = screenY(c.from.row);
+  const tx = screenX(c.to.col),   ty = screenY(c.to.row);
+  // Sit the badge beside the arrowHEAD (just behind the tip, offset to the
+  // side) so each number hugs the end of its own arrow, off the line. Collinear
+  // branches share a file but end at different tips, so the numbers separate
+  // naturally; same-tip dupes are stepped back along the arrow via `nudge`.
+  const dx = tx - fx, dy = ty - fy;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const px = -uy, py = ux;               // perpendicular unit
+  const back = 13 + (nudge || 0), off = 15;
+  const mx = tx - ux * back + px * off, my = ty - uy * back + py * off;
+  const badge = document.createElementNS(SVG_NS, "circle");
+  badge.setAttribute("cx", mx); badge.setAttribute("cy", my);
+  badge.setAttribute("r", 9.5);
+  badge.setAttribute("fill", color);
+  badge.setAttribute("stroke", "#fff");
+  badge.setAttribute("stroke-width", 1.5);
+  badge.style.pointerEvents = "none";
+  layer.appendChild(badge);
+  const txt = document.createElementNS(SVG_NS, "text");
+  txt.setAttribute("x", mx); txt.setAttribute("y", my + 4);
+  txt.setAttribute("text-anchor", "middle");
+  txt.setAttribute("font-size", "12.5");
+  txt.setAttribute("font-weight", "700");
+  txt.setAttribute("fill", "#fff");
+  txt.style.pointerEvents = "none";
+  txt.textContent = label;
+  layer.appendChild(txt);
+}
+
+// Arrow palette — a blue/green/amber categorical trio whose lightness &
+// chroma are retuned per board theme so the arrows belong to the wood / stone
+// / slate they sit on instead of fighting it, while staying mutually
+// distinguishable and legible over both red and black pieces. Semantics are
+// constant across themes: green = book branch (numbered), blue = engine's best
+// move, amber = opponent's predicted reply. Source hues run a notch hotter
+// than the final look because everything renders at ARROW_OPACITY over the
+// board, with a dark casing locking the edge. Notes per theme:
+//   gilded   — dark slate ⇒ brighten all three so they lift off the ground.
+//   celadon  — green-grey ground ⇒ deepen the branch green so it doesn't melt
+//              into the board; warm amber pops against the cool field.
+//   wood/copper — warm grounds ⇒ a cobalt best-move gives complementary punch.
+const ARROW_THEMES = {
+  traditional: { branch: "#0c8f63", engineMove: "#1763bf", engineReply: "#d06a12" },
+  stone:       { branch: "#0a8c5e", engineMove: "#155fb8", engineReply: "#c96412" },
+  gilded:      { branch: "#34c98c", engineMove: "#46a0e6", engineReply: "#ef9a4d" },
+  copperwood:  { branch: "#0e9778", engineMove: "#1d6cc0", engineReply: "#cf5a1e" },
+  celadon:     { branch: "#0a7d57", engineMove: "#1c6fb8", engineReply: "#c25d2a" },
+};
+const ARROW_WIDTH = 5.5;     // one width for every arrow — rank is carried by the badge
+const ARROW_OPACITY = 0.6;   // translucent so pieces / board lines show through
+function arrowPalette() {
+  return ARROW_THEMES[document.documentElement.dataset.board] || ARROW_THEMES.traditional;
+}
+
+function updateBoardArrows() {
+  const svg = $("#board");
+  if (!svg) return;
+  const old = svg.querySelector(".arrowLayer");
+  if (old) old.remove();
+  if (!EDITOR.data) return;
+  const layer = document.createElementNS(SVG_NS, "g");
+  layer.setAttribute("class", "arrowLayer");
+  const pal = arrowPalette();
+
+  // Branch hint: continuations from the current position (≥2 = a real branch),
+  // numbered 1.. to match the variation list (1 = main line). Lines are drawn
+  // now; numbers are deferred to a final pass so no overlapping branch can
+  // cover another's badge. Collinear branches (same file, different depth)
+  // would stack badges on one spot, so each repeat at a midpoint is nudged
+  // along its own arrow.
+  const node = nodeAt(EDITOR.activePath);
+  const conts = node ? (node.children || []) : (EDITOR.data.roots || []);
+  const branchBadges = [];
+  if (conts.length >= 2) {
+    const seen = new Map();   // dedupe by destination tip
+    conts.forEach((ch, i) => {
+      if (!ch.iccs) return;
+      boardArrow(layer, ch.iccs, { color: pal.branch, width: ARROW_WIDTH, opacity: ARROW_OPACITY });
+      const c = iccsToCoord(ch.iccs);
+      const key = c.to.col + "," + c.to.row;
+      const k = seen.get(key) || 0; seen.set(key, k + 1);
+      branchBadges.push({ iccs: ch.iccs, label: String(i + 1), nudge: k * 19 });
+    });
+  }
+
+  // Engine "thinking" arrows: the best move + the predicted reply (first two
+  // PV plies). Only when the analysed FEN is the one currently on the board.
+  // Reply drawn first so the primary move sits on top.
+  const a = EDITOR.engineAnalysis;
+  if (a.running && a.fen && a.fen === currentFen()) {
+    const pv = (a.history[0] && a.history[0].pvUci) || [];
+    if (pv[1]) boardArrow(layer, pv[1], { color: pal.engineReply, width: ARROW_WIDTH, opacity: ARROW_OPACITY });
+    if (pv[0]) boardArrow(layer, pv[0], { color: pal.engineMove, width: ARROW_WIDTH, opacity: ARROW_OPACITY });
+  }
+
+  // Number badges last of all — guaranteed on top of every arrow line.
+  branchBadges.forEach((b) => boardArrowBadge(layer, b.iccs, b.label, pal.branch, b.nudge));
+
+  // Sit beneath the click layer so the transparent rects keep capturing clicks.
+  const clickLayer = svg.querySelector(".clickLayer");
+  if (clickLayer) svg.insertBefore(layer, clickLayer);
+  else svg.appendChild(layer);
 }
 
 function renderVarPicker() {
@@ -1582,6 +1789,7 @@ function recordEngineEvent(ev) {
   if (h.length && h[0].depth === entry.depth) h[0] = entry;
   else h.unshift(entry);
   renderEngineHistory();
+  updateBoardArrows();   // refresh the blue best-move arrow as depth climbs
 }
 
 function renderEngineHistory() {
@@ -1659,6 +1867,7 @@ function stopAnalysis(stateText) {
   if (btn) btn.innerHTML = iconLabel("ai", "前一步");
   const st = $("#engineState");
   if (st && stateText != null) st.textContent = stateText;
+  updateBoardArrows();   // drop the blue best-move arrow now analysis is idle
 }
 
 // mode: "prev" = the position the active move was chosen from (judge the move);
@@ -1994,6 +2203,40 @@ async function tryAutoLoadLastFile() {
   fileLi.scrollIntoView({ block: "nearest" });
 }
 
+// When a configured path is missing/invalid but localStorage remembers a
+// different last-good one, offer to restore it (and persist it server-side).
+// This is the safety net for a wiped/relocated preferences.json: the browser
+// still knows the path that worked last time. Runs after the boot info fetches
+// so EDITOR.*Info reflect the server's current (possibly broken) state.
+async function recoverSettingsFromLocalStorage() {
+  // Library root (directory).
+  if (EDITOR.rootOk === false) {
+    const r = lsGet(LS_KEYS.root);
+    if (r && r !== EDITOR.rootPath
+        && await showConfirmDialog(`棋譜根目錄無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
+      await applyRoot(r);
+    }
+  }
+  // Eval DB (file).
+  const ei = EDITOR.evalDbInfo || {};
+  if (!ei.exists) {
+    const r = lsGet(LS_KEYS.evalDb);
+    if (r && r !== ei.path
+        && await showConfirmDialog(`評估資料庫無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
+      await applyEvalDbPath(r);
+    }
+  }
+  // Pikafish engine (file).
+  const gi = EDITOR.engineInfo || {};
+  if (!(gi.exists && gi.ok)) {
+    const r = lsGet(LS_KEYS.engine);
+    if (r && r !== gi.path
+        && await showConfirmDialog(`皮卡魚引擎無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
+      await applyEnginePath(r);
+    }
+  }
+}
+
 // ---------- async boot ----------
 // Order: PREFS -> theme -> splitters -> file tree -> auto-open last file.
 (async function boot() {
@@ -2014,5 +2257,8 @@ async function tryAutoLoadLastFile() {
   // Parallelisable on boot — eval info is independent of the XQF tree fetch
   // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.
   await Promise.all([fetchEvalDbInfo(), fetchEngineInfo(), loadFileTree()]);
+  // Offer to restore any path the server lost but the browser still remembers,
+  // before auto-loading (root recovery reloads the tree autoload depends on).
+  await recoverSettingsFromLocalStorage();
   await tryAutoLoadLastFile();
 })();
