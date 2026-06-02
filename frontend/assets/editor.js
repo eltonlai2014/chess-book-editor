@@ -457,28 +457,45 @@ async function deleteCurrentMove() {
 //
 // parentPath = [] means root-level siblings live in EDITOR.data.roots.
 // Subtrees move atomically with their sibling — no re-indexing of descendants.
-function promoteToMain(parentPath, siblingIdx) {
-  if (siblingIdx === 0) return;  // already main line
+// Reorder a variation within its sibling list by `delta` slots — move/splice
+// semantics, NOT a swap, so every other branch keeps its relative order.
+// children[0] is the main line, so moving toward 0 promotes; reaching 0 makes
+// it the main line. The active path is remapped so the user stays on the same
+// physical line after the shuffle. Persisted on the next save like any other
+// tree edit (XQF writer emits children in array order).
+function moveVariation(parentPath, idx, delta) {
   const siblings = parentPath.length === 0
     ? (EDITOR.data ? EDITOR.data.roots : null)
     : (nodeAt(parentPath)?.children || null);
-  if (!siblings || siblingIdx >= siblings.length) return;
-
-  const tmp = siblings[0];
-  siblings[0] = siblings[siblingIdx];
-  siblings[siblingIdx] = tmp;
-
-  // If the active path passes through one of the two swapped siblings at the
-  // ply right after parentPath, follow the swap so the user stays on the same
-  // physical line.
+  if (!siblings) return;
+  const to = idx + delta;
+  if (to < 0 || to >= siblings.length) return;
+  const [moved] = siblings.splice(idx, 1);
+  siblings.splice(to, 0, moved);
+  // Keep the active path on the same physical line if it runs through these
+  // siblings at the ply right after parentPath.
   if (EDITOR.activePath.length > parentPath.length) {
-    const depthIdx = EDITOR.activePath[parentPath.length];
-    if (depthIdx === 0)             EDITOR.activePath[parentPath.length] = siblingIdx;
-    else if (depthIdx === siblingIdx) EDITOR.activePath[parentPath.length] = 0;
+    const d = parentPath.length;
+    EDITOR.activePath[d] = remapAfterMove(EDITOR.activePath[d], idx, to);
   }
-  const promotedLabel = siblings[0].notation || siblings[0].iccs;
   refreshActive();
-  setStatus(`已升『${promotedLabel}』為主線`, "ok");
+  setStatus(`已移動『${moved.notation || moved.iccs}』`, "ok");
+}
+
+// New index of an element originally at `cur` after the element at `from` is
+// spliced out and reinserted at `to`.
+function remapAfterMove(cur, from, to) {
+  if (cur === from) return to;
+  if (from < to && cur > from && cur <= to) return cur - 1;
+  if (from > to && cur >= to && cur < from) return cur + 1;
+  return cur;
+}
+
+// Reorder the currently-active variation (keyboard: Alt+↑/↓).
+function moveActiveVariation(delta) {
+  const path = EDITOR.activePath;
+  if (path.length === 0) return;   // init position has no active variation
+  moveVariation(path.slice(0, -1), path[path.length - 1], delta);
 }
 
 // Insert a freshly-built node as a child of the node at `parentPath`.
@@ -627,6 +644,7 @@ async function selectFile(rel, liEl) {
   document.querySelectorAll("#fileTree li.file.active").forEach(el => el.classList.remove("active"));
   if (liEl) liEl.classList.add("active");
   setStatus("載入中…");
+  drawBoardLoading("棋譜載入中…");   // pulsing badge until refreshActive() draws the position
   try {
     const r = await fetch("/api/xqf/load?path=" + encodeURIComponent(rel));
     const data = await r.json();
@@ -654,6 +672,7 @@ async function selectFile(rel, liEl) {
     fetchEvalsForFile().then(() => renderEvalLine());
   } catch (e) {
     setStatus("載入失敗：" + e.message, "err");
+    drawBoardLoading("載入失敗", false);   // stop the pulse so it doesn't spin forever
   }
 }
 
@@ -1383,24 +1402,33 @@ function renderVarPicker() {
     const t = document.createElement("span");
     t.textContent = opt.notation;
     row.appendChild(t);
+    // Right-aligned controls: ▲▼ reorder (any slot; disabled at the ends) plus
+    // a ← marker on the active row. Reordering is move/splice, so a row can be
+    // walked to any position; children[0] is the main line.
+    const ctrl = document.createElement("span");
+    ctrl.className = "varCtrl";
     if (i === activeIdx) {
       const arrow = document.createElement("span");
       arrow.className = "varArrow";
       arrow.textContent = "←";
-      row.appendChild(arrow);
-    } else if (i !== 0) {
-      // Non-main-line, non-active row: offer "升主線".
-      const btn = document.createElement("button");
-      btn.className = "varPromote";
-      btn.type = "button";
-      btn.textContent = "升主線";
-      btn.title = "把此變例升為主線（與主線交換位置）";
-      btn.onclick = (e) => {
-        e.stopPropagation();  // don't also navigate
-        promoteToMain(parentPath, i);
-      };
-      row.appendChild(btn);
+      ctrl.appendChild(arrow);
     }
+    const mkMove = (delta, glyph, title, disabled) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "varMoveBtn";
+      b.textContent = glyph;
+      b.title = title;
+      b.disabled = disabled;
+      b.onclick = (e) => {
+        e.stopPropagation();   // don't also navigate
+        moveVariation(parentPath, i, delta);
+      };
+      return b;
+    };
+    ctrl.appendChild(mkMove(-1, "▲", "上移（更靠主線；移到頂端即為主線）", i === 0));
+    ctrl.appendChild(mkMove(+1, "▼", "下移", i === opts.length - 1));
+    row.appendChild(ctrl);
     row.onclick = () => {
       const newPath = path.length === 0 ? [i] : path.slice(0, -1).concat([i]);
       navigateTo(newPath);
@@ -1424,6 +1452,58 @@ function commitAnnoteEdit() {
   if (EDITOR.data && (EDITOR.data.init_annote || "") !== newVal) {
     EDITOR.data.init_annote = newVal;
   }
+}
+
+// ---------- annote preset chips ----------
+// One-click verdicts above the annote box. A position's annote is a single
+// conclusion (a position can't be both 紅優 and 黑優), so a chip REPLACES the
+// box content rather than appending. Presets are read from PREFS.annotePresets
+// (a management UI will edit that later); until it exists, a default set ships
+// so the bar isn't empty. A preset is a plain string, or { label, text } when
+// the chip caption should differ from the inserted text.
+const DEFAULT_ANNOTE_PRESETS = [
+  "紅方先手", "紅方易走", "紅優", "紅稍優",
+  "均勢", "黑稍優", "黑優", "黑方易走",
+];
+
+function annotePresets() {
+  const p = PREFS.annotePresets;
+  return Array.isArray(p) && p.length ? p : DEFAULT_ANNOTE_PRESETS;
+}
+
+function presetLabelText(p) {
+  if (typeof p === "string") return { label: p, text: p };
+  const text = p.text != null ? p.text : (p.label || "");
+  return { label: p.label || text, text };
+}
+
+function renderAnnotePresets() {
+  const bar = $("#annotePresetBar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  annotePresets().forEach((p) => {
+    const { label, text } = presetLabelText(p);
+    if (!label) return;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "annoteChip";
+    chip.textContent = label;
+    chip.title = `設為註解：${text}`;
+    chip.onclick = () => applyAnnotePreset(text);
+    bar.appendChild(chip);
+  });
+}
+
+// Replace the annote with the preset verdict and push it into the tree via the
+// same path manual edits take (commitAnnoteEdit → active node or init_annote).
+function applyAnnotePreset(text) {
+  const box = $("#annoteBox");
+  if (!box || box.disabled) return;   // no file loaded → nothing to annotate
+  box.value = text;
+  commitAnnoteEdit();
+  box.focus();
+  box.setSelectionRange(text.length, text.length);
+  setStatus("已套用註解", "ok");
 }
 
 // ---------- metadata edit modal ----------
@@ -1702,8 +1782,8 @@ window.addEventListener("keydown", (e) => {
   switch (e.key) {
     case "ArrowLeft":  navPrev();    e.preventDefault(); break;
     case "ArrowRight": navNext();    e.preventDefault(); break;
-    case "ArrowUp":    navVarUp();   e.preventDefault(); break;
-    case "ArrowDown":  navVarDown(); e.preventDefault(); break;
+    case "ArrowUp":    if (e.altKey) moveActiveVariation(-1); else navVarUp();   e.preventDefault(); break;
+    case "ArrowDown":  if (e.altKey) moveActiveVariation(+1); else navVarDown(); e.preventDefault(); break;
     case "Home":       navFirst();          e.preventDefault(); break;
     case "End":        navLast();           e.preventDefault(); break;
     case "Delete":     deleteCurrentMove(); e.preventDefault(); break;
@@ -2101,6 +2181,29 @@ function drawAiBusy(svg, text) {
   const w = 116, h = 30;
   mk("rect", { x: (W - w) / 2, y: (H - h) / 2, width: w, height: h, rx: 15, ry: 15 }, "aiBusyPill");
   mk("text", { x: W / 2, y: H / 2 + 4.5, "text-anchor": "middle" }, "aiBusyTxt").textContent = text;
+}
+
+// Loading shimmer on the board — same pulsing-pill aesthetic as the AI sweep
+// (drawAiBusy), shown while a chessbook is being fetched on UI open / file
+// switch. drawBoard() wipes the SVG the moment the real position renders, so
+// this needs no explicit teardown on success. Pass pulse=false for a static
+// badge (idle "尚未載入" / "載入失敗" states that shouldn't keep animating).
+function drawBoardLoading(text, pulse = true) {
+  const svg = $("#board");
+  if (!svg) return;
+  svg.setAttribute("viewBox", "0 0 540 600");
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const mk = (tag, attrs, cls) => {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (cls) e.setAttribute("class", cls);
+    svg.appendChild(e);
+    return e;
+  };
+  const W = 540, H = 600, w = 220, h = 46;
+  mk("rect", { x: (W - w) / 2, y: (H - h) / 2, width: w, height: h, rx: 23, ry: 23 },
+     "boardBusyPill" + (pulse ? "" : " static"));
+  mk("text", { x: W / 2, y: H / 2 + 6, "text-anchor": "middle" }, "boardBusyTxt").textContent = text;
 }
 
 // Red-POV score trend. Positive (red better) sits high; mate clamps to the
@@ -2559,7 +2662,12 @@ async function recoverSettingsFromLocalStorage() {
   document.documentElement.dataset.uiTheme = initialUiTheme;
   const aiDepthEl = $("#aiDepthInput");
   if (aiDepthEl) aiDepthEl.value = aiDepth();
+  renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
+  // Pulsing badge on the empty board while the tree + last file load, so the
+  // UI doesn't open on a blank board. Themes are already applied above, so the
+  // accent colour is correct.
+  drawBoardLoading("棋譜載入中…");
   // Parallelisable on boot — eval info is independent of the XQF tree fetch
   // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.
   await Promise.all([fetchEvalDbInfo(), fetchEngineInfo(), loadFileTree()]);
@@ -2567,4 +2675,7 @@ async function recoverSettingsFromLocalStorage() {
   // before auto-loading (root recovery reloads the tree autoload depends on).
   await recoverSettingsFromLocalStorage();
   await tryAutoLoadLastFile();
+  // No last file (or it vanished) → tryAutoLoadLastFile never drew a position;
+  // settle the pulse into a static idle prompt instead of spinning forever.
+  if (!EDITOR.data) drawBoardLoading("尚未載入棋譜 · 從左側選擇", false);
 })();

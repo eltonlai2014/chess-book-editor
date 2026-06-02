@@ -999,7 +999,27 @@ h2.panelHead > span { flex: 1 1 auto; }
 
 /* 注解 / AI分析 share one tab strip; each body fills the section below it
    (hiding handled by the shared .rpTabBody[hidden] rule above). */
-#anBodyAnnote { display: flex; }
+#anBodyAnnote { display: flex; flex-direction: column; gap: 8px; }
+
+/* Preset verdict chips above the annote box — click replaces the annote. */
+.annotePresetBar { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.annoteChip {
+  font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 11px;
+  color: var(--text);
+  background: rgba(var(--accent-strong-rgb), 0.10);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.22);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.annoteChip:hover {
+  background: rgba(var(--accent-strong-rgb), 0.20);
+  border-color: rgba(var(--accent-strong-rgb), 0.45);
+  color: var(--accent);
+}
 #anBodyAnnote #annoteBox { margin: 0; max-width: 100%; }
 
 /* AI 分析 — trigger sits in the tab strip (right-aligned); the body holds the
@@ -1029,6 +1049,13 @@ h2.panelHead > span { flex: 1 1 auto; }
 .aiChart .aiBusyPill { fill: rgba(var(--accent-strong-rgb), 0.14); stroke: rgba(var(--accent-strong-rgb), 0.45); stroke-width: 1; animation: aiPulse 1.2s ease-in-out infinite; }
 .aiChart .aiBusyTxt  { fill: var(--accent-strong); font-size: 13px; font-weight: 600; }
 @keyframes aiPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* Board loading badge — same pulsing-pill look as the AI sweep, shown over the
+   empty #board while a chessbook loads (UI open / file switch). .static kills
+   the pulse for idle / error states. */
+#board .boardBusyPill { fill: rgba(var(--accent-strong-rgb), 0.12); stroke: rgba(var(--accent-strong-rgb), 0.42); stroke-width: 1; animation: aiPulse 1.2s ease-in-out infinite; }
+#board .boardBusyPill.static { animation: none; opacity: .55; }
+#board .boardBusyTxt  { fill: var(--accent-strong); font-size: 18px; font-weight: 600; letter-spacing: .5px; }
 
 /* Single-row readout under the chart — the point under the query line. */
 .aiReadout { flex: 0 0 auto; }
@@ -1175,23 +1202,39 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 .varOpt:not(.active) .varArrow { visibility: hidden; }
 
-/* "升主線" pill — promotes a non-main-line variation to children[0].
-   Ghost base + hover come from the button system; here only the pill
-   shape + size + the inline-flex centring. */
-.varOpt .varPromote {
+/* Reorder controls — ▲▼ move a variation to any slot (children[0] = main
+   line), plus the ← marker on the active row, grouped at the right edge. */
+.varOpt .varCtrl {
   margin-left: auto;
-  font-size: 11px;
-  min-width: 52px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
+}
+.varCtrl .varArrow { margin-left: 0; min-width: 24px; }
+.varOpt .varMoveBtn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
 }
-.varOpt.active .varPromote,
-.varOpt.mainLine .varPromote { display: none; }
+.varOpt .varMoveBtn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--accent);
+  border-color: rgba(var(--accent-strong-rgb), 0.3);
+}
+.varOpt .varMoveBtn:disabled { opacity: .28; cursor: default; }
 
 /* ---------- modal (metadata editor) ---------- */
 .modal {

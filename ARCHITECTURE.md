@@ -132,14 +132,17 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 |---|---|
 | 透明 overlay + 點擊路由 | `installBoardOverlay`:244 / `onSquareClick`:326 |
 | 選子/清選/嘗試走子 | `selectSquare`:361 / `clearSelection`:353 / `tryAddMove`:383 |
-| 插入/刪除/升主線 | `insertMoveAt`:495 / `deleteCurrentMove`:429 / `promoteToMain`:460 |
+| 插入/刪除 | `insertMoveAt`:512 / `deleteCurrentMove`:429 |
+| 分支重排（splice 任意排序，非對調；index 0=主線）+ 索引重映射 | `moveVariation`:466 / `remapAfterMove`:487 / `moveActiveVariation`:495（Alt+↑/↓）|
 
 **棋譜列 / 注解 / 走法分支**
 | 功能 | 函式:行 |
 |---|---|
 | 棋譜列 + 單步列（含 trap/brilliant 判定） | `renderMoveList`:1064 / `renderPlyRow`:1075 / `plyVerdict`:1038 / `plyLossAt`:1024 |
-| 走法選擇器（同層分支，無 ICCS） | `renderVarPicker`:1356 |
-| 注解編輯（即時同步 data） | `commitAnnoteEdit`:1416 |
+| 走法選擇器（同層分支，無 ICCS；每列 ▲▼ 重排） | `renderVarPicker`:1375 |
+| 注解編輯（即時同步 data） | `commitAnnoteEdit`:1444 |
+| 常用註解 chip（讀 `PREFS.annotePresets`，點擊 replace 結論） | `renderAnnotePresets`:1480 / `applyAnnotePreset`:1499 |
+| 棋譜載入脈動藥丸（開 UI / 換檔；`drawBoard` 重畫即覆蓋） | `drawBoardLoading`:2191 |
 
 **棋盤箭頭提示（畫在 `<g class="arrowLayer">`，獨立刷新）**
 | 功能 | 函式:行 |
