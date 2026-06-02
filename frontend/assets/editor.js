@@ -25,6 +25,7 @@ const EDITOR = {
   evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
   engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
+  aiAnalysis: { running: false, points: [], queryIdx: null },  // depth-limited whole-line sweep → trend chart (queryIdx = hovered point)
   demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // 演示 playback state
   rootOk: true,       // false when the configured library root is missing (drives LS recovery)
   rootPath: "",       // last root reported by the server (valid or not)
@@ -585,6 +586,7 @@ async function applyRoot(path) {
   clearSelection();
   stopAnalysis("尚未開始");
   clearAnalysisHistory();
+  clearAiAnalysis();
   $("#saveBtn").disabled = true;
   $("#metaBtn").disabled = true;
   $("#fileTitle").textContent = "尚未載入";
@@ -634,9 +636,10 @@ async function selectFile(rel, liEl) {
     EDITOR.activePath = [];
     clearSelection();
     // New file → the old analysis no longer applies. Stop any running stream
-    // and wipe the history so the 引擎分析 tab starts clean.
+    // and wipe both the 引擎分析 history and the AI 分析 trend.
     stopAnalysis("尚未開始");
     clearAnalysisHistory();
+    clearAiAnalysis();
     const fileName = rel.split("/").pop();
     $("#fileTitle").textContent = fileName;
     $("#fileTitle").title = rel;  // full path on hover
@@ -1179,6 +1182,7 @@ function refreshActive() {
   $("#navLast").disabled = !next;
 
   renderEvalLine();
+  if (EDITOR.aiAnalysis.points.length) renderAiView();   // move the trend cursor
 }
 
 // ---------- board move-hint arrows ----------
@@ -1735,18 +1739,30 @@ const ICON = {
   skipFwd: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>',
   chevL: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
   chevR: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  cpu: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2"/><path d="M15 2v2"/><path d="M9 20v2"/><path d="M15 20v2"/><path d="M2 9h2"/><path d="M2 15h2"/><path d="M20 9h2"/><path d="M20 15h2"/></svg>',
+  search: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  chart: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
+  note: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>',
 };
 function iconLabel(icon, label) {
   return (ICON[icon] || "") + `<span>${label}</span>`;
 }
 
-function switchRpTab(tab) {
-  document.querySelectorAll(".rpTab").forEach((b) => {
-    b.classList.toggle("active", b.dataset.tab === tab);
-  });
-  document.querySelectorAll(".rpTabBody").forEach((p) => {
-    p.hidden = p.dataset.tab !== tab;
-  });
+// Tab switching is scoped to a container so the two independent tab strips
+// (注解|AI分析 in #rpAnnote, 走法|引擎分析 in #rpVars) never clobber each other.
+function switchTabsIn(container, tab) {
+  if (!container) return;
+  container.querySelectorAll(".rpTab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  container.querySelectorAll(".rpTabBody").forEach((p) => { p.hidden = p.dataset.tab !== tab; });
+}
+function switchRpTab(tab) { switchTabsIn($("#rpVars"), tab); }
+function switchAnnoteTab(tab) {
+  switchTabsIn($("#rpAnnote"), tab);
+  // The 分析本分支 trigger lives in the tab strip; only relevant on the AI tab.
+  const bar = $("#aiBar");
+  if (bar) bar.hidden = tab !== "ai";
+  // The chart can't size itself while hidden — redraw now it's visible.
+  if (tab === "ai") renderAiView();
 }
 
 function fmtEngineScore(ev) {
@@ -1864,7 +1880,7 @@ function stopAnalysis(stateText) {
   a.fen = null;
   a.mode = null;
   const btn = $("#engineToggleBtn");
-  if (btn) btn.innerHTML = iconLabel("ai", "前一步");
+  if (btn) btn.innerHTML = iconLabel("search", "前一步");
   const st = $("#engineState");
   if (st && stateText != null) st.textContent = stateText;
   updateBoardArrows();   // drop the blue best-move arrow now analysis is idle
@@ -1909,6 +1925,252 @@ function toggleAnalysis() {
 
 function analyzeCurrentStep() {
   startAnalysis(currentFen(), "cur");
+}
+
+// ---------- AI 分析: depth-limited sweep of the whole current line ----------
+// Walks the current branch (active path, then the main line down to the leaf),
+// runs Pikafish at a fixed user-set depth (preferences.aiAnalysisDepth, default
+// 12) on every position, and plots a red-POV score trend. The backend streams
+// NDJSON so the chart + list fill in live. Ephemeral — nothing persisted.
+function aiDepth() {
+  const d = parseInt(PREFS.aiAnalysisDepth, 10);
+  return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 12;
+}
+
+// Position list for the current branch: index 0 = start, index k = the board
+// after the k-th move. Each carries a label + the node path that reaches it
+// (for click-to-navigate). Built off currentLine() so it follows exactly what
+// the 棋譜 list shows.
+function aiLinePositions() {
+  if (!EDITOR.data) return [];
+  const out = [{ fen: EDITOR.data.init_fen, label: "起始局面", path: [] }];
+  for (const item of currentLine()) {
+    out.push({
+      fen: applyIccs(item.fen, item.node.iccs),
+      label: `${item.ply}. ${item.node.notation}`,
+      path: item.path,
+    });
+  }
+  return out;
+}
+
+async function analyzeCurrentLine() {
+  if (!EDITOR.data) { setStatus("尚未載入棋譜", "err"); return; }
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) {
+    $("#aiState").textContent = "引擎未設定（請在設定選 🐟）";
+    return;
+  }
+  const ai = EDITOR.aiAnalysis;
+  if (ai.running) return;
+  const positions = aiLinePositions();
+  if (positions.length === 0) { $("#aiState").textContent = "此分支無著法"; return; }
+  // Seed points with labels/paths; scores fill in as records arrive.
+  ai.points = positions.map((p, i) => ({ ply: i, label: p.label, path: p.path, cp: null, mate: null, best: null }));
+  ai.running = true;
+  ai.queryIdx = null;
+  const depth = aiDepth();
+  $("#aiAnalyzeBtn").disabled = true;
+  $("#aiState").textContent = `分析中 (d${depth})… 0/${positions.length}`;
+  renderAiView();
+  try {
+    const resp = await fetch("/api/engine/analyze-line", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fens: positions.map((p) => p.fen), depth }),
+    });
+    if (!resp.ok || !resp.body) {
+      let msg = "分析失敗";
+      try { const j = await resp.json(); if (j.error) msg = j.error; } catch (_) {}
+      $("#aiState").textContent = msg;
+      return;
+    }
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "", done = 0;
+    for (;;) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const ln = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!ln) continue;
+        let ev; try { ev = JSON.parse(ln); } catch (_) { continue; }
+        if (ev.error) { $("#aiState").textContent = ev.error; continue; }
+        const pt = ai.points[ev.ply];
+        if (pt) { pt.cp = ev.cp; pt.mate = ev.mate; pt.best = ev.best; }
+        done++;
+        // No progressive plot — just tick the count; the chart shows 分析中.
+        $("#aiState").textContent = `分析中 (d${depth})… ${done}/${ai.points.length}`;
+      }
+    }
+    $("#aiState").textContent = `完成 (d${depth}) · ${ai.points.length} 點`;
+    ai.queryIdx = ai.points.length - 1;   // rest the query line on the final position
+  } catch (e) {
+    $("#aiState").textContent = "分析中斷：" + (e && e.message || e);
+  } finally {
+    ai.running = false;
+    $("#aiAnalyzeBtn").disabled = false;
+    renderAiView();
+  }
+}
+
+function clearAiAnalysis() {
+  EDITOR.aiAnalysis.points = [];
+  const st = $("#aiState"); if (st) st.textContent = "尚未分析";
+  renderAiView();
+}
+
+// Index on the analysed line matching the board now (= moves made so far).
+function aiActiveIdx() {
+  const n = EDITOR.aiAnalysis.points.length;
+  if (!n) return -1;
+  return Math.max(0, Math.min(n - 1, EDITOR.activePath.length));
+}
+
+// The cursor follows the hovered point (queryIdx); with no hover it rests on
+// the position currently on the board.
+function aiCursorIdx() {
+  const q = EDITOR.aiAnalysis.queryIdx;
+  return q != null ? q : aiActiveIdx();
+}
+
+// Nearest point index under a pointer event over the chart. The SVG uses
+// preserveAspectRatio="none", so viewBox-x maps linearly to client width.
+// Chart geometry — kept in one place so drawing and hit-testing agree.
+const AI_PAD = { l: 38, r: 8, t: 10, b: 10 };
+const AI_RANGE_MIN = 100;   // floor so a near-level game isn't over-zoomed
+
+// Round up to a "nice" axis bound (1/2/2.5/5 × 10^k).
+function aiNiceCeil(v) {
+  if (v <= 0) return AI_RANGE_MIN;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / pow;
+  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
+// Y-axis max from the data (red-POV |cp|), so the curve uses the full height
+// instead of being squashed under a fixed ±800. Mate clamps to whatever bound
+// the cp values set (it draws at the edge regardless).
+function aiRange(points) {
+  let m = 0;
+  for (const p of points) if (p.cp != null) m = Math.max(m, Math.abs(p.cp));
+  return Math.max(AI_RANGE_MIN, aiNiceCeil(m));
+}
+
+function aiIndexFromEvent(e) {
+  const svg = $("#aiChart");
+  const n = EDITOR.aiAnalysis.points.length;
+  if (!svg || !n) return -1;
+  const rect = svg.getBoundingClientRect();
+  if (rect.width === 0) return -1;
+  // viewBox is set to the pixel size (1:1), so client-x maps straight in.
+  const frac = (e.clientX - rect.left - AI_PAD.l) / (rect.width - AI_PAD.l - AI_PAD.r);
+  return Math.max(0, Math.min(n - 1, Math.round(frac * (n - 1))));
+}
+
+function renderAiView() {
+  const a = EDITOR.aiAnalysis;
+  const svg = $("#aiChart");
+  // During the sweep we don't plot partial data — just a "分析中" pill.
+  if (a.running) {
+    if (svg) drawAiBusy(svg, "分析中…");
+    const box = $("#aiReadout");
+    if (box) box.innerHTML = `<div class="varEmpty">分析中…（皮卡魚 d${aiDepth()}）</div>`;
+    return;
+  }
+  const idx = aiCursorIdx();
+  if (svg) drawAiChart(svg, a.points, idx);
+  renderAiReadout(idx);
+}
+
+// Centred rounded "analysing" badge shown while the sweep runs.
+function drawAiBusy(svg, text) {
+  const W = svg.clientWidth || 300, H = svg.clientHeight || 160;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const mk = (tag, attrs, cls) => {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (cls) e.setAttribute("class", cls);
+    svg.appendChild(e);
+    return e;
+  };
+  const w = 116, h = 30;
+  mk("rect", { x: (W - w) / 2, y: (H - h) / 2, width: w, height: h, rx: 15, ry: 15 }, "aiBusyPill");
+  mk("text", { x: W / 2, y: H / 2 + 4.5, "text-anchor": "middle" }, "aiBusyTxt").textContent = text;
+}
+
+// Red-POV score trend. Positive (red better) sits high; mate clamps to the
+// edge. Colours come from CSS classes so the chart tracks the UI theme.
+function drawAiChart(svg, points, cursorIdx) {
+  // viewBox = pixel size so the chart can grow to fill its box without
+  // distorting strokes/text, and so axis labels can live inside the SVG.
+  const W = svg.clientWidth || 300, H = svg.clientHeight || 160;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const { l: padL, r: padR, t: padT, b: padB } = AI_PAD;
+  const RANGE = aiRange(points);   // dynamic Y bound from the data
+  const n = points.length;
+  const xAt = (i) => padL + (n <= 1 ? 0 : (i / (n - 1)) * (W - padL - padR));
+  const yAt = (cp) => {
+    const c = Math.max(-RANGE, Math.min(RANGE, cp));
+    return padT + (1 - (c + RANGE) / (2 * RANGE)) * (H - padT - padB);
+  };
+  const mk = (tag, attrs, cls) => {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (cls) e.setAttribute("class", cls);
+    svg.appendChild(e);
+    return e;
+  };
+  // Gridlines + Y labels at ±RANGE, ±RANGE/2, 0 (0 line emphasised).
+  for (const g of [RANGE, RANGE / 2, 0, -RANGE / 2, -RANGE]) {
+    const lbl = Math.round(g);
+    mk("line", { x1: padL, y1: yAt(g), x2: W - padR, y2: yAt(g) }, g === 0 ? "aiZero" : "aiGrid");
+    mk("text", { x: padL - 6, y: yAt(g) + 3.5, "text-anchor": "end" }, "aiAxisTxt")
+      .textContent = lbl > 0 ? "+" + lbl : "" + lbl;
+  }
+  if (!n) return;
+  const val = (p) => (p.mate != null ? (p.mate > 0 ? RANGE : -RANGE) : p.cp);
+  const scored = points.map((p, i) => ({ i, v: val(p) })).filter((p) => p.v != null);
+  // Blue eval line (reference style — no area fill).
+  if (scored.length >= 2) {
+    mk("polyline", { points: scored.map((p) => `${xAt(p.i)},${yAt(p.v)}`).join(" "), fill: "none" }, "aiLine");
+  }
+  // Vertical query line at the cursor.
+  if (cursorIdx >= 0 && cursorIdx < n) {
+    mk("line", { x1: xAt(cursorIdx), y1: padT, x2: xAt(cursorIdx), y2: H - padB }, "aiCursor");
+  }
+  // Dots coloured by the side that moved (odd ply = red, even = black); the
+  // start position is neutral. Light tone stands in for black on the dark chart.
+  scored.forEach((p) => {
+    const cls = p.i === 0 ? "aiDotBlk" : (p.i % 2 === 1 ? "aiDotRed" : "aiDotBlk");
+    mk("circle", { cx: xAt(p.i), cy: yAt(p.v), r: 3.2 }, cls);
+  });
+  // Orange ring highlighting the queried point.
+  if (cursorIdx >= 0 && cursorIdx < n && val(points[cursorIdx]) != null) {
+    mk("circle", { cx: xAt(cursorIdx), cy: yAt(val(points[cursorIdx])), r: 6.5, fill: "none" }, "aiRing");
+  }
+}
+
+// Single-row readout for the point under the query line (走法 + 分數). Falls
+// back to a hint before analysis runs.
+function renderAiReadout(idx) {
+  const box = $("#aiReadout");
+  if (!box) return;
+  const pts = EDITOR.aiAnalysis.points;
+  if (!pts.length) { box.innerHTML = `<div class="varEmpty">按「分析本分支」開始；分析後可在走勢圖上查詢各步</div>`; return; }
+  if (idx < 0 || idx >= pts.length) { box.innerHTML = `<div class="varEmpty">移到走勢圖上查看各步分數</div>`; return; }
+  const p = pts[idx];
+  const sc = p.mate != null
+    ? (p.mate > 0 ? `#+${Math.abs(p.mate)}` : `#-${Math.abs(p.mate)}`)
+    : (p.cp != null ? (p.cp > 0 ? "+" + p.cp : "" + p.cp) : "…");
+  const isActive = idx === aiActiveIdx();
+  box.innerHTML = `<div class="aiRead${isActive ? " active" : ""}">`
+    + `<span class="aiReadLabel">${p.label}</span><span class="aiReadScore">${sc}</span></div>`;
 }
 
 // ---------- 演示: replay one PV line on a popup board ----------
@@ -2021,6 +2283,7 @@ function openSettingsModal() { $("#settingsModal").hidden = false; }
 function closeSettingsModal() { $("#settingsModal").hidden = true; }
 $("#settingsBtn").onclick = openSettingsModal;
 $("#settingsClose").onclick = closeSettingsModal;
+$("#settingsCloseX").onclick = closeSettingsModal;
 $("#settingsModal").addEventListener("click", (e) => {
   if (e.target.id === "settingsModal") closeSettingsModal();
 });
@@ -2053,21 +2316,62 @@ $("#rootPickBtn").onclick = pickRoot;
 $("#evalDbPickBtn").onclick = pickEvalDb;
 // Pikafish engine picker — opens native file dialog (pikafish*.exe).
 $("#enginePickBtn").onclick = pickEngine;
-// Right-column tabs + live-analysis toggle.
-document.querySelectorAll(".rpTab").forEach((b) => {
-  b.addEventListener("click", () => switchRpTab(b.dataset.tab));
-});
+// Right-column tabs (scoped so the two strips don't clobber each other) +
+// live-analysis toggle.
+$("#rpVars").querySelectorAll(".rpTab").forEach((b) => b.addEventListener("click", () => switchRpTab(b.dataset.tab)));
+$("#rpAnnote").querySelectorAll(".rpTab").forEach((b) => b.addEventListener("click", () => switchAnnoteTab(b.dataset.tab)));
 $("#engineToggleBtn").onclick = toggleAnalysis;
 $("#engineCurBtn").onclick = analyzeCurrentStep;
 $("#engineClearBtn").onclick = clearAnalysisHistory;
 $("#engineExportBtn").onclick = exportAnalysisHistory;
+// AI 分析 (whole-line trend) — run button + chart query line (hover to read
+// each step's move + score; click to jump the board to that position).
+$("#aiAnalyzeBtn").onclick = analyzeCurrentLine;
+$("#aiAnalyzeBtn").innerHTML = iconLabel("chart", "分析本分支");
+const aiChartEl = $("#aiChart");
+if (aiChartEl) {
+  aiChartEl.addEventListener("mousemove", (e) => {
+    const i = aiIndexFromEvent(e);
+    if (i < 0 || i === EDITOR.aiAnalysis.queryIdx) return;
+    EDITOR.aiAnalysis.queryIdx = i;
+    renderAiView();
+  });
+  aiChartEl.addEventListener("mouseleave", () => {
+    if (EDITOR.aiAnalysis.queryIdx == null) return;
+    EDITOR.aiAnalysis.queryIdx = null;
+    renderAiView();
+  });
+  aiChartEl.addEventListener("click", (e) => {
+    const i = aiIndexFromEvent(e);
+    const pt = EDITOR.aiAnalysis.points[i];
+    if (pt) navigateTo(pt.path || []);
+  });
+  // Redraw when the pane/chart is resized (splitter drag, window resize) so the
+  // viewBox tracks the pixel size.
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(() => { if (EDITOR.aiAnalysis.points.length) renderAiView(); }).observe(aiChartEl);
+  }
+}
+// AI analysis search depth — adjustable in settings, persisted to prefs.
+const aiDepthInput = $("#aiDepthInput");
+if (aiDepthInput) {
+  aiDepthInput.addEventListener("change", () => {
+    let v = parseInt(aiDepthInput.value, 10);
+    if (!Number.isFinite(v)) v = 12;
+    v = Math.max(1, Math.min(30, v));
+    aiDepthInput.value = v;
+    savePreference("aiAnalysisDepth", v);
+  });
+}
 // Icon + concise label for the analysis button bar.
-$("#engineToggleBtn").innerHTML = iconLabel("ai", "前一步");
-$("#engineCurBtn").innerHTML = iconLabel("ai", "本步");
+$("#engineToggleBtn").innerHTML = iconLabel("search", "前一步");
+$("#engineCurBtn").innerHTML = iconLabel("search", "本步");
 $("#engineClearBtn").innerHTML = iconLabel("trash", "清除");
 $("#engineExportBtn").innerHTML = iconLabel("clipboard", "導出");
 $("#rpTabVars").innerHTML = iconLabel("branch", "走法");
-$("#rpTabEngine").innerHTML = iconLabel("ai", "引擎分析");
+$("#rpTabEngine").innerHTML = iconLabel("cpu", "引擎分析");
+$("#anTabAnnote").innerHTML = iconLabel("note", "注解");
+$("#anTabAi").innerHTML = iconLabel("chart", "AI分析");
 // Unify the rest of the system's buttons on the same icon set.
 $("#metaBtn").innerHTML = iconLabel("info", "賽事資訊");
 $("#saveBtn").innerHTML = iconLabel("save", "儲存");
@@ -2253,6 +2557,8 @@ async function recoverSettingsFromLocalStorage() {
   const initialUiTheme = UI_THEMES[savedUiTheme] ? savedUiTheme : "ember";
   if (uiThemeSel) uiThemeSel.value = initialUiTheme;
   document.documentElement.dataset.uiTheme = initialUiTheme;
+  const aiDepthEl = $("#aiDepthInput");
+  if (aiDepthEl) aiDepthEl.value = aiDepth();
   setupSplitters();
   // Parallelisable on boot — eval info is independent of the XQF tree fetch
   // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.

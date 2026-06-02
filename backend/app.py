@@ -645,6 +645,101 @@ def _parse_info_line(line: str, flip: int, fen: str) -> dict | None:
     return info
 
 
+def _parse_score(line: str, flip: int):
+    """Pull just the red-POV score out of one UCI ``info`` line — cheap, no PV
+    conversion. Used by the per-position line sweep where only the number
+    matters. Returns ``{"cp": n}`` or ``{"mate": n}`` (the latest wins), or None."""
+    toks = line.split()
+    for i in range(len(toks) - 2):
+        if toks[i] == "score":
+            kind, val = toks[i + 1], _safe_int(toks[i + 2])
+            return {"mate": val * flip} if kind == "mate" else {"cp": val * flip}
+    return None
+
+
+@app.post("/api/engine/analyze-line")
+def analyze_line():
+    """Analyse a whole line of positions at a fixed depth, streaming one NDJSON
+    record per position so the client can build a score trend live.
+
+    Body: ``{fens: [editor-FEN, ...], depth (default 12)}``. One engine process
+    is reused for the whole sweep. Ephemeral — nothing persisted. Scores are red
+    POV (cp/mate), matching #evalLine and the live-analysis tab. Each record:
+    ``{ply, total, cp|null, mate|null, best|null}``.
+    """
+    body = request.get_json(silent=True) or {}
+    fens = [f for f in (body.get("fens") or []) if isinstance(f, str) and f]
+    depth = max(1, min(30, _safe_int(body.get("depth"), 12)))
+    engine = _get_pikafish()
+    if not (engine.exists() and engine.is_file()):
+        return jsonify({"error": "皮卡魚引擎未設定（請先在檔案窗格選擇）"}), 400
+
+    def gen():
+        proc = subprocess.Popen(
+            [str(engine)],
+            cwd=str(engine.parent),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+
+        def send(cmd: str) -> None:
+            proc.stdin.write(cmd + "\n")
+            proc.stdin.flush()
+
+        try:
+            send("uci")
+            send("setoption name Threads value 4")
+            send("setoption name Hash value 128")
+            send("isready")
+            total = len(fens)
+            for idx, fen in enumerate(fens):
+                parts = fen.split()
+                board_part = parts[0]
+                side = parts[1] if len(parts) > 1 else "w"
+                full_fen = f"{board_part} {side} - - 0 1"   # Pikafish wants 6 fields
+                flip = -1 if side == "b" else 1
+                send(f"position fen {full_fen}")
+                send(f"go depth {depth}")
+                cp = mate = best = None
+                for line in proc.stdout:
+                    line = line.strip()
+                    if line.startswith("bestmove"):
+                        bits = line.split()
+                        best = bits[1] if len(bits) > 1 and bits[1] != "(none)" else None
+                        break
+                    if line.startswith("info ") and " score " in line and " depth " in line:
+                        sc = _parse_score(line, flip)
+                        if sc is not None:
+                            # latest score wins; clear the other kind so a final
+                            # mate never sits beside a stale cp.
+                            if "mate" in sc:
+                                mate, cp = sc["mate"], None
+                            else:
+                                cp, mate = sc["cp"], None
+                yield json.dumps(
+                    {"ply": idx, "total": total, "cp": cp, "mate": mate, "best": best},
+                    ensure_ascii=False,
+                ) + "\n"
+        finally:
+            try:
+                send("quit")
+            except Exception:
+                pass
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    return Response(
+        stream_with_context(gen()),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/api/engine/analyze")
 def engine_analyze():
     """SSE stream of live Pikafish analysis for one position.

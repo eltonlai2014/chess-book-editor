@@ -191,6 +191,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+/* Fixed full-height app shell: header auto-height + main fills the rest, so
+   there's no hardcoded header-height assumption to overflow the viewport
+   (that was producing a stray right-side page scrollbar). */
+body { display: flex; flex-direction: column; overflow: hidden; }
 
 /* ---------- scrollbars ---------- */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -317,23 +321,20 @@ header {
   background: linear-gradient(180deg, var(--bg-3) 0%, var(--bg-2) 100%);
   border-bottom: 1px solid var(--line-strong);
   box-shadow: var(--shadow-sm);
-  flex: 0 0 52px;
+  flex: 0 0 auto;
   z-index: 2;
 }
 header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 18px;
   font-weight: 700;
   margin: 0;
   color: var(--text);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
-header h1::before {
-  content: "♚";
-  color: var(--accent);
-  margin-right: 8px;
-  font-size: 20px;
-  vertical-align: -1px;
-}
+.appLogo { width: 22px; height: 22px; color: var(--accent); flex: 0 0 auto; }
 
 /* .actions = header right-side controls (theme picker, view toggle, meta /
    save buttons, status). Button styling lives in the button system above. */
@@ -432,7 +433,8 @@ header h1::before {
 main {
   display: flex;
   flex-direction: row;
-  height: calc(100vh - 52px);
+  flex: 1 1 0;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   gap: 10px;
@@ -775,7 +777,8 @@ h2.panelHead > span { flex: 1 1 auto; }
   scrollbar-gutter: auto;
 }
 #rpMoves, .rpRightCol, .rpAnnote, .rpVars { background: transparent; }
-.rpAnnote { padding-left: 0; padding-right: 0; overflow-x: hidden; scrollbar-gutter: auto; }
+/* Match .rpVars' inset so the 注解/AI分析 tabs line up with 走法/引擎分析 below. */
+.rpAnnote { padding-left: var(--rp-pad-x); padding-right: var(--rp-pad-x); overflow-x: hidden; scrollbar-gutter: auto; }
 .rpAnnote > .panelHead {
   margin-left: 0; margin-right: 0;
   padding-left: 16px; padding-right: 16px;
@@ -783,7 +786,7 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 #annoteBox { margin-left: 16px; margin-right: 16px; max-width: calc(100% - 32px); }
 
-.rpTabs { flex: 0 0 auto; display: flex; gap: 4px; margin-bottom: 10px; }
+.rpTabs { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-bottom: 10px; }
 .rpTab {
   flex: 0 0 auto; padding: 6px 12px;
   display: inline-flex; align-items: center; gap: 5px;
@@ -799,7 +802,9 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-color: rgba(var(--accent-strong-rgb), 0.55);
 }
 .rpTabBody { flex: 1 1 0; min-height: 0; overflow: auto; }
-.rpTabBody[hidden] { display: none; }
+/* !important so a body's own display:flex (e.g. #rpEngineBody / #anBodyAi)
+   can't override the inactive-tab hide — every tab strip hides the same way. */
+.rpTabBody[hidden] { display: none !important; }
 
 /* 引擎分析 — control bar + scrolling history (newest on top, Pikafish-style). */
 #rpEngineBody { display: flex; flex-direction: column; gap: 8px; }
@@ -991,6 +996,58 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-color: var(--line);
 }
 #annoteBox::placeholder { color: var(--text-faint); font-style: italic; }
+
+/* 注解 / AI分析 share one tab strip; each body fills the section below it
+   (hiding handled by the shared .rpTabBody[hidden] rule above). */
+#anBodyAnnote { display: flex; }
+#anBodyAnnote #annoteBox { margin: 0; max-width: 100%; }
+
+/* AI 分析 — trigger sits in the tab strip (right-aligned); the body holds the
+   red-POV score trend + per-ply list. */
+#anBodyAi { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.aiBar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.aiBar[hidden] { display: none; }
+.aiBar .iconBtn { height: 28px; min-width: 96px; justify-content: center; border-radius: 999px; font-size: 12.5px; padding: 0 12px; }
+.aiBar .engineState { margin-left: 4px; }
+/* Chart fills the AI body (no whitespace below); readout is a fixed strip. */
+.aiChartWrap { position: relative; flex: 1 1 0; min-height: 90px; }
+.aiChart {
+  width: 100%; height: 100%; display: block; cursor: crosshair;
+  background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.06), rgba(var(--accent-strong-rgb), 0.02));
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14); border-radius: 10px;
+}
+/* Reference-style palette: faint grid, blue eval line, red/black side dots,
+   orange query ring. Fixed semantic colours (not theme-tinted). */
+.aiChart .aiGrid    { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 2 4; opacity: .22; }
+.aiChart .aiZero    { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
+.aiChart .aiAxisTxt { fill: var(--text-faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+.aiChart .aiLine    { stroke: #5b9be0; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.aiChart .aiCursor  { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .6; }
+.aiChart .aiDotRed  { fill: #e2594f; }
+.aiChart .aiDotBlk  { fill: #d8d2c8; }
+.aiChart .aiRing    { stroke: #f3a73a; stroke-width: 2.2; }
+.aiChart .aiBusyPill { fill: rgba(var(--accent-strong-rgb), 0.14); stroke: rgba(var(--accent-strong-rgb), 0.45); stroke-width: 1; animation: aiPulse 1.2s ease-in-out infinite; }
+.aiChart .aiBusyTxt  { fill: var(--accent-strong); font-size: 13px; font-weight: 600; }
+@keyframes aiPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* Single-row readout under the chart — the point under the query line. */
+.aiReadout { flex: 0 0 auto; }
+.aiRead {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 7px 11px; font-size: 14px; border-radius: 8px;
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
+  background: rgba(var(--accent-strong-rgb), 0.05);
+}
+.aiRead.active { background: rgba(var(--accent-strong-rgb), 0.16); border-color: rgba(var(--accent-strong-rgb), 0.42); }
+.aiReadLabel { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aiReadScore { color: var(--accent-strong); font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+
+/* settings — numeric input (AI analysis depth) */
+.settingRow input[type="number"] {
+  width: 96px; padding: 7px 9px; font-size: 13px;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.22); border-radius: 8px;
+}
 
 /* DB path strip — small monospace chip above the eval line. Mirrors the
    file-pane rootPath chip so the "what data is wired" reads as one pattern. */
@@ -1203,6 +1260,10 @@ h2.panelHead > span { flex: 1 1 auto; }
      20px padding + 16px radius. */
   margin: -18px -22px 14px;
   padding: 13px 22px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 16px;
   font-weight: 700;
   color: var(--accent-strong);
@@ -1214,6 +1275,19 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
 }
+/* Title-bar close (✕) for dialogs that carry one (demo / settings). */
+.modalClose {
+  flex: 0 0 auto;
+  width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+  color: var(--accent-strong);
+  background: transparent;
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.30);
+  border-radius: 8px; cursor: pointer;
+  transition: var(--btn-transition);
+}
+.modalClose:hover { background: rgba(var(--accent-strong-rgb), 0.16); color: var(--text); }
 .metaForm {
   display: grid;
   grid-template-columns: 1fr 1fr;

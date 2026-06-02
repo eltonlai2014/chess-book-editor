@@ -2,12 +2,19 @@
 <html lang="zh-Hant" data-board="traditional">
 <head>
   <meta charset="utf-8">
-  <title>XQF Editor</title>
+  <title>棋鑑 — 象棋譜分析</title>
   <link rel="stylesheet" href="/assets/editor.css">
 </head>
 <body>
   <header>
-    <h1>象棋譜編輯器</h1>
+    <h1>
+      <svg class="appLogo" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="1" opacity="0.45"/>
+        <polyline points="9 20 13.5 15 17.5 18 23 10.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="23" cy="10.5" r="1.7" fill="currentColor"/>
+      </svg>棋鑑
+    </h1>
     <div class="actions">
       <label class="boardThemePicker">
         棋盤
@@ -64,8 +71,23 @@
       <div class="splitter splitter-v" data-resize="rpMoves" data-pref="splitMovesW"></div>
       <div class="rpRightCol">
         <div id="rpAnnote" class="rpSection rpAnnote">
-          <h2 class="panelHead"><span>注解</span></h2>
-          <textarea id="annoteBox" placeholder="（無註解，可在此輸入）"></textarea>
+          <div class="rpTabs" role="tablist">
+            <button id="anTabAnnote" class="rpTab active" data-tab="annote" role="tab">注解</button>
+            <button id="anTabAi"     class="rpTab"        data-tab="ai"     role="tab">AI分析</button>
+            <div id="aiBar" class="aiBar" hidden>
+              <button id="aiAnalyzeBtn" class="iconBtn" title="用皮卡魚在設定層數下，逐步分析目前分支每個局面並畫出走勢圖">分析本分支</button>
+              <span id="aiState" class="engineState">尚未分析</span>
+            </div>
+          </div>
+          <div id="anBodyAnnote" class="rpTabBody" data-tab="annote">
+            <textarea id="annoteBox" placeholder="（無註解，可在此輸入）"></textarea>
+          </div>
+          <div id="anBodyAi" class="rpTabBody" data-tab="ai" hidden>
+            <div class="aiChartWrap">
+              <svg id="aiChart" class="aiChart" preserveAspectRatio="none"></svg>
+            </div>
+            <div id="aiReadout" class="aiReadout"></div>
+          </div>
         </div>
         <div class="splitter splitter-h" data-resize="rpAnnote" data-pref="splitAnnoteH" data-direction="row"></div>
         <div id="rpVars" class="rpSection rpVars">
@@ -152,7 +174,7 @@
        touching the move tree (use 加入 for that). -->
   <div id="demoModal" class="modal" hidden>
     <div class="modalDialog demoDialog" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
-      <h3 id="demoTitle">變化例演示</h3>
+      <h3 id="demoTitle"><span>變化例演示</span><button id="demoClose" class="modalClose" aria-label="關閉" title="關閉">✕</button></h3>
       <svg id="demoBoard" viewBox="0 0 540 600" width="414" height="460"></svg>
       <div id="demoMoveInfo" class="demoMoveInfo">起始局面</div>
       <div class="demoControls">
@@ -165,9 +187,6 @@
           <input id="demoInterval" type="number" min="0.2" max="10" step="0.1" value="2"> 秒
         </label>
       </div>
-      <div class="modalActions">
-        <button id="demoClose" class="primary">關閉</button>
-      </div>
     </div>
   </div>
   <!-- Settings dialog. Holds the rarely-changed paths (library root / eval DB /
@@ -175,7 +194,7 @@
        classes preserved so the existing render/picker JS works unchanged. -->
   <div id="settingsModal" class="modal" hidden>
     <div class="modalDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <h3 id="settingsTitle">設定</h3>
+      <h3 id="settingsTitle"><span>設定</span><button id="settingsCloseX" class="modalClose" aria-label="關閉" title="關閉">✕</button></h3>
       <div class="settingsForm">
         <div class="settingRow">
           <label>棋譜根目錄</label>
@@ -197,6 +216,11 @@
             <span id="enginePath" title="皮卡魚引擎執行檔位置（即時分析用）">🐟 載入中…</span>
             <button id="enginePickBtn" class="iconBtn" title="選擇皮卡魚引擎執行檔…">📁</button>
           </div>
+        </div>
+        <div class="settingRow">
+          <label>AI 分析層數（走勢圖；層數越高越慢越準）</label>
+          <input id="aiDepthInput" type="number" min="1" max="30" step="1" value="12"
+                 title="「分析本分支」逐步分析每個局面所用的皮卡魚搜尋深度">
         </div>
       </div>
       <div class="modalActions">
