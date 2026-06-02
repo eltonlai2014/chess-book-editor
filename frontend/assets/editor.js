@@ -1477,6 +1477,17 @@ function presetLabelText(p) {
   return { label: p.label || text, text };
 }
 
+// Colour group for a chip: red-side verdicts → red, black-side → blue, the
+// rest (均勢…) stay neutral. Inferred from a 紅/黑 prefix so plain-string
+// presets work; an object preset can override with an explicit `tone`.
+function presetTone(p) {
+  if (p && typeof p === "object" && p.tone) return p.tone;
+  const s = (typeof p === "string" ? p : (p.label || p.text || "")).trim();
+  if (s.startsWith("紅")) return "red";
+  if (s.startsWith("黑")) return "black";
+  return "neutral";
+}
+
 function renderAnnotePresets() {
   const bar = $("#annotePresetBar");
   if (!bar) return;
@@ -1484,9 +1495,10 @@ function renderAnnotePresets() {
   annotePresets().forEach((p) => {
     const { label, text } = presetLabelText(p);
     if (!label) return;
+    const tone = presetTone(p);
     const chip = document.createElement("button");
     chip.type = "button";
-    chip.className = "annoteChip";
+    chip.className = "annoteChip" + (tone !== "neutral" ? " tone-" + tone : "");
     chip.textContent = label;
     chip.title = `設為註解：${text}`;
     chip.onclick = () => applyAnnotePreset(text);

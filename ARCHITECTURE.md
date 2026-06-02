@@ -141,7 +141,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 棋譜列 + 單步列（含 trap/brilliant 判定） | `renderMoveList`:1064 / `renderPlyRow`:1075 / `plyVerdict`:1038 / `plyLossAt`:1024 |
 | 走法選擇器（同層分支，無 ICCS；每列 ▲▼ 重排） | `renderVarPicker`:1375 |
 | 注解編輯（即時同步 data） | `commitAnnoteEdit`:1444 |
-| 常用註解 chip（讀 `PREFS.annotePresets`，點擊 replace 結論） | `renderAnnotePresets`:1480 / `applyAnnotePreset`:1499 |
+| 常用註解 chip（讀 `PREFS.annotePresets`，點擊 replace 結論；紅/黑字首→紅藍立體 chip） | `renderAnnotePresets`:1491 / `applyAnnotePreset`:1511 / `presetTone`:1483 |
 | 棋譜載入脈動藥丸（開 UI / 換檔；`drawBoard` 重畫即覆蓋） | `drawBoardLoading`:2191 |
 
 **棋盤箭頭提示（畫在 `<g class="arrowLayer">`，獨立刷新）**

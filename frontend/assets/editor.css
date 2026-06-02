@@ -1003,22 +1003,59 @@ h2.panelHead > span { flex: 1 1 auto; }
 
 /* Preset verdict chips above the annote box — click replaces the annote. */
 .annotePresetBar { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; }
+/* 3D pill: top→bottom gradient (domed), inset top highlight + bottom shadow,
+   a soft drop shadow underneath. Tone just recolours via the --chip-* custom
+   props, so the relief treatment + hover-lift / active-press is defined once
+   and applies to every chip. */
 .annoteChip {
+  --chip-top: rgba(var(--accent-strong-rgb), 0.22);
+  --chip-bot: rgba(var(--accent-strong-rgb), 0.07);
+  --chip-border: rgba(var(--accent-strong-rgb), 0.30);
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
   font-size: 13px;
   line-height: 1;
-  padding: 6px 11px;
+  padding: 6px 12px;
   color: var(--text);
-  background: rgba(var(--accent-strong-rgb), 0.10);
-  border: 1px solid rgba(var(--accent-strong-rgb), 0.22);
+  background: linear-gradient(180deg, var(--chip-top), var(--chip-bot));
+  border: 1px solid var(--chip-border);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.22);
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 100ms ease, border-color 100ms ease;
 }
 .annoteChip:hover {
-  background: rgba(var(--accent-strong-rgb), 0.20);
-  border-color: rgba(var(--accent-strong-rgb), 0.45);
-  color: var(--accent);
+  transform: translateY(-1px);
+  filter: brightness(1.10);
+  border-color: var(--chip-border);
+  box-shadow:
+    0 3px 7px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.22);
+}
+.annoteChip:active {
+  transform: translateY(1px);
+  filter: brightness(0.97);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.30),
+    inset 0 2px 4px rgba(0, 0, 0, 0.32);
+}
+/* Verdict colours: red-side advantage = 紅底白字, black-side = 藍底白字.
+   The pair is matched in weight (similar saturation/lightness) so neither
+   shouts over the other on the warm dark UI; 均勢 etc. keep the neutral chip. */
+.annoteChip.tone-red {
+  color: #fff;
+  --chip-top: #e06556;
+  --chip-bot: #c4402f;
+  --chip-border: #a5302466;
+}
+.annoteChip.tone-black {
+  color: #fff;
+  --chip-top: #4f8cd2;
+  --chip-bot: #2f69ad;
+  --chip-border: #2563a866;
 }
 #anBodyAnnote #annoteBox { margin: 0; max-width: 100%; }
 
