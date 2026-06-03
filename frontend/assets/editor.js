@@ -39,10 +39,10 @@ const EDITOR = {
 // Falls back to traditional's palette if the active theme key is missing.
 const EDITOR_THEME_COLORS = {
   traditional: { select: "#e67e22", target: "#16a085" },  // orange / teal on warm wood (teal pops harder than the original steel-blue against mid-tone wood)
-  stone:       { select: "#c0392b", target: "#3a6b3a" },  // cinnabar / pine green on cream stone
-  gilded:      { select: "#e8b75c", target: "#5fa8d6" },  // brighter gold / cool blue on dark slate
-  copperwood:  { select: "#cf6a32", target: "#7aa6a1" },
-  celadon:     { select: "#c75b4a", target: "#5b8f7a" },
+  stone: { select: "#c0392b", target: "#3a6b3a" },  // cinnabar / pine green on cream stone
+  gilded: { select: "#e8b75c", target: "#5fa8d6" },  // brighter gold / cool blue on dark slate
+  copperwood: { select: "#cf6a32", target: "#7aa6a1" },
+  celadon: { select: "#c75b4a", target: "#5b8f7a" },
 };
 
 const UI_THEMES = {
@@ -76,7 +76,7 @@ async function savePreference(key, value) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [key]: value }),
     });
-  } catch (_) {}
+  } catch (_) { }
 }
 
 // Browser-local backup of the three "last known good" config paths. Mirrors
@@ -86,7 +86,7 @@ async function savePreference(key, value) {
 // recoverSettingsFromLocalStorage().
 const LS_KEYS = { root: "xqfRoot", evalDb: "evalDbPath", engine: "pikafishPath" };
 function lsGet(k) { try { return localStorage.getItem(k) || ""; } catch (_) { return ""; } }
-function lsSet(k, v) { try { if (v) localStorage.setItem(k, v); } catch (_) {} }
+function lsSet(k, v) { try { if (v) localStorage.setItem(k, v); } catch (_) { } }
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -400,9 +400,9 @@ async function tryAddMove(fromSq, toSq) {
       annote: "",
       children: [],
     });
-    if (outcome === "added")        setStatus(`已新增 ${resp.notation}`, "ok");
+    if (outcome === "added") setStatus(`已新增 ${resp.notation}`, "ok");
     else if (outcome === "existing") setStatus(`已切換至 ${resp.notation}`, "ok");
-    else                             setStatus("");  // cancelled
+    else setStatus("");  // cancelled
   } catch (e) {
     setStatus("新增失敗：" + e.message, "err");
   }
@@ -1025,11 +1025,11 @@ function currentLine() {
 // Thresholds and SKIP_OPENING_PLIES must stay in sync with render_site.py.
 
 const SKIP_OPENING_PLIES = 15;     // skip plies 1..15; trap/brilliant from ply 16
-const TRAP_SHALLOW_MAX  = 50;      // shallow says "fine"
-const TRAP_DEEP_MIN     = 100;     // deep says "blunder"
-const TRAP_DEEP_MAX     = 2000;    // sanity cap
-const BRILLIANT_MIN     = 50;
-const BRILLIANT_MAX     = 300;
+const TRAP_SHALLOW_MAX = 50;      // shallow says "fine"
+const TRAP_DEEP_MIN = 100;     // deep says "blunder"
+const TRAP_DEEP_MAX = 2000;    // sanity cap
+const BRILLIANT_MIN = 50;
+const BRILLIANT_MAX = 300;
 
 function scoreCp(e) {
   if (!e) return null;
@@ -1062,11 +1062,11 @@ function plyVerdict(items, i) {
 
   // Trap rule A: shallow says fine, d22 says blunder.
   const trapA = (sLoss != null && sLoss < TRAP_SHALLOW_MAX
-                 && dLoss != null && dLoss > TRAP_DEEP_MIN && dLoss < TRAP_DEEP_MAX);
+    && dLoss != null && dLoss > TRAP_DEEP_MIN && dLoss < TRAP_DEEP_MAX);
   // Trap rule B: shallow says fine, d22 missed it, d28 catches it.
   const trapB = (!trapA
-                 && sLoss != null && sLoss < TRAP_SHALLOW_MAX
-                 && vdLoss != null && vdLoss > TRAP_DEEP_MIN && vdLoss < TRAP_DEEP_MAX);
+    && sLoss != null && sLoss < TRAP_SHALLOW_MAX
+    && vdLoss != null && vdLoss > TRAP_DEEP_MIN && vdLoss < TRAP_DEEP_MAX);
   if (trapA || trapB) {
     return { kind: "trap", sLoss, dLoss, vdLoss, source: trapA ? "d22" : "d28" };
   }
@@ -1192,8 +1192,8 @@ function refreshActive() {
     $("#moveInfo").textContent = "初始局面";
   }
 
-  $("#navFirst").disabled  = path.length === 0;
-  $("#navPrev").disabled   = path.length === 0;
+  $("#navFirst").disabled = path.length === 0;
+  $("#navPrev").disabled = path.length === 0;
   $("#navBranch").disabled = path.length === 0;
   $("#navDelete").disabled = path.length === 0;
   const next = node ? (node.children || [])[0] : (EDITOR.data && EDITOR.data.roots && EDITOR.data.roots[0]);
@@ -1224,7 +1224,7 @@ function boardArrow(layer, iccs, opts) {
   const c = iccsToCoord(iccs);
   if (!c) return;
   const fx = screenX(c.from.col), fy = screenY(c.from.row);
-  const tx = screenX(c.to.col),   ty = screenY(c.to.row);
+  const tx = screenX(c.to.col), ty = screenY(c.to.row);
   const dx = tx - fx, dy = ty - fy;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len, uy = dy / len;
@@ -1233,7 +1233,7 @@ function boardArrow(layer, iccs, opts) {
   const headLen = w * 2.3, headHalf = w * 1.5;
   const sx = fx + ux * 18, sy = fy + uy * 18;    // start just outside the source piece
   const ex = tx, ey = ty;                        // tip lands on the destination intersection
-                                                 // (short one-step moves stay visible)
+  // (short one-step moves stay visible)
   // One stroke+head pass; called twice (casing, then colour).
   const pass = (color, lw, hl, hh, opacity) => {
     const bx = ex - ux * hl, by = ey - uy * hl;  // arrowhead base centre
@@ -1267,7 +1267,7 @@ function boardArrowBadge(layer, iccs, label, color, nudge) {
   const c = iccsToCoord(iccs);
   if (!c) return;
   const fx = screenX(c.from.col), fy = screenY(c.from.row);
-  const tx = screenX(c.to.col),   ty = screenY(c.to.row);
+  const tx = screenX(c.to.col), ty = screenY(c.to.row);
   // Sit the badge beside the arrowHEAD (just behind the tip, offset to the
   // side) so each number hugs the end of its own arrow, off the line. Collinear
   // branches share a file but end at different tips, so the numbers separate
@@ -1311,10 +1311,10 @@ function boardArrowBadge(layer, iccs, label, color, nudge) {
 //   wood/copper — warm grounds ⇒ a cobalt best-move gives complementary punch.
 const ARROW_THEMES = {
   traditional: { branch: "#0c8f63", engineMove: "#1763bf", engineReply: "#d06a12" },
-  stone:       { branch: "#0a8c5e", engineMove: "#155fb8", engineReply: "#c96412" },
-  gilded:      { branch: "#34c98c", engineMove: "#46a0e6", engineReply: "#ef9a4d" },
-  copperwood:  { branch: "#0e9778", engineMove: "#1d6cc0", engineReply: "#cf5a1e" },
-  celadon:     { branch: "#0a7d57", engineMove: "#1c6fb8", engineReply: "#c25d2a" },
+  stone: { branch: "#0a8c5e", engineMove: "#155fb8", engineReply: "#c96412" },
+  gilded: { branch: "#34c98c", engineMove: "#46a0e6", engineReply: "#ef9a4d" },
+  copperwood: { branch: "#0e9778", engineMove: "#1d6cc0", engineReply: "#cf5a1e" },
+  celadon: { branch: "#0a7d57", engineMove: "#1c6fb8", engineReply: "#c25d2a" },
 };
 const ARROW_WIDTH = 5.5;     // one width for every arrow — rank is carried by the badge
 const ARROW_OPACITY = 0.6;   // translucent so pieces / board lines show through
@@ -1784,7 +1784,7 @@ window.addEventListener("keydown", (e) => {
     if (!$("#demoModal").hidden) { closeDemo(); e.preventDefault(); return; }
     if (!$("#settingsModal").hidden) { closeSettingsModal(); e.preventDefault(); return; }
     if (!$("#metaModal").hidden) { closeMetaModal(); e.preventDefault(); return; }
-    if (!$("#newModal").hidden)  { closeNewModal();  e.preventDefault(); return; }
+    if (!$("#newModal").hidden) { closeNewModal(); e.preventDefault(); return; }
   }
   // Don't intercept other keys while typing in form controls
   // (textarea for annote, inputs in the metadata modal).
@@ -1792,13 +1792,13 @@ window.addEventListener("keydown", (e) => {
   if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
   if (!EDITOR.data) return;
   switch (e.key) {
-    case "ArrowLeft":  navPrev();    e.preventDefault(); break;
-    case "ArrowRight": navNext();    e.preventDefault(); break;
-    case "ArrowUp":    if (e.altKey) moveActiveVariation(-1); else navVarUp();   e.preventDefault(); break;
-    case "ArrowDown":  if (e.altKey) moveActiveVariation(+1); else navVarDown(); e.preventDefault(); break;
-    case "Home":       navFirst();          e.preventDefault(); break;
-    case "End":        navLast();           e.preventDefault(); break;
-    case "Delete":     deleteCurrentMove(); e.preventDefault(); break;
+    case "ArrowLeft": navPrev(); e.preventDefault(); break;
+    case "ArrowRight": navNext(); e.preventDefault(); break;
+    case "ArrowUp": if (e.altKey) moveActiveVariation(-1); else navVarUp(); e.preventDefault(); break;
+    case "ArrowDown": if (e.altKey) moveActiveVariation(+1); else navVarDown(); e.preventDefault(); break;
+    case "Home": navFirst(); e.preventDefault(); break;
+    case "End": navLast(); e.preventDefault(); break;
+    case "Delete": deleteCurrentMove(); e.preventDefault(); break;
     case "b": case "B":
       if (!e.ctrlKey && !e.metaKey) { navToNearestBranch(); e.preventDefault(); }
       break;
@@ -1878,8 +1878,8 @@ function fmtWdlHtml(wdl) {
   if (!wdl || wdl.length < 3) return "";
   const pct = (x) => (x / 10).toFixed(1);
   return `<span class="wdlW">勝 ${pct(wdl[0])}%</span>`
-       + `<span class="wdlD">和 ${pct(wdl[1])}%</span>`
-       + `<span class="wdlL">負 ${pct(wdl[2])}%</span>`;
+    + `<span class="wdlD">和 ${pct(wdl[1])}%</span>`
+    + `<span class="wdlL">負 ${pct(wdl[2])}%</span>`;
 }
 
 // Record one streamed event into the history (newest depth on top, Pikafish
@@ -1911,14 +1911,14 @@ function renderEngineHistory() {
     const canPlay = (e.pvUci || []).length > 0;
     return `<div class="engEntry" data-depth="${e.depth}">`
       + `<div class="engMeta">`
-      +   `<span>深度 <b class="engBig">${e.depth}</b></span>`
-      +   `<span>紅分 <b class="engBig">${fmtEngineScore(e)}</b></span>`
-      +   `<span>耗時 ${t}</span>`
-      +   fmtWdlHtml(e.wdl)
+      + `<span>深度 <b class="engBig">${e.depth}</b></span>`
+      + `<span>紅分 <b class="engBig">${fmtEngineScore(e)}</b></span>`
+      + `<span>耗時 ${t}</span>`
+      + fmtWdlHtml(e.wdl)
       + (canPlay ? `<span class="engActions">`
-      +   `<button class="engDemo" title="在彈出棋盤上演示這條變化例">${iconLabel("demo", "演示")}</button>`
-      +   `<button class="engAdd" title="把這條變化例加入棋譜分支">${iconLabel("branch", "加入")}</button>`
-      + `</span>` : "")
+        + `<button class="engDemo" title="在彈出棋盤上演示這條變化例">${iconLabel("demo", "演示")}</button>`
+        + `<button class="engAdd" title="把這條變化例加入棋譜分支">${iconLabel("branch", "加入")}</button>`
+        + `</span>` : "")
       + `</div>`
       + (pv ? `<div class="engPv">${pv}</div>` : "")
       + `</div>`;
@@ -1966,7 +1966,7 @@ function analysisFen() {
 
 function stopAnalysis(stateText) {
   const a = EDITOR.engineAnalysis;
-  if (a.es) { try { a.es.close(); } catch (_) {} }
+  if (a.es) { try { a.es.close(); } catch (_) { } }
   a.es = null;
   a.running = false;
   a.fen = null;
@@ -2029,6 +2029,38 @@ function aiDepth() {
   return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 12;
 }
 
+// Second (usually deeper) depth + the dual-depth comparison toggle/threshold.
+// When enabled, each position is also evaluated at aiDepth2 and the deep-vs-
+// shallow gap is flagged on the chart + readout where |Δ| ≥ aiDiffThreshold.
+function aiDepth2() {
+  const d = parseInt(PREFS.aiAnalysisDepth2, 10);
+  return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 20;
+}
+function aiDualEnabled() {
+  return PREFS.aiDualDepth === true || PREFS.aiDualDepth === "true";
+}
+function aiDiffThreshold() {
+  const t = parseInt(PREFS.aiDiffThreshold, 10);
+  return Number.isFinite(t) && t >= 0 ? t : 200;
+}
+
+// Mate maps to a large signed magnitude so a mate-vs-cp swing always counts as
+// a divergence. Returns null only when there's no score at all.
+function aiScoreNum(cp, mate) {
+  if (mate != null) return mate > 0 ? 100000 : -100000;
+  return cp != null ? cp : null;
+}
+// Deep-minus-shallow gap for a point, or null when dual data is absent. flagged
+// uses the *current* threshold so adjusting it re-evaluates on the next render.
+function aiPointDiff(p) {
+  if (!p || (p.cp2 == null && p.mate2 == null)) return null;
+  const a = aiScoreNum(p.cp, p.mate);
+  const b = aiScoreNum(p.cp2, p.mate2);
+  if (a == null || b == null) return null;
+  const diff = b - a;
+  return { diff, flagged: Math.abs(diff) >= aiDiffThreshold() };
+}
+
 // Position list for the current branch: index 0 = start, index k = the board
 // after the k-th move. Each carries a label + the node path that reaches it
 // (for click-to-navigate). Built off currentLine() so it follows exactly what
@@ -2057,29 +2089,34 @@ async function analyzeCurrentLine() {
   const positions = aiLinePositions();
   if (positions.length === 0) { $("#aiState").textContent = "此分支無著法"; return; }
   // Seed points with labels/paths; scores fill in as records arrive.
-  ai.points = positions.map((p, i) => ({ ply: i, label: p.label, path: p.path, cp: null, mate: null, best: null }));
+  ai.points = positions.map((p, i) => ({ ply: i, label: p.label, path: p.path, cp: null, mate: null, best: null, cp2: null, mate2: null }));
   ai.running = true;
   ai.queryIdx = null;
   const depth = aiDepth();
+  const dual = aiDualEnabled();
+  const depth2 = aiDepth2();
+  ai.depth = depth;
+  ai.depth2 = dual ? depth2 : null;   // latched so the readout labels match this sweep
+  const dlabel = dual ? `d${depth}+d${depth2}` : `d${depth}`;
   $("#aiAnalyzeBtn").disabled = true;
-  $("#aiState").textContent = `分析中 (d${depth})… 0/${positions.length}`;
+  $("#aiState").textContent = `分析中 (${dlabel})… 0/${positions.length}`;
   renderAiView();
   try {
     const resp = await fetch("/api/engine/analyze-line", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fens: positions.map((p) => p.fen), depth }),
+      body: JSON.stringify({ fens: positions.map((p) => p.fen), depth, ...(dual ? { depth2 } : {}) }),
     });
     if (!resp.ok || !resp.body) {
       let msg = "分析失敗";
-      try { const j = await resp.json(); if (j.error) msg = j.error; } catch (_) {}
+      try { const j = await resp.json(); if (j.error) msg = j.error; } catch (_) { }
       $("#aiState").textContent = msg;
       return;
     }
     const reader = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = "", done = 0;
-    for (;;) {
+    for (; ;) {
       const { value, done: streamDone } = await reader.read();
       if (streamDone) break;
       buf += dec.decode(value, { stream: true });
@@ -2091,13 +2128,17 @@ async function analyzeCurrentLine() {
         let ev; try { ev = JSON.parse(ln); } catch (_) { continue; }
         if (ev.error) { $("#aiState").textContent = ev.error; continue; }
         const pt = ai.points[ev.ply];
-        if (pt) { pt.cp = ev.cp; pt.mate = ev.mate; pt.best = ev.best; }
+        if (pt) {
+          pt.cp = ev.cp; pt.mate = ev.mate; pt.best = ev.best;
+          pt.cp2 = ev.cp2 != null ? ev.cp2 : null;
+          pt.mate2 = ev.mate2 != null ? ev.mate2 : null;
+        }
         done++;
         // No progressive plot — just tick the count; the chart shows 分析中.
-        $("#aiState").textContent = `分析中 (d${depth})… ${done}/${ai.points.length}`;
+        $("#aiState").textContent = `分析中 (${dlabel})… ${done}/${ai.points.length}`;
       }
     }
-    $("#aiState").textContent = `完成 (d${depth}) · ${ai.points.length} 點`;
+    $("#aiState").textContent = `完成 (${dlabel}) · ${ai.points.length} 點`;
     ai.queryIdx = ai.points.length - 1;   // rest the query line on the final position
   } catch (e) {
     $("#aiState").textContent = "分析中斷：" + (e && e.message || e);
@@ -2214,7 +2255,7 @@ function drawBoardLoading(text, pulse = true) {
   };
   const W = 540, H = 600, w = 220, h = 46;
   mk("rect", { x: (W - w) / 2, y: (H - h) / 2, width: w, height: h, rx: 23, ry: 23 },
-     "boardBusyPill" + (pulse ? "" : " static"));
+    "boardBusyPill" + (pulse ? "" : " static"));
   mk("text", { x: W / 2, y: H / 2 + 6, "text-anchor": "middle" }, "boardBusyTxt").textContent = text;
 }
 
@@ -2251,7 +2292,36 @@ function drawAiChart(svg, points, cursorIdx) {
   if (!n) return;
   const val = (p) => (p.mate != null ? (p.mate > 0 ? RANGE : -RANGE) : p.cp);
   const scored = points.map((p, i) => ({ i, v: val(p) })).filter((p) => p.v != null);
-  // Blue eval line (reference style — no area fill).
+
+  // Advantage area: fill between the eval curve and the 0 line — red where red
+  // leads (above 0), blue where black leads (below 0). One area path filled
+  // with a vertical gradient that hard-stops at the 0 line and fades toward it,
+  // so colour depth reads as lead magnitude. (Only the shallow/primary series
+  // is plotted; the deep series, when dual is on, surfaces via the Δ flags.)
+  if (scored.length >= 2) {
+    const y0 = yAt(0);
+    const f = Math.max(0, Math.min(1, (y0 - padT) / (H - padT - padB)));
+    const defs = mk("defs", {});
+    const grad = document.createElementNS(SVG_NS, "linearGradient");
+    grad.setAttribute("id", "aiAreaGrad");
+    grad.setAttribute("gradientUnits", "userSpaceOnUse");
+    grad.setAttribute("x1", 0); grad.setAttribute("y1", padT);
+    grad.setAttribute("x2", 0); grad.setAttribute("y2", H - padB);
+    for (const [off, col] of [
+      [0, "rgba(226,89,79,0.42)"], [f, "rgba(226,89,79,0.05)"],
+      [f, "rgba(91,155,224,0.05)"], [1, "rgba(91,155,224,0.42)"],
+    ]) {
+      const s = document.createElementNS(SVG_NS, "stop");
+      s.setAttribute("offset", off); s.setAttribute("stop-color", col);
+      grad.appendChild(s);
+    }
+    defs.appendChild(grad);
+    const curve = scored.map((p) => `${xAt(p.i)},${yAt(p.v)}`).join(" L ");
+    const xa = xAt(scored[0].i), xb = xAt(scored[scored.length - 1].i);
+    mk("path", { d: `M ${curve} L ${xb},${y0} L ${xa},${y0} Z`, fill: "url(#aiAreaGrad)", stroke: "none" });
+  }
+  // Eval line on top of the fill — a light neutral stroke so it belongs to both
+  // the red and blue zones rather than fighting them.
   if (scored.length >= 2) {
     mk("polyline", { points: scored.map((p) => `${xAt(p.i)},${yAt(p.v)}`).join(" "), fill: "none" }, "aiLine");
   }
@@ -2259,11 +2329,22 @@ function drawAiChart(svg, points, cursorIdx) {
   if (cursorIdx >= 0 && cursorIdx < n) {
     mk("line", { x1: xAt(cursorIdx), y1: padT, x2: xAt(cursorIdx), y2: H - padB }, "aiCursor");
   }
-  // Dots coloured by the side that moved (odd ply = red, even = black); the
-  // start position is neutral. Light tone stands in for black on the dark chart.
+  // Small dots coloured by the side that moved (odd ply = red, even = black);
+  // the start position is neutral. Secondary to the fill, but keep the per-move
+  // detail + hover targets.
   scored.forEach((p) => {
     const cls = p.i === 0 ? "aiDotBlk" : (p.i % 2 === 1 ? "aiDotRed" : "aiDotBlk");
-    mk("circle", { cx: xAt(p.i), cy: yAt(p.v), r: 3.2 }, cls);
+    mk("circle", { cx: xAt(p.i), cy: yAt(p.v), r: 2.6 }, cls);
+  });
+  // Dual-depth divergence flags: a small alert triangle above any point where
+  // deep vs shallow disagree by ≥ threshold (only present when dual ran).
+  points.forEach((p, i) => {
+    const d = aiPointDiff(p);
+    if (!d || !d.flagged) return;
+    const v = val(p);
+    if (v == null) return;
+    const x = xAt(i), y = yAt(v);
+    mk("polygon", { points: `${x - 5},${y - 13} ${x + 5},${y - 13} ${x},${y - 4}` }, "aiFlag");
   });
   // Orange ring highlighting the queried point.
   if (cursorIdx >= 0 && cursorIdx < n && val(points[cursorIdx]) != null) {
@@ -2277,15 +2358,29 @@ function renderAiReadout(idx) {
   const box = $("#aiReadout");
   if (!box) return;
   const pts = EDITOR.aiAnalysis.points;
-  if (!pts.length) { box.innerHTML = `<div class="varEmpty">按「分析本分支」開始；分析後可在走勢圖上查詢各步</div>`; return; }
+  if (!pts.length) { box.innerHTML = `<div class="varEmpty">按「掃描」開始；分析後可在走勢圖上查詢各步</div>`; return; }
   if (idx < 0 || idx >= pts.length) { box.innerHTML = `<div class="varEmpty">移到走勢圖上查看各步分數</div>`; return; }
   const p = pts[idx];
-  const sc = p.mate != null
-    ? (p.mate > 0 ? `#+${Math.abs(p.mate)}` : `#-${Math.abs(p.mate)}`)
-    : (p.cp != null ? (p.cp > 0 ? "+" + p.cp : "" + p.cp) : "…");
+  const fmt = (cp, mate) => mate != null
+    ? (mate > 0 ? `#+${Math.abs(mate)}` : `#-${Math.abs(mate)}`)
+    : (cp != null ? (cp > 0 ? "+" + cp : "" + cp) : "…");
   const isActive = idx === aiActiveIdx();
+  const d = aiPointDiff(p);
+  let scoreHtml;
+  if (d) {
+    const D1 = EDITOR.aiAnalysis.depth || aiDepth();
+    const D2 = EDITOR.aiAnalysis.depth2 || aiDepth2();
+    const dtxt = (d.diff > 0 ? "+" : "") + d.diff;
+    scoreHtml = `<span class="aiReadScore aiReadDual">`
+      + `<span class="aiScorePair"><i>d${D1}</i>${fmt(p.cp, p.mate)}</span>`
+      + `<span class="aiScorePair"><i>d${D2}</i>${fmt(p.cp2, p.mate2)}</span>`
+      + `<span class="aiDiff${d.flagged ? " flag" : ""}">Δ${dtxt}${d.flagged ? " ⚠" : ""}</span>`
+      + `</span>`;
+  } else {
+    scoreHtml = `<span class="aiReadScore">${fmt(p.cp, p.mate)}</span>`;
+  }
   box.innerHTML = `<div class="aiRead${isActive ? " active" : ""}">`
-    + `<span class="aiReadLabel">${p.label}</span><span class="aiReadScore">${sc}</span></div>`;
+    + `<span class="aiReadLabel">${p.label}</span>${scoreHtml}</div>`;
 }
 
 // ---------- 演示: replay one PV line on a popup board ----------
@@ -2442,7 +2537,7 @@ $("#engineExportBtn").onclick = exportAnalysisHistory;
 // AI 分析 (whole-line trend) — run button + chart query line (hover to read
 // each step's move + score; click to jump the board to that position).
 $("#aiAnalyzeBtn").onclick = analyzeCurrentLine;
-$("#aiAnalyzeBtn").innerHTML = iconLabel("chart", "分析本分支");
+$("#aiAnalyzeBtn").innerHTML = iconLabel("chart", "掃描");
 const aiChartEl = $("#aiChart");
 if (aiChartEl) {
   aiChartEl.addEventListener("mousemove", (e) => {
@@ -2477,6 +2572,32 @@ if (aiDepthInput) {
     aiDepthInput.value = v;
     savePreference("aiAnalysisDepth", v);
   });
+}
+const aiDepth2Input = $("#aiDepth2Input");
+if (aiDepth2Input) {
+  aiDepth2Input.addEventListener("change", () => {
+    let v = parseInt(aiDepth2Input.value, 10);
+    if (!Number.isFinite(v)) v = 20;
+    v = Math.max(1, Math.min(30, v));
+    aiDepth2Input.value = v;
+    savePreference("aiAnalysisDepth2", v);
+  });
+}
+const aiDiffThreshInput = $("#aiDiffThreshInput");
+if (aiDiffThreshInput) {
+  aiDiffThreshInput.addEventListener("change", () => {
+    let v = parseInt(aiDiffThreshInput.value, 10);
+    if (!Number.isFinite(v)) v = 200;
+    v = Math.max(0, Math.min(2000, v));
+    aiDiffThreshInput.value = v;
+    savePreference("aiDiffThreshold", v);
+    // Re-flag the already-analysed line against the new threshold.
+    if (EDITOR.aiAnalysis.points.length) renderAiView();
+  });
+}
+const aiDualChk = $("#aiDualChk");
+if (aiDualChk) {
+  aiDualChk.addEventListener("change", () => savePreference("aiDualDepth", aiDualChk.checked));
 }
 // Icon + concise label for the analysis button bar.
 $("#engineToggleBtn").innerHTML = iconLabel("search", "前一步");
@@ -2516,10 +2637,10 @@ $("#engineHistory").addEventListener("click", (e) => {
 });
 // 演示 dialog controls.
 $("#demoFirst").onclick = () => demoGo(0);
-$("#demoPrev").onclick  = () => demoGo(EDITOR.demo.idx - 1);
-$("#demoNext").onclick  = () => demoGo(EDITOR.demo.idx + 1);
-$("#demoLast").onclick  = () => demoGo(EDITOR.demo.fens.length - 1);
-$("#demoPlay").onclick  = demoTogglePlay;
+$("#demoPrev").onclick = () => demoGo(EDITOR.demo.idx - 1);
+$("#demoNext").onclick = () => demoGo(EDITOR.demo.idx + 1);
+$("#demoLast").onclick = () => demoGo(EDITOR.demo.fens.length - 1);
+$("#demoPlay").onclick = demoTogglePlay;
 $("#demoClose").onclick = closeDemo;
 $("#demoModal").addEventListener("click", (e) => { if (e.target.id === "demoModal") closeDemo(); });
 reorderEvalRows();
@@ -2573,21 +2694,21 @@ function setupSplitters() {
       e.preventDefault();
       const rect = target.getBoundingClientRect();
       const startSize = isRow ? rect.height : rect.width;
-      const startPos  = isRow ? e.clientY : e.clientX;
+      const startPos = isRow ? e.clientY : e.clientX;
 
       splitter.classList.add("dragging");
       document.body.classList.add("dragging");
       if (isRow) document.body.classList.add("dragging-row");
 
       const onMove = (ev) => {
-        const cur   = isRow ? ev.clientY : ev.clientX;
+        const cur = isRow ? ev.clientY : ev.clientX;
         const delta = cur - startPos;
-        const next  = Math.max(80, startSize + delta);
+        const next = Math.max(80, startSize + delta);
         target.style.flexBasis = next + "px";
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup",   onUp);
+        document.removeEventListener("mouseup", onUp);
         splitter.classList.remove("dragging");
         document.body.classList.remove("dragging", "dragging-row");
         if (prefKey) {
@@ -2596,7 +2717,7 @@ function setupSplitters() {
         }
       };
       document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup",   onUp);
+      document.addEventListener("mouseup", onUp);
     });
   });
 }
@@ -2632,7 +2753,7 @@ async function recoverSettingsFromLocalStorage() {
   if (EDITOR.rootOk === false) {
     const r = lsGet(LS_KEYS.root);
     if (r && r !== EDITOR.rootPath
-        && await showConfirmDialog(`棋譜根目錄無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
+      && await showConfirmDialog(`棋譜根目錄無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
       await applyRoot(r);
     }
   }
@@ -2641,7 +2762,7 @@ async function recoverSettingsFromLocalStorage() {
   if (!ei.exists) {
     const r = lsGet(LS_KEYS.evalDb);
     if (r && r !== ei.path
-        && await showConfirmDialog(`評估資料庫無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
+      && await showConfirmDialog(`評估資料庫無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
       await applyEvalDbPath(r);
     }
   }
@@ -2650,7 +2771,7 @@ async function recoverSettingsFromLocalStorage() {
   if (!(gi.exists && gi.ok)) {
     const r = lsGet(LS_KEYS.engine);
     if (r && r !== gi.path
-        && await showConfirmDialog(`皮卡魚引擎無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
+      && await showConfirmDialog(`皮卡魚引擎無法使用，要套用上次記住的位置「${r}」嗎？`, "回復設定")) {
       await applyEnginePath(r);
     }
   }
@@ -2674,6 +2795,12 @@ async function recoverSettingsFromLocalStorage() {
   document.documentElement.dataset.uiTheme = initialUiTheme;
   const aiDepthEl = $("#aiDepthInput");
   if (aiDepthEl) aiDepthEl.value = aiDepth();
+  const aiDepth2El = $("#aiDepth2Input");
+  if (aiDepth2El) aiDepth2El.value = aiDepth2();
+  const aiDiffThreshEl = $("#aiDiffThreshInput");
+  if (aiDiffThreshEl) aiDiffThreshEl.value = aiDiffThreshold();
+  const aiDualEl = $("#aiDualChk");
+  if (aiDualEl) aiDualEl.checked = aiDualEnabled();
   renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
   // Pulsing badge on the empty board while the tree + last file load, so the

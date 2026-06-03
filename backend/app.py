@@ -662,14 +662,20 @@ def analyze_line():
     """Analyse a whole line of positions at a fixed depth, streaming one NDJSON
     record per position so the client can build a score trend live.
 
-    Body: ``{fens: [editor-FEN, ...], depth (default 12)}``. One engine process
-    is reused for the whole sweep. Ephemeral — nothing persisted. Scores are red
-    POV (cp/mate), matching #evalLine and the live-analysis tab. Each record:
-    ``{ply, total, cp|null, mate|null, best|null}``.
+    Body: ``{fens: [editor-FEN, ...], depth (default 12), depth2?}``. One engine
+    process is reused for the whole sweep. Ephemeral — nothing persisted. Scores
+    are red POV (cp/mate), matching #evalLine and the live-analysis tab. Each
+    record: ``{ply, total, cp|null, mate|null, best|null}``; when ``depth2`` is
+    given, a single ``go depth max(depth, depth2)`` search also reports the
+    second (usually deeper) eval as ``cp2|null, mate2|null`` — the client diffs
+    the two to flag positions where shallow and deep search disagree.
     """
     body = request.get_json(silent=True) or {}
     fens = [f for f in (body.get("fens") or []) if isinstance(f, str) and f]
     depth = max(1, min(30, _safe_int(body.get("depth"), 12)))
+    depth2 = body.get("depth2")
+    depth2 = max(1, min(30, _safe_int(depth2, 0))) if depth2 is not None else 0
+    go_depth = max(depth, depth2) if depth2 else depth
     engine = _get_pikafish()
     if not (engine.exists() and engine.is_file()):
         return jsonify({"error": "皮卡魚引擎未設定（請先在檔案窗格選擇）"}), 400
@@ -702,8 +708,12 @@ def analyze_line():
                 full_fen = f"{board_part} {side} - - 0 1"   # Pikafish wants 6 fields
                 flip = -1 if side == "b" else 1
                 send(f"position fen {full_fen}")
-                send(f"go depth {depth}")
-                cp = mate = best = None
+                send(f"go depth {go_depth}")
+                # Capture the resolved score at each completed iteration depth, so
+                # one deep search yields BOTH the shallow (depth) and deep (depth2)
+                # evals — iterative deepening passes through `depth` on its way up.
+                cap = {}   # iteration-depth -> {"cp": x} | {"mate": x}
+                best = None
                 for line in proc.stdout:
                     line = line.strip()
                     if line.startswith("bestmove"):
@@ -713,16 +723,35 @@ def analyze_line():
                     if line.startswith("info ") and " score " in line and " depth " in line:
                         sc = _parse_score(line, flip)
                         if sc is not None:
-                            # latest score wins; clear the other kind so a final
-                            # mate never sits beside a stale cp.
-                            if "mate" in sc:
-                                mate, cp = sc["mate"], None
-                            else:
-                                cp, mate = sc["cp"], None
-                yield json.dumps(
-                    {"ply": idx, "total": total, "cp": cp, "mate": mate, "best": best},
-                    ensure_ascii=False,
-                ) + "\n"
+                            toks = line.split()
+                            d = None
+                            for k, t in enumerate(toks):
+                                if t == "depth" and k + 1 < len(toks):
+                                    d = _safe_int(toks[k + 1], None)
+                                    break
+                            if d is not None:
+                                cap[d] = sc   # latest line at this depth wins
+
+                def _pick(d):
+                    if not d:
+                        return None
+                    if d in cap:
+                        return cap[d]
+                    lower = [k for k in cap if k <= d]
+                    return cap[max(lower)] if lower else None
+
+                sc1 = _pick(depth)
+                rec = {
+                    "ply": idx, "total": total,
+                    "cp": sc1.get("cp") if sc1 else None,
+                    "mate": sc1.get("mate") if sc1 else None,
+                    "best": best,
+                }
+                if depth2:
+                    sc2 = _pick(depth2)
+                    rec["cp2"] = sc2.get("cp") if sc2 else None
+                    rec["mate2"] = sc2.get("mate") if sc2 else None
+                yield json.dumps(rec, ensure_ascii=False) + "\n"
         finally:
             try:
                 send("quit")

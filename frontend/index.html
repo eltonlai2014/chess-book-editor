@@ -76,6 +76,9 @@
             <button id="anTabAi"     class="rpTab"        data-tab="ai"     role="tab">AI分析</button>
             <div id="aiBar" class="aiBar" hidden>
               <button id="aiAnalyzeBtn" class="iconBtn" title="用皮卡魚在設定層數下，逐步分析目前分支每個局面並畫出走勢圖">分析本分支</button>
+              <label class="aiDualToggle" title="同時用第二（較深）層數分析，標出深淺分歧的步（層數與門檻在 ⚙ 設定）">
+                <input type="checkbox" id="aiDualChk"> 雙深度
+              </label>
               <span id="aiState" class="engineState">尚未分析</span>
             </div>
           </div>
@@ -222,6 +225,16 @@
           <label>AI 分析層數（走勢圖；層數越高越慢越準）</label>
           <input id="aiDepthInput" type="number" min="1" max="30" step="1" value="12"
                  title="「分析本分支」逐步分析每個局面所用的皮卡魚搜尋深度">
+        </div>
+        <div class="settingRow">
+          <label>AI 第二分析層數（雙深度比對；建議比上者深）</label>
+          <input id="aiDepth2Input" type="number" min="1" max="30" step="1" value="20"
+                 title="勾選「雙深度」時的第二（較深）搜尋深度。一次深算同時取得兩個深度的分數">
+        </div>
+        <div class="settingRow">
+          <label>雙深度分歧門檻（cp；超過即標記該步）</label>
+          <input id="aiDiffThreshInput" type="number" min="0" max="2000" step="10" value="200"
+                 title="兩個深度的分數相差超過此值時，於走勢圖該步標出警示符號">
         </div>
       </div>
       <div class="modalActions">

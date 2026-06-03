@@ -169,12 +169,13 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 **AI 分析 —— 整條線走勢圖（AI分析 tab）**
 | 功能 | 函式:行 |
 |---|---|
-| 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**） | `analyze_line`(app.py):661 / `_parse_score`:648 ｜ `POST /api/engine/analyze-line` |
-| 取層數(預設12)/組局面清單 | `aiDepth`:1935（pref `aiAnalysisDepth`）/ `aiLinePositions`:1944 |
-| 主流程（串流接收→填點→完成移游標到終局） | `analyzeCurrentLine`:1957 / `clearAiAnalysis`:2019 |
-| 游標索引（hover 或目前盤面） / hit-test | `aiCursorIdx`:2034 / `aiActiveIdx`:2026 / `aiIndexFromEvent`:2063 |
-| 繪圖：動態 Y 量程 + 藍線 + 紅/黑分色點 + 橙環 | `drawAiChart`:2108（量程 `aiRange`:2057/`aiNiceCeil`:2046、`AI_PAD`:2042） |
-| 分析中圓角提示 / 單筆讀數 | `drawAiBusy`:2090 / `renderAiView`:2074 / `renderAiReadout`:2161 |
+| 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**）；給 `depth2` 時單次深算同時擷取兩層分數 | `analyze_line`(app.py):661 / `_parse_score`:648 ｜ `POST /api/engine/analyze-line {fens,depth,depth2?}` |
+| 取層數(預設12)/組局面清單 | `aiDepth`:2027（pref `aiAnalysisDepth`）/ `aiLinePositions`:2068 |
+| **雙深度比對**：第二層數(預設20)/開關/門檻(預設200)/深淺差值+旗標 | `aiDepth2`:2035 / `aiDualEnabled`:2039 / `aiDiffThreshold`:2042 / `aiPointDiff`:2055（pref `aiAnalysisDepth2`/`aiDualDepth`/`aiDiffThreshold`）|
+| 主流程（串流接收→填點→完成移游標到終局；雙深度時帶 cp2/mate2） | `analyzeCurrentLine`:2081 / `clearAiAnalysis`:2152 |
+| 游標索引（hover 或目前盤面） / hit-test | `aiCursorIdx`:2167 / `aiActiveIdx`:2159 / `aiIndexFromEvent`:2196 |
+| 繪圖：動態 Y 量程 + **紅藍漲跌面積圖**（0 線硬切換漸層）+ 中性壓頂線 + 小分色點 + Δ旗標 + 橙環 | `drawAiChart`:2264（量程 `aiRange`:2190/`aiNiceCeil`:2179、`AI_PAD`:2175） |
+| 分析中圓角提示 / 單筆讀數（雙深度顯示 d1/d2/Δ） | `drawAiBusy`:2223 / `renderAiView`:2207 / `renderAiReadout`:2357 |
 
 > 為何 d12 走勢圖就抓到即時分析 d21 才證出的殺：名目深度≠步數（seldepth/延伸/quiescence）＋掃描共用置換表。詳見 memory `project-ai-line-depth`，內含「是否每點 `ucinewgame` 嚴格獨立」的待決定。
 
