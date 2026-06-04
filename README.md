@@ -17,7 +17,7 @@ for full context.
 
 Persistence + format work that is already verified:
 
-- `vendor/io_xqf_patched.py` — patched `cchess.io_xqf.XQFWriter`. 46/46
+- `vendor/io_xqf_patched.py` — patched `cchess.io_xqf.XQFWriter`. Perfect
   round-trip on the XQF library, samples in `samples/xqf/` verified in
   XQStudio. Preserves variations, init annote, and Traditional Chinese
   (GB18030).
@@ -36,6 +36,7 @@ backend/      # Flask app — /api/xqf/{list,load,save,root,pick-root}, /prefere
 frontend/     # board.js + editor.js + editor.css (single-page)
 tools/        # CLI: cbl_to_xqf.py, xqf_to_cbl.py, cwp_to_xqf.py, emit_sample.py, dump_annotes.py
 vendor/       # io_xqf_patched + cchess_cbl + io_cb_writer + io_cwp + cbl_index_fix
+              #   wheels/ — vendored cchess wheel (offline, upstream-proof install)
 tests/        # round-trip, integration, Big5 recovery, CBL smoke, CWP reader
 samples/      # xqf/ (XQStudio-verified) + cbl/ (CCBridge3-verified)
 docs/         # HANDOFF.md (session-to-session context)
@@ -52,30 +53,37 @@ docs/         # HANDOFF.md (session-to-session context)
   — tick "Add python.exe to PATH" and keep the default "tcl/tk and IDLE"
   component (the native folder picker uses **tkinter**, which ships with
   the python.org installer but is omitted by some minimal builds).
-- **Git** for Windows — `pip install` pulls cchess straight from GitHub.
+- **Git** for Windows — *optional*; only needed if you rebuild the cchess
+  wheel. Normal installs use the vendored wheel in `vendor/wheels/`.
 - **Browser** — Chrome/Edge tested. Any modern evergreen will do.
 
 Sanity-check on a fresh machine:
 
 ```powershell
 python --version              # 3.10.x or newer
-git --version                 # any recent
+git --version                 # optional — only to rebuild the cchess wheel
 python -c "import tkinter; print(tkinter.TkVersion)"   # should print a number, not error
 ```
 
 ### Create venv + install deps
 
 ```powershell
-# In the repo root
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install "git+https://github.com/walker8088/cchess.git@master"
-.\.venv\Scripts\python.exe -m pip install flask
+# In the repo root — one shot: builds .venv, installs deps, seeds preferences.json
+.\setup.ps1
 ```
 
-Direct dependencies are intentionally short — `cchess` and `flask`. There
-is no `requirements.txt`; pin versions yourself if you need reproducible
-builds.
+Equivalent manual steps:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+`requirements.txt` pins every dependency. **cchess installs from a vendored
+wheel in `vendor/wheels/`, not from GitHub** — so a fresh install needs no
+network to GitHub and survives the upstream repo being deleted / force-pushed.
+cchess is GPLv3; see CLAUDE.md *Distribution* for the wheel-bump protocol.
 
 ### First-run check
 
@@ -84,7 +92,7 @@ builds.
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
 ```
 
-You should see `46/46 perfect round-trip` (or similar — depends on what's
+You should see an all-perfect round-trip (the file count depends on what's
 under `SRC_ROOT`; see *Test corpora paths* below).
 
 ### Test corpora paths (hard-coded)
@@ -127,9 +135,11 @@ files; the file tree refreshes immediately.
 
 The chosen path is saved to `preferences.json` at the repo root, alongside
 splitter sizes, board theme, and the last-opened file. If no root has been
-set yet, the backend falls back to `D:\Elton\TestArea\chess-book\` — change
-`DEFAULT_XQF_ROOT` in [backend/app.py](backend/app.py) if you want a
-different starting default.
+set yet, the backend falls back to `D:\Elton\TestArea\chess-book\`; on a fresh
+machine where that path doesn't exist, the file panel shows a **📂 選擇棋譜根
+目錄** prompt (no error) so you can pick one straight away. Change
+`DEFAULT_XQF_ROOT` in [backend/app.py](backend/app.py) if you want a different
+starting default.
 
 ## Format conversion
 
@@ -177,7 +187,7 @@ starting positions are skipped (full FEN replay not implemented).
 ## Verify round-trip
 
 ```powershell
-# XQF library: all 46 files round-trip without losing variations or annotations
+# XQF library: every file round-trips without losing variations or annotations
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
 
 # Side-by-side with upstream XQFWriter (shows why we patch)
