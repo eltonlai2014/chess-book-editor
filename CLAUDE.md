@@ -17,35 +17,48 @@ Both repos analyse — the split is **breadth vs depth**, not "analyse vs edit":
 |---|---|---|
 | Emphasis | **Breadth** — batch-scan the library, surface problem points | **Depth** — drill into a specific position; input + deep study + annotation |
 | Purpose | Analyse XQF en masse, surface engine-vs-book traps | **Edit + deeply analyse** XQF (moves, variations, annotes, targeted engine study) |
-| Backend | None (batch Python → static HTML) | Flask/FastAPI for POST /xqf/save + live engine SSE |
+| Backend | None (batch Python → static HTML) | Flask for POST /xqf/save + live engine SSE |
 | Deploy | GitHub Pages (public) | Local-only tool |
 | cchess | old install (read_xqf.py only) | new install + `vendor/io_xqf_patched.py` |
 
 Shared read-only data: `D:\Elton\TestArea\chess-book\` (41 originals + AI/ subset).
 
-## Status (as of repo init)
+## Status
 
-Only the **persistence layer** is built and verified:
+Editor is end-to-end working — see [ARCHITECTURE.md](ARCHITECTURE.md) for the
+full feature → `file:line` map. In brief, all of this is built and live:
+
+- **Editor UI + Flask backend** — browse library, open/edit/save XQF, tree
+  ops (add/delete move, promote variation, edit metadata, new file).
+- **Live engine analysis (SSE)** — execs Pikafish, streams depth/score/PV;
+  ephemeral, nothing persisted. Plus the AI whole-line score-trend chart.
+- **Eval + cloud integration** — read-only evals from chess-book-ai's
+  `positions.db`, and live chessdb.cn cloud-library lookup (cache-first).
+- **Format-conversion CLIs** — XQF ⇄ CBL/CBR (CCBridge3) ⇄ CWP, with the
+  vendored reader/writer stack.
+
+Persistence layer (the original foundation, still the correctness anchor):
 
 - `vendor/io_xqf_patched.py` — `PatchedXQFWriter`. Subclasses upstream
   `cchess.io_xqf.XQFWriter`, fixes three bugs (variation collapse, sibling
-  pointer mismatch, annote encoding loss). See the module docstring for the
-  precise reasoning.
-- `tests/test_roundtrip.py` — 46/46 perfect round-trip on the XQF library
-  (compares the FULL set of root-to-leaf move+annote paths). Upstream writer
-  scores 0/46 on the same test.
+  pointer mismatch, annote encoding loss). See the module docstring.
+- `tests/test_roundtrip.py` — perfect path-level round-trip over the whole
+  XQF library (full set of root-to-leaf move+annote paths). Upstream writer
+  scores 0 on the same test.
 - `samples/` — XQStudio-verified output files (manually opened by the master).
-
-Nothing else is built yet: no editor UI, no backend, no shared board library.
 
 ## Commands
 
 ```powershell
-# Setup (one-time)
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install "git+https://github.com/walker8088/cchess.git@master"
+# Setup (one-time) — builds .venv, installs requirements (cchess from the
+# vendored wheel in vendor/wheels/), seeds preferences.json from the example.
+.\setup.ps1
 
-# Verify writer (whenever cchess updates or PatchedXQFWriter changes)
+# Run the editor (serves the frontend too); open http://127.0.0.1:5174/
+.\.venv\Scripts\python.exe backend\app.py
+# Werkzeug debugger is OFF by default; opt in with $env:FLASK_DEBUG=1
+
+# Verify writer (whenever the cchess wheel or PatchedXQFWriter changes)
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
 
 # Side-by-side comparison (shows the bug in upstream)

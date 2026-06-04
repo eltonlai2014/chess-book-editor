@@ -18,7 +18,7 @@
 | 項目 | 版本 | 為什麼 |
 |---|---|---|
 | **Python** | 3.10+ | 程式碼用 PEP-604 unions（如 `int | None`）+ `from __future__ import annotations` |
-| **Git** | 任意近代版本 | `pip install` 從 GitHub 拉 cchess |
+| **Git** | 選用 | 只在重建 cchess wheel 時需要；一般安裝走 `vendor/wheels/` 本地 wheel |
 | **tkinter** | Python 標配 | 原生資料夾選擇對話框（library root picker）|
 | **瀏覽器** | Chrome / Edge | 已測試 |
 
@@ -26,30 +26,37 @@
 
 ```powershell
 python --version       # 3.10.x 或更新
-git --version
 python -c "import tkinter; print(tkinter.TkVersion)"
 ```
 
 ## 安裝步驟
 
 ```powershell
-# 在 repo 根目錄
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install "git+https://github.com/walker8088/cchess.git@master"
-.\.venv\Scripts\python.exe -m pip install flask
+# 在 repo 根目錄——一鍵：建 .venv、裝相依、由範本產生 preferences.json
+.\setup.ps1
 ```
 
-直接相依只有兩個：**cchess** 與 **flask**。沒有 `requirements.txt`；要可重現 build 自己 pin 版本。
+手動等效：
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+`requirements.txt` 釘死每個相依。**cchess 從 `vendor/wheels/` 的內附 wheel 安裝、
+不從 GitHub 拉**——全新安裝免連網路、不怕上游 repo 消失。cchess 為 GPLv3。
 
 > ⚠️ **不要 `pip install --upgrade cchess` 到全域 Python**。
-> 姊妹專案 chess-book-ai 鎖在 cchess 1.25.5（用 `from cchess import read_from_xqf`），
-> 1.26+ 把這個 import 從 `__init__.py` 拿掉了。本 repo 在自己的 `.venv` 用最新版即可。
+> 姊妹專案 chess-book-ai 鎖在舊版 cchess（用 `from cchess import read_from_xqf`），
+> 新版把這個 import 從 `__init__.py` 拿掉了；本 repo 用新版（`io_xqf`）＋patched
+> writer。兩 repo 各用自己 `.venv`，模組路徑本身就不相容（`read_xqf` → `io_xqf`）。
+> 升級本 repo 的 cchess＝重建 wheel 後跑 `test_roundtrip.py` 全綠才換（見 CLAUDE.md）。
 
 ## 驗證 / 跑測試
 
 ```powershell
-# XQF round-trip：46 個 XQF 不掉變例、不掉註解
+# XQF round-trip：全庫每個 XQF 都不掉變例、不掉註解
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
 
 # JSON round-trip：本 repo 的 JSON 中介格式無損
@@ -93,8 +100,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 瀏覽器開 <http://127.0.0.1:5174/>。
 
 首次開啟會 fallback 到 `D:\Elton\TestArea\chess-book\`（hard-coded 在
-[backend/app.py](backend/app.py) 的 `DEFAULT_XQF_ROOT`）。
-UI 上 **📁** 按鈕可重新選資料夾，路徑存到 repo 根的 `preferences.json`。
+[backend/app.py](backend/app.py) 的 `DEFAULT_XQF_ROOT`）。新機器上該路徑不存在時，
+檔案窗格顯示 **📂 選擇棋譜根目錄** 提示（不報錯，`/api/xqf/list` 回 200 + `needsRoot`）。
+UI 上 **📂** 按鈕可重新選資料夾，路徑存到 repo 根的 `preferences.json`。
+
+> 除錯開 Werkzeug debugger：`$env:FLASK_DEBUG=1` 再啟動（預設關，避免互動式 RCE）。
 
 ## 目錄速查
 

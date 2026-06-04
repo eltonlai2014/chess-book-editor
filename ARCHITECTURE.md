@@ -51,7 +51,10 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | **版面所有權** | 區塊標題一律 `.panelHead`；面板寬高用 splitter 拖 `flex-basis`（非 width/height），尺寸存 PREFS。靠左對齊優先，別過度設計格線。 | editor.js `setupSplitters`(1925) |
 | **偏好 key-value** | 一切設定（路徑、主題、splitter 尺寸）存 `preferences.json`，前端 `savePreference(key,value)`。 | app.py `_read_prefs`/`_write_prefs` |
 | **原生路徑選擇** | 本機工具用 tkinter subprocess 開系統檔案/資料夾對話框，不用網頁文字框。 | app.py `pick_*_dialog` |
-| **cchess 逐 venv** | 別全域 `pip install --upgrade cchess`；AI repo 用舊版（read_xqf.py），本 repo 用新版＋patched writer。 | CLAUDE.md |
+| **cchess 逐 venv** | 別全域 `pip install --upgrade cchess`；AI repo 用舊版（read_xqf.py），本 repo 用新版（io_xqf）＋patched writer。 | CLAUDE.md |
+| **cchess 走 vendored wheel** | 安裝來源是 `vendor/wheels/` 的內附 wheel（非 `git+@master`），離線可裝、不怕上游消失。`requirements.txt` 用直接路徑引用。升級＝重建 wheel→`test_roundtrip` 全綠才換。GPLv3。 | CLAUDE.md *Distribution* |
+| **散布版 debug 預設關** | `app.run` 的 debug 由 `FLASK_DEBUG` 控制，預設 False（Werkzeug debugger＝互動式 RCE，不可隨散布版開著）。 | app.py `__main__` |
+| **首開優雅降級** | root 不存在時 `/api/xqf/list` 回 200＋`needsRoot`（前端給 📂 picker），不 500 硬崩。引擎／評估 DB 缺件亦各自 gated。 | app.py `list_xqf`；editor.js |
 | **變化深度 walk** | 深層變化用 `move.next_move.variations_all`，別信 `variation_next`。 | io_xqf_patched.py docstring |
 
 ---
@@ -65,7 +68,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | `GET /` | `index`:100 | 出 index.html |
 | `GET /assets/<f>` | `assets`:105 | 靜態檔 |
 | `GET/POST /api/preferences` | `get_preferences`:131 / `set_preferences`:136 | preferences.json 讀寫 |
-| `GET /api/xqf/list` | `list_xqf`:193 | 棋譜檔案樹（`_tree`:167） |
+| `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500） |
 | `GET /api/xqf/root` | `get_root`:204 | 目前根目錄（`get_xqf_root`:82） |
 | `POST /api/xqf/pick-root` | `pick_root_dialog`:209 | tkinter 資料夾對話框 |
 | `POST /api/xqf/root` | `set_root`:254 | 設根目錄 |
@@ -246,7 +249,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`：`#cdbBar`+`#cdbList`)+引擎分析 |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
 
-### 持久層（已驗證 46/46 round-trip）
+### 持久層（已驗證全庫 round-trip）
 
 | 元件 | 位置 |
 |---|---|
@@ -254,6 +257,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | round-trip 測試（SRC 路徑硬編） | `tests/test_roundtrip.py`（`SRC_ROOT`） |
 | XQStudio 驗證樣本 | `samples/`、`tools/emit_sample.py` |
 | 門檻同步檢查 | `backend/test_trap_spotcheck.py` / `test_eval_integration.py` |
+| cchess 內附 wheel（離線安裝來源） | `vendor/wheels/`、`requirements.txt`、`setup.ps1` |
 
 ---
 

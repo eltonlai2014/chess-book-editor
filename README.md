@@ -1,78 +1,69 @@
-# chess-book-editor
+# chess-book-editor（棋鑑）
 
-Browser-based XQF (Chinese chess opening-book file) editor — open `.XQF` files,
-edit moves / variations / annotations, save back as `.XQF`.
+瀏覽器內運作的 XQF（中國象棋對局檔）編輯器：開啟 `.XQF` → 看盤／走法／變例／註解
+→ 編輯 → 存回 `.XQF`，並可叫本機 Pikafish 引擎做即時深算、查 chessdb.cn 雲庫。
 
-Sibling project of [chess-book-ai](../chess-book-ai/) (engine analysis +
-static-site builder). This repo focuses on the **authoring** side. The XQF
-library path is configurable from the UI (see *Choose your library* below).
+姊妹專案 [chess-book-ai](../chess-book-ai/)（引擎批量分析 + 靜態網站）負責**廣度**
+——掃整個棋庫找問題點；本專案負責**深度**——鑽研單一盤面（輸入＋深算＋註解）。
+本工具**純本機使用**，非公開部署。
 
-## Status
+## 現況
 
-MVP editor working end-to-end: browse library → open XQF → navigate moves /
-variations → edit annotations (including the init / 譜首引言 annote) → save
-back as XQF. Tree-editing operations (add/delete move, promote variation,
-edit metadata) shipped; what's still to do see [docs/HANDOFF.md](docs/HANDOFF.md). See [docs/HANDOFF.md](docs/HANDOFF.md)
-for full context.
+編輯器已端到端可用：瀏覽棋庫 → 開 XQF → 導航走法／變例 → 編輯註解（含譜首引言）
+→ 存回 XQF。走子樹編輯（新增／刪除走法、變例升降、賽事資訊）已上線。即時引擎分析、
+AI 整條線走勢圖、雲庫即時查皆已接好。完整脈絡見 [docs/HANDOFF.md](docs/HANDOFF.md)。
 
-Persistence + format work that is already verified:
+已驗證的持久層／格式工作：
 
-- `vendor/io_xqf_patched.py` — patched `cchess.io_xqf.XQFWriter`. Perfect
-  round-trip on the XQF library, samples in `samples/xqf/` verified in
-  XQStudio. Preserves variations, init annote, and Traditional Chinese
-  (GB18030).
-- `vendor/cchess_cbl.py` + `vendor/cbl_index_fix.py` — CCBridge3 `.cbl`
-  reader; transparently fixes a cchess offset bug that left 18/1570 of the
-  master's CBL files unreadable.
-- `vendor/io_cb_writer.py` — `.cbr` / `.cbl` writer, opens cleanly in
-  CCBridge3 (binary-GUID linkage, init-annote gate flag, and library
-  metadata slots all handled).
-- Big5 mojibake recovery for legacy XQF files in [backend/xqf_service.py](backend/xqf_service.py).
+- `vendor/io_xqf_patched.py` — 修正版 `cchess.io_xqf.XQFWriter`，全庫完美 round-trip，
+  `samples/xqf/` 經 XQStudio 開啟驗證。保留變例、譜首引言、繁體中文（GB18030）。
+- `vendor/cchess_cbl.py` + `vendor/cbl_index_fix.py` — CCBridge3 `.cbl` 讀取，
+  透明修掉 cchess 的 offset bug（原本害 1570 個 CBL 中 18 個讀不出）。
+- `vendor/io_cb_writer.py` — `.cbr` / `.cbl` 寫入，CCBridge3 開得乾淨
+  （binary-GUID 連結、init-annote gate flag、library metadata slots 全處理好）。
+- 早期 XQF 的 Big5 mojibake 還原，見 [backend/xqf_service.py](backend/xqf_service.py)。
 
-## Layout
+## 目錄結構
 
 ```
-backend/      # Flask app — /api/xqf/{list,load,save,root,pick-root}, /preferences
-frontend/     # board.js + editor.js + editor.css (single-page)
-tools/        # CLI: cbl_to_xqf.py, xqf_to_cbl.py, cwp_to_xqf.py, emit_sample.py, dump_annotes.py
-vendor/       # io_xqf_patched + cchess_cbl + io_cb_writer + io_cwp + cbl_index_fix
-              #   wheels/ — vendored cchess wheel (offline, upstream-proof install)
-tests/        # round-trip, integration, Big5 recovery, CBL smoke, CWP reader
-samples/      # xqf/ (XQStudio-verified) + cbl/ (CCBridge3-verified)
-docs/         # HANDOFF.md (session-to-session context)
+backend/      Flask app（/api/xqf/{list,load,save,new,…}、/api/{eval,engine,chessdb}、/api/preferences）
+frontend/     board.js + editor.js + editor.css（單頁原生 JS，無框架、無 build step）
+tools/        CLI：cbl_to_xqf.py / xqf_to_cbl.py / cwp_to_xqf.py / emit_sample.py / dump_annotes.py
+vendor/       io_xqf_patched + cchess_cbl + io_cb_writer + io_cwp + cbl_index_fix
+              wheels/ — vendored cchess wheel（離線、不受上游 GitHub 影響的安裝來源）
+tests/        XQF / JSON / CBL / CWP / Big5 各種 round-trip 與整合測試
+samples/      xqf/（XQStudio 驗證）+ cbl/（CCBridge3 驗證）
+docs/         HANDOFF.md（跨 session 上下文）、CHESSDB_CLOUD_QUERY.md（雲庫協定）
 ```
 
-## Setup
+## 安裝
 
-### Prerequisites
+### 前置需求
 
-- **Python 3.10+** (this venv was built on 3.10.10 — anything ≥ 3.10 should
-  work; older versions won't because the code uses `match`-free PEP-604
-  unions / `from __future__ import annotations` patterns expected by 3.10).
-  Install via the [python.org Windows installer](https://www.python.org/downloads/windows/)
-  — tick "Add python.exe to PATH" and keep the default "tcl/tk and IDLE"
-  component (the native folder picker uses **tkinter**, which ships with
-  the python.org installer but is omitted by some minimal builds).
-- **Git** for Windows — *optional*; only needed if you rebuild the cchess
-  wheel. Normal installs use the vendored wheel in `vendor/wheels/`.
-- **Browser** — Chrome/Edge tested. Any modern evergreen will do.
+- **Python 3.10+**（本 venv 建於 3.10.10；程式碼用 PEP-604 unions（`int | None`）+
+  `from __future__ import annotations`，3.10 以下不行）。請用
+  [python.org Windows 安裝程式](https://www.python.org/downloads/windows/)，
+  勾選「Add python.exe to PATH」並保留預設的「tcl/tk and IDLE」元件——
+  原生資料夾／檔案選擇器用 **tkinter**，python.org 版內建，但某些精簡版會缺。
+- **Git**（選用）——只在你要**重建 cchess wheel** 時才需要；一般安裝走
+  `vendor/wheels/` 的本地 wheel，不必連 GitHub。
+- **瀏覽器**——Chrome／Edge 已測，任何近代瀏覽器皆可。
 
-Sanity-check on a fresh machine:
+新機器健檢：
 
 ```powershell
-python --version              # 3.10.x or newer
-git --version                 # optional — only to rebuild the cchess wheel
-python -c "import tkinter; print(tkinter.TkVersion)"   # should print a number, not error
+python --version              # 3.10.x 或更新
+python -c "import tkinter; print(tkinter.TkVersion)"   # 應印出數字，非報錯
 ```
 
-### Create venv + install deps
+### 建立 venv ＋裝相依
 
 ```powershell
-# In the repo root — one shot: builds .venv, installs deps, seeds preferences.json
+# 在 repo 根目錄——一鍵：建 .venv、裝相依、由範本產生 preferences.json
 .\setup.ps1
 ```
 
-Equivalent manual steps:
+手動等效步驟：
 
 ```powershell
 py -m venv .venv
@@ -80,99 +71,90 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-`requirements.txt` pins every dependency. **cchess installs from a vendored
-wheel in `vendor/wheels/`, not from GitHub** — so a fresh install needs no
-network to GitHub and survives the upstream repo being deleted / force-pushed.
-cchess is GPLv3; see CLAUDE.md *Distribution* for the wheel-bump protocol.
+`requirements.txt` 釘死每個相依。**cchess 從 `vendor/wheels/` 的內附 wheel 安裝、
+不從 GitHub 拉**——所以全新安裝不需連 GitHub，也不怕上游 repo 被刪或 force-push。
+cchess 為 GPLv3；升級 wheel 的協議見 [CLAUDE.md](CLAUDE.md) 的 *Distribution* 段。
 
-### First-run check
+### 首次驗證
 
 ```powershell
-# Round-trip test against the bundled samples — no external corpora needed
+# 對棋庫做 round-trip——不需外部語料即可 smoke 測（看 samples/）
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
 ```
 
-You should see an all-perfect round-trip (the file count depends on what's
-under `SRC_ROOT`; see *Test corpora paths* below).
+應看到全數完美 round-trip（檔案數量視 `SRC_ROOT` 下有什麼而定，見下方*測試語料路徑*）。
 
-### Test corpora paths (hard-coded)
+### 測試語料路徑（寫死）
 
-Several tests reference real-world corpora the master keeps on `D:\`:
+數個測試引用主人放在 `D:\` 的真實語料：
 
-| Test | Path | Notes |
+| 測試 | 路徑 | 備註 |
 |---|---|---|
-| `tests/test_roundtrip.py` | `D:\Elton\TestArea\chess-book\` (`SRC_ROOT`) | 46 XQF files |
-| `tests/test_cbl_smoke.py` | `D:\Elton\CCBridge3\CBL\` | ~1570 CBLs |
-| `tests/test_cb_xqf_integration.py` | `D:\Elton\CCBridge3\CBL\…` (3 specific files) | round-trip fixtures |
-| `tests/test_big5_recovery.py` | `D:\Elton\TestArea\chess-book\` | mojibake corpus |
+| `tests/test_roundtrip.py` | `D:\Elton\TestArea\chess-book\`（`SRC_ROOT`） | XQF 棋庫 |
+| `tests/test_cbl_smoke.py` | `D:\Elton\CCBridge3\CBL\` | ~1570 個 CBL |
+| `tests/test_cb_xqf_integration.py` | 同上的 3 個指定檔 | round-trip fixtures |
+| `tests/test_big5_recovery.py` | `D:\Elton\TestArea\chess-book\` | mojibake 語料 |
 
-If those paths don't exist on the new machine, either:
-1. Copy the corpora over, or
-2. Edit the path constants at the top of each test file to point somewhere
-   you have data, or
-3. Skip those tests — `samples/xqf/` and `samples/cbl/` in this repo are
-   enough for a smoke check.
+新機器若沒這些路徑，三選一：
+1. 把語料複製過來；或
+2. 改各測試檔頂端的路徑常數，指向你有資料的地方；或
+3. 跳過這些測試——repo 內的 `samples/xqf/` 與 `samples/cbl/` 足夠 smoke 測。
 
-## Run the editor
+## 跑編輯器
 
 ```powershell
-# If PowerShell blocks Activate.ps1 the first time:
+# PowerShell 第一次擋 Activate.ps1 的話：
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 
-# Start the Flask backend (serves the frontend too)
+# 啟動 Flask 後端（同時 serve 前端）
 .\.venv\Scripts\python.exe backend\app.py
 ```
 
-Then open <http://127.0.0.1:5174/> in a browser.
+然後瀏覽器開 <http://127.0.0.1:5174/>。
 
-## Choose your library
+> 除錯時想開 Werkzeug debugger：`$env:FLASK_DEBUG=1` 再啟動。預設**關閉**——
+> debugger 是互動式 RCE 主控台，散布版不該開著。
 
-The XQF library root is **set from the UI**, not hard-coded. On the file
-panel header, click the **📁** button next to the path display — a native
-Windows folder picker opens. Pick the directory containing your `.XQF`
-files; the file tree refreshes immediately.
+## 選擇棋譜庫
 
-The chosen path is saved to `preferences.json` at the repo root, alongside
-splitter sizes, board theme, and the last-opened file. If no root has been
-set yet, the backend falls back to `D:\Elton\TestArea\chess-book\`; on a fresh
-machine where that path doesn't exist, the file panel shows a **📂 選擇棋譜根
-目錄** prompt (no error) so you can pick one straight away. Change
-`DEFAULT_XQF_ROOT` in [backend/app.py](backend/app.py) if you want a different
-starting default.
+棋譜庫根目錄**從 UI 設定**，不寫死。在檔案窗格標題列點路徑旁的 **📂** 按鈕，
+會跳出原生資料夾對話框；選含 `.XQF` 的目錄，檔案樹立即刷新。
 
-## Format conversion
+選定的路徑存到 repo 根的 `preferences.json`（連同 splitter 尺寸、棋盤主題、上次開的檔）。
+若尚未設根目錄，後端 fallback 到 `D:\Elton\TestArea\chess-book\`；新機器上該路徑不存在時，
+檔案窗格會顯示 **📂 選擇棋譜根目錄** 提示（不會報錯），讓你當場挑一個。要改起始預設，
+改 [backend/app.py](backend/app.py) 的 `DEFAULT_XQF_ROOT`。
 
-CLI drivers for converting between XQF, CBL/CBR (CCBridge3 libraries), and
-CWP (CCBridge single-game plain text). Round-trip-verified end-to-end
-against real CCBridge corpora (see [tests/test_cb_xqf_integration.py](tests/test_cb_xqf_integration.py)).
+## 格式轉換
 
-### CBL → XQF (explode a library into per-game files)
+XQF、CBL/CBR（CCBridge3 棋庫）、CWP（CCBridge 單局純文字）互轉的 CLI。
+已對真實 CCBridge 語料端到端 round-trip 驗證（見
+[tests/test_cb_xqf_integration.py](tests/test_cb_xqf_integration.py)）。
+
+### CBL → XQF（把棋庫拆成單局檔）
 
 ```powershell
-# Single library
+# 單一棋庫
 .\.venv\Scripts\python.exe tools\cbl_to_xqf.py path\to\lib.cbl out_dir
 
-# Or a directory tree — one sub-folder per .cbl
+# 或整個目錄樹——一個子資料夾對一個 .cbl
 .\.venv\Scripts\python.exe tools\cbl_to_xqf.py D:\Elton\CCBridge3\CBL out_dir
 ```
 
-Output layout: `<out_dir>/<cbl_stem>/<NNN>-<sanitised_title>.xqf`. Annotation
-encoding is converted from CBR's UTF-16-LE to XQF's GB18030 (rare non-GB
-chars drop silently).
+輸出佈局：`<out_dir>/<cbl_stem>/<NNN>-<sanitised_title>.xqf`。
+註解編碼從 CBR 的 UTF-16-LE 轉成 XQF 的 GB18030（罕見非 GB 字會靜默丟棄）。
 
-### XQF → CBL (bundle files into a CCBridge3-compatible library)
+### XQF → CBL（包成 CCBridge3 可開的棋庫）
 
 ```powershell
-# Single .xqf or directory of .xqf files → one .cbl
-.\.venv\Scripts\python.exe tools\xqf_to_cbl.py input_dir out.cbl --name "library name"
+# 單一 .xqf 或一整個 .xqf 目錄 → 一個 .cbl
+.\.venv\Scripts\python.exe tools\xqf_to_cbl.py input_dir out.cbl --name "棋庫名稱"
 ```
 
-`--name` controls the library name shown in CCBridge3's property panel
-(defaults to the input directory/file stem). The writer stamps `creator =
-chess-book-editor` and `created_at`/`modified_at` to now, and handles the
-CCBridge format gotchas (binary GUID linkage, init-annote gate flag,
-metadata slots) automatically.
+`--name` 控制 CCBridge3 屬性面板顯示的棋庫名（預設取輸入目錄／檔名）。
+writer 蓋 `creator = chess-book-editor` 與 `created_at`/`modified_at`，
+並自動處理 CCBridge 格式陷阱（binary GUID 連結、init-annote gate flag、metadata slots）。
 
 ### CWP → XQF
 
@@ -180,44 +162,48 @@ metadata slots) automatically.
 .\.venv\Scripts\python.exe tools\cwp_to_xqf.py
 ```
 
-Paths are hard-coded at the top of the script (`SRC_ROOT`, `OUT_ROOT`,
-`SKIP_DIRS`) — edit them before running. Endgame puzzles with non-standard
-starting positions are skipped (full FEN replay not implemented).
+路徑寫死在腳本頂端（`SRC_ROOT`、`OUT_ROOT`、`SKIP_DIRS`）——執行前先改。
+非標準起始局面的排局會跳過（尚未實作完整 FEN replay）。
 
-## Verify round-trip
+## 驗證 round-trip
 
 ```powershell
-# XQF library: every file round-trips without losing variations or annotations
+# XQF 棋庫：每個檔都 round-trip，不掉變例、不掉註解
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
 
-# Side-by-side with upstream XQFWriter (shows why we patch)
+# 與上游 XQFWriter 並排對照（看出為何要 patch）
 .\.venv\Scripts\python.exe tests\test_roundtrip.py both
 
-# Full XQF <-> CBL pipeline: 3 real CCBridge3 corpora, 376 games
+# 完整 XQF ↔ CBL pipeline：3 個真實 CCBridge3 語料
 .\.venv\Scripts\python.exe tests\test_cb_xqf_integration.py
 
-# Big5 mojibake recovery: 870-file legacy corpus
+# Big5 mojibake 還原：legacy 語料
 .\.venv\Scripts\python.exe tests\test_big5_recovery.py
 
-# CBL offset-fix smoke: linear formula vs. cchess's broken table across 1570 files
+# CBL offset 修正 smoke：線性公式 vs cchess 壞掉的查表，掃 1570 檔
 .\.venv\Scripts\python.exe tests\test_cbl_smoke.py
 
-# Regenerate XQStudio sanity-check samples
+# 重新產生 XQStudio sanity 樣本
 .\.venv\Scripts\python.exe tools\emit_sample.py
 ```
 
-## Why a patched writer / vendored CBL stack
+> 主控台若印不出中文／✓（cp950），加 `$env:PYTHONIOENCODING="utf-8"` 再跑。
 
-`cchess.io_xqf.XQFWriter.save()` collapses multi-branch trees to the main line
-because its linear move-list emission does not match the reader's recursive
-DFS expectation; it also drops Traditional Chinese chars (GBK vs. GB18030)
-and the book-level init annote. See [vendor/io_xqf_patched.py](vendor/io_xqf_patched.py)
-docstring for the full breakdown — suitable for upstream PR.
+## 為何要 patched writer／vendored 堆疊
 
-The CBL/CBR side was reverse-engineered against the master's CCBridge3
-corpus (no public spec). cchess ships a CBL reader with a broken
-4-bucket `_get_cbl_data_offset` lookup; the actual formula is linear
-(`66624 + N*276`), which `vendor/cbl_index_fix.py` monkeypatches in.
-`vendor/io_cb_writer.py` is the first open writer that produces files
-CCBridge3 opens cleanly (binary-GUID linkage at CBR +19..35, init-annote
-gate flag 0/1/4/5, library metadata slots at 832/896/960/1024).
+`cchess.io_xqf.XQFWriter.save()` 會把多分支樹塌成主線一條——它線性吐 move list，
+不合 reader 遞迴 DFS 的預期；還會掉繁體中文字（GBK vs GB18030）與譜首引言。
+完整拆解見 [vendor/io_xqf_patched.py](vendor/io_xqf_patched.py) docstring——可作為上游 PR。
+
+CBL/CBR 那側是對主人的 CCBridge3 語料逆向得出（無公開規格）。cchess 附的 CBL reader
+有個壞掉的 4-bucket `_get_cbl_data_offset` 查表，實際公式是線性的（`66624 + N*276`），
+由 `vendor/cbl_index_fix.py` monkeypatch 修正。`vendor/io_cb_writer.py` 是第一個能產出
+CCBridge3 乾淨開啟之檔案的開放 writer（binary-GUID 連結於 CBR +19..35、
+init-annote gate flag 0/1/4/5、library metadata slots 於 832/896/960/1024）。
+
+## 散布
+
+本工具是單人本機工具，**不適合**雲端多人部署（引擎 exec、寫檔、共用 chessdb 速率
+都是單人假設）。要分享的話：交付源碼，讓每個使用者在自己機器上跑、配自己的引擎與資料。
+詳見 [CLAUDE.md](CLAUDE.md) 的 *Distribution* 段（vendored wheel、`FLASK_DEBUG`、
+首開優雅降級、GPL 義務、`git archive` 打包）。
