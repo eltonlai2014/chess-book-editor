@@ -930,6 +930,17 @@ function fmtEvalScore(entry, fen) {
   return `${sign}${redScore}`;
 }
 
+// chessdb encodes a forced result (mate / tablebase win) as a score near
+// ±30000 with NO winrate field — |score| ≈ 30000 − plies_to_mate. Convert a
+// RED-POV score to Pikafish-style "#+N" (red mates in N) / "#-N" (red gets
+// mated in N), or null for a normal centipawn score. Threshold 25000 is far
+// above any real cp eval, so this never misfires on a big-but-finite score.
+function mateFromCdbScore(scoreRed) {
+  if (scoreRed == null || Math.abs(scoreRed) < 25000) return null;
+  const n = 30000 - Math.abs(scoreRed);
+  return (scoreRed > 0 ? "#+" : "#-") + n;
+}
+
 // Translate a single ICCS move under `fen` to traditional Chinese via the
 // existing /api/xqf/move-info endpoint, lightly cached. We use this to label
 // the engine's best move (e.g. "車１平６ (a7f7)") without hard-coding any
@@ -1051,8 +1062,12 @@ async function renderEvalLine() {
   if (cEntry.cdb && cEntry.cdb.best) {
     const b = cEntry.cdb.best;
     cdbIccs = b.iccs;
-    const wr = b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—";
-    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${wr})</span>`);
+    // Mate (#+N) takes precedence over winrate — chessdb omits winrate for
+    // forced results and codes them as a ±30000-ish score (red POV via cFen).
+    const cFlip = ((cFen.trim().split(/\s+/)[1]) || "w") === "b" ? -1 : 1;
+    const cMate = mateFromCdbScore(b.score != null ? b.score * cFlip : null);
+    const tag = cMate != null ? cMate : (b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—");
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${tag})</span>`);
   } else if (cl.loading && cl.fen === cFen) {
     cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalNote">查詢中…</span></span>`);
   } else if (cEntry.cdb && cEntry.cdb.status && cEntry.cdb.status !== "ok") {
@@ -1197,7 +1212,8 @@ function renderCdbTab() {
   list.innerHTML = "";
   moves.forEach((m, i) => {
     const sRed = m.score == null ? null : Math.round(m.score * flip);
-    const sTxt = sRed == null ? "?" : (sRed > 0 ? "+" : "") + sRed;
+    const sMate = mateFromCdbScore(sRed);
+    const sTxt = sMate != null ? sMate : (sRed == null ? "?" : (sRed > 0 ? "+" : "") + sRed);
     const wr = m.winrate == null ? "—" : m.winrate.toFixed(1) + "%";
     const isCurrent = activeIccs && m.iccs === activeIccs;
     const row = document.createElement("div");
