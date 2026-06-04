@@ -27,7 +27,7 @@ if (-not (Test-Path ".venv")) {
   & $py -m venv .venv
 }
 
-Write-Host "安裝相依套件 (pinned，含 cchess 指定 commit) ..." -ForegroundColor Cyan
+Write-Host "安裝相依套件 (cchess 從 vendor/wheels 本地 wheel，不依賴上游 GitHub) ..." -ForegroundColor Cyan
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 

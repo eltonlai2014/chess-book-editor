@@ -39,9 +39,27 @@ Move-record layout (low version 0x0A):
   bytes 8..: annote bytes (GB18030)
 
 Suitable for upstream PR to walker8088/cchess.
+
+cchess coupling / version drift
+-------------------------------
+This writer subclasses ``XQFWriter`` and imports the *private* module function
+``_encode_xqf_pos`` below — the single most version-fragile line in the repo. A
+rename/removal upstream makes this module fail at import time. Two guards:
+
+  * cchess is pinned via a **vendored wheel** in ``vendor/wheels/`` (see
+    requirements.txt), so the exact bytes this code was written against can't
+    vanish or be silently swapped.
+  * ``tests/test_roundtrip.py`` does a path-level round-trip over the whole XQF
+    library; it catches the *semantic* drifts an import check can't — e.g. if
+    upstream changes how ``Move.variations_all`` is populated (bug #2 exists
+    precisely because that data model is already inconsistent). **Re-run it and
+    require all-green before bumping the vendored wheel.**
 """
 import struct
 
+# NOTE: `_encode_xqf_pos` is a private (underscore) cchess symbol — no API
+# stability promise. If this import ever ImportErrors after a cchess bump, the
+# internals moved; see the "cchess coupling" note above before chasing it.
 from cchess.io_xqf import XQFWriter, _encode_xqf_pos
 
 

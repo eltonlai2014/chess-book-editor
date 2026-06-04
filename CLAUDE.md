@@ -129,9 +129,23 @@ non-goal (engine exec, file writes, and the shared chessdb politeness budget
 are all single-user assumptions). The supported way to share it is: **ship the
 source, let each user run it on their own machine with their own engine + data.**
 
-- **`requirements.txt` pins cchess to an exact commit**, not `@master`. The
-  writer/FEN code is validated against that revision; bump only after
-  `tests\test_roundtrip.py` passes. `setup.ps1` builds the venv from it.
+- **cchess is installed from a VENDORED WHEEL** (`vendor/wheels/cchess-*.whl`),
+  not from GitHub. A pinned `git+…@commit` still breaks if upstream deletes the
+  repo, goes private, or force-pushes (the commit gets GC'd) — and needs live
+  network to GitHub on every fresh install. The committed wheel removes all of
+  that: zero upstream trust, zero network for cchess, exact bytes. It's
+  `py3-none-any` (pure Python) so one file covers every OS + Python 3.
+  `requirements.txt` references the wheel by **direct path** (not `cchess==…`)
+  so pip can't substitute a same-numbered-but-different PyPI build (PyPI 1.26.2
+  ≠ this commit, whose internal `__version__` is 2.27.0).
+  **To bump**: rebuild the wheel (`pip wheel "cchess @ git+…@<commit>" -w
+  vendor/wheels/ --no-deps`), re-run `tests\test_roundtrip.py` (must stay all-
+  green — the writer couples to cchess internals), then swap the wheel + path.
+- **cchess is GPLv3.** Bundling the wheel is permitted, but distributing the
+  editor with it obligates the editor to stay GPL-compatible and ship source —
+  already true (we ship full source, and `import cchess` makes it a combined
+  work regardless). Don't relicense the editor as proprietary while it links
+  cchess.
 - **`FLASK_DEBUG` gates the Werkzeug debugger** (`backend/app.py`, default
   OFF). Never ship a build that boots with debug on — it's an interactive RCE
   console. Opt in locally with `FLASK_DEBUG=1`.

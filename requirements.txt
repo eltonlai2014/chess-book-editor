@@ -1,11 +1,27 @@
 # Pinned dependencies for the XQF editor backend.
 #
-# cchess is pinned to an EXACT commit, not @master: the editor's
-# PatchedXQFWriter and FEN handling are validated against this revision, and
-# upstream master can change XQF/FEN behaviour without notice (see CLAUDE.md
-# "Don't pip install --upgrade cchess"). Bump this only after re-running
-# tests\test_roundtrip.py.
-cchess @ git+https://github.com/walker8088/cchess.git@046351f738992e86224860520cf810070c772c21
+# cchess is installed from a VENDORED WHEEL committed in vendor/wheels/, NOT
+# from GitHub. This makes a fresh install immune to the upstream repo being
+# deleted / made private / force-pushed (the pinned commit could be GC'd), and
+# needs no network connection to GitHub at all. The wheel is py3-none-any (pure
+# Python) so the one file works on every OS + Python 3.
+#
+# cchess is GPLv3; redistributing the wheel is permitted (and obligates the
+# editor itself to stay GPL-compatible when distributed — already true since we
+# ship full source). See CLAUDE.md "Distribution" + vendor/io_xqf_patched.py.
+#
+# To BUMP cchess: rebuild the wheel, then re-run tests\test_roundtrip.py — it
+# must stay 46/46 before you commit the new wheel (the editor's writer couples
+# to cchess internals; see vendor/io_xqf_patched.py).
+#   pip wheel "cchess @ git+https://github.com/walker8088/cchess.git@<commit>" \
+#       -w vendor/wheels/ --no-deps
+#   # then delete the old wheel and update the path below to the new filename
+#
+# Direct path (not "cchess==1.26.2"): pins THIS exact file, so pip never falls
+# back to a PyPI cchess of the same version number — which is a DIFFERENT build
+# (PyPI 1.26.2 vs this git commit's internal __version__ 2.27.0). Resolved
+# relative to pip's cwd; setup.ps1 runs pip from the repo root.
+./vendor/wheels/cchess-1.26.2-py3-none-any.whl
 
 Flask==3.1.3
 Werkzeug==3.1.8
