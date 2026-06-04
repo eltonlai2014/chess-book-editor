@@ -954,6 +954,61 @@ async function notationFor(fen, iccs) {
   }
 }
 
+// Batch variant of notationFor: ONE POST for many candidate moves from the
+// SAME fen (the chessdb branch point). Fills NOTATION_CACHE and returns a
+// {iccs: notation} map. Already-cached moves are served from cache and left out
+// of the request, so repeated calls only ever fetch the genuinely-new moves.
+async function notationsForBatch(fen, iccsList) {
+  const out = {};
+  const miss = [];
+  for (const iccs of iccsList) {
+    const k = fen + "|" + iccs;
+    if (NOTATION_CACHE.has(k)) out[iccs] = NOTATION_CACHE.get(k);
+    else miss.push(iccs);
+  }
+  if (miss.length) {
+    try {
+      const r = await fetch("/api/xqf/move-info-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fen, iccs: miss }),
+      });
+      const j = await r.json();
+      const notations = (j && j.notations) || {};
+      for (const iccs of miss) {
+        const n = notations[iccs] || null;
+        NOTATION_CACHE.set(fen + "|" + iccs, n);
+        out[iccs] = n;
+      }
+    } catch (_) { /* network glitch — leave them as iccs fallback */ }
+  }
+  return out;
+}
+
+// Fill the 雲庫 list rows with Chinese notation — GATED on the tab being
+// visible, and BATCHED into a single request. This is why landing on a position
+// while looking at another tab no longer fires one /move-info per cloud move:
+// renderCdbTab builds the rows (showing a … placeholder) and calls this, which
+// no-ops while #rpCdbBody is hidden; switchRpTab fills them when you actually
+// open the tab. Cached rows fill instantly.
+async function fillCdbNotations() {
+  const body = $("#rpCdbBody");
+  if (!body || body.hidden) return;            // only translate when visible
+  const list = $("#cdbList");
+  if (!list) return;
+  const fen = cdbFen();
+  const entry = fen && EDITOR.evalsByFen[fen];
+  const cdb = entry && entry.cdb;
+  if (!cdb || cdb.status !== "ok" || !(cdb.moves || []).length) return;
+  const map = await notationsForBatch(fen, cdb.moves.map((m) => m.iccs));
+  // The await may have spanned a navigation; bail if we've moved on.
+  if (cdbFen() !== fen || body.hidden) return;
+  for (const m of cdb.moves) {
+    const span = list.querySelector(`.cdbMove[data-iccs="${m.iccs}"]`);
+    if (span) span.textContent = (map && map[m.iccs]) || m.iccs;
+  }
+}
+
 async function renderEvalLine() {
   // Analysis is position-specific: if the board moved, drop the stale stream.
   const ea = EDITOR.engineAnalysis;
@@ -1158,11 +1213,12 @@ function renderCdbTab() {
       + (isCurrent ? `\n目前所在變化` : `\n點擊：加入此分支／切換至此著`);
     row.onclick = () => addCdbMove(m.iccs);
     list.appendChild(row);
-    notationFor(fen, m.iccs).then((n) => {
-      const span = row.querySelector(`.cdbMove[data-iccs="${m.iccs}"]`);
-      if (span) span.textContent = n || m.iccs;
-    });
   });
+  // Translate the candidate moves to Chinese in ONE batched request — and only
+  // while the 雲庫 tab is visible (fillCdbNotations no-ops when hidden). Rows
+  // show the … placeholder until then (and fall back to the raw iccs if a
+  // conversion fails).
+  fillCdbNotations();
 }
 
 // Add a cloud-library move as a variation AT THE BRANCH POINT (前一步), i.e. a
@@ -2061,7 +2117,12 @@ function switchTabsIn(container, tab) {
   container.querySelectorAll(".rpTab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   container.querySelectorAll(".rpTabBody").forEach((p) => { p.hidden = p.dataset.tab !== tab; });
 }
-function switchRpTab(tab) { switchTabsIn($("#rpVars"), tab); }
+function switchRpTab(tab) {
+  switchTabsIn($("#rpVars"), tab);
+  // The 雲庫 list defers its Chinese-notation translation until visible — fill
+  // it now that the tab is shown (batched; no-op if already cached).
+  if (tab === "cdb") fillCdbNotations();
+}
 function switchAnnoteTab(tab) {
   switchTabsIn($("#rpAnnote"), tab);
   // The 分析本分支 trigger lives in the tab strip; only relevant on the AI tab.

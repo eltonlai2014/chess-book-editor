@@ -46,6 +46,7 @@ from flask import Flask, jsonify, request, send_from_directory, Response, stream
 from backend.xqf_service import (  # noqa: E402
     compute_legal_targets,
     compute_move_info,
+    compute_move_infos_batch,
     create_xqf,
     load_xqf,
     sanitise_filename,
@@ -354,6 +355,27 @@ def move_info():
     except Exception as e:
         return jsonify({"error": f"驗證失敗：{e}"}), 400
     return jsonify({"ok": True, **info})
+
+
+@app.post("/api/xqf/move-info-batch")
+def move_info_batch():
+    """Batch Chinese-notation lookup for many candidate moves from ONE fen.
+
+    Body: ``{fen, iccs: [iccs, ...]}`` -> ``{ok, notations: {iccs: notation}}``.
+    Collapses the per-cloud-move ``/move-info`` burst (one request per candidate
+    move in the chessdb list) into a single request. Illegal/unparseable moves
+    are absent from ``notations`` (caller shows the raw iccs).
+    """
+    body = request.get_json(silent=True) or {}
+    fen = body.get("fen")
+    iccs_list = body.get("iccs") or []
+    if not isinstance(iccs_list, list):
+        return jsonify({"error": "iccs must be an array"}), 400
+    try:
+        notations = compute_move_infos_batch(fen, iccs_list)
+    except Exception as e:
+        return jsonify({"error": f"驗證失敗：{e}"}), 400
+    return jsonify({"ok": True, "notations": notations})
 
 
 @app.post("/api/xqf/new")

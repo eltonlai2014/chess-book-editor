@@ -416,6 +416,28 @@ def compute_move_info(fen: str, iccs: str) -> dict:
     return {"notation": notation, "side": side}
 
 
+def compute_move_infos_batch(fen: str, iccs_list) -> dict:
+    """Chinese notation for many candidate moves from the SAME ``fen``.
+
+    All moves are alternatives from one position (the chessdb branch point), so
+    this collapses N per-move ``/move-info`` round-trips into a single call.
+    Each move is validated on its own fresh board (``compute_move_info`` —
+    ``board.move`` mutates, and these are siblings, not a sequence).
+    Unparseable / illegal moves are simply omitted; the caller falls back to
+    the raw iccs for those."""
+    out: dict = {}
+    if not fen or not iccs_list:
+        return out
+    for iccs in iccs_list:
+        if not isinstance(iccs, str) or len(iccs) < 4:
+            continue
+        try:
+            out[iccs] = compute_move_info(fen, iccs)["notation"]
+        except Exception:
+            continue
+    return out
+
+
 def pv_to_chinese(fen: str, uci_moves, limit: int = 64) -> list:
     """Replay a UCI principal variation on `fen`, return each move's
     traditional-Chinese notation. Pikafish move coords are identical to our

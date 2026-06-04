@@ -75,6 +75,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | `GET /api/xqf/load` | `load`:278 | 載入 XQF→JSON（`load_xqf`/`book_to_json`） |
 | `POST /api/xqf/legal-targets` | `legal_targets`:295 | 某子合法著點（`compute_legal_targets`） |
 | `POST /api/xqf/move-info` | `move_info`:312 | 單步中文著法（`compute_move_info`） |
+| `POST /api/xqf/move-info-batch` | `move_info_batch` | 同一 fen 多著法一次翻中文（`compute_move_infos_batch`）；雲庫清單用，把 N 發併 1 發 |
 | `POST /api/xqf/new` | `new_xqf`:332 | 新建空棋譜（`create_xqf`） |
 | `GET /api/eval/info` | `eval_info`:385 | DB 狀態（`db_info`） |
 | `POST /api/eval/pick-db` `/db` | `pick_eval_db_dialog`:395 / `set_eval_db`:440 | 選/設評估 DB |
@@ -180,6 +181,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 導航時 lazy 查 `cdbFen()`（debounce 220ms；已有 cdb 即跳過） | `ensureCdbLive` |
 | 實際抓取（merge 進 `evalsByFen[cdbFen].cdb`；`fresh` 跳快取；失敗不快取以利重試） | `fetchCdbLive` |
 | 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳；標出目前所在變化 `.current`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
+| 雲庫著法翻中文：**僅在 tab 可見時翻 + 一次 batch**（避免落點時對隱藏 tab 狂打 move-info） | `fillCdbNotations`（gate on `#rpCdbBody.hidden`）/ `notationsForBatch`；`switchRpTab('cdb')` 切過去時補翻 |
 | 點列＝在**分支點**加同層變化（非當前著的子著）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
 | 「重查」按鈕（`fresh=1` 跳快取重打 `cdbFen()`） | boot 段綁 `#cdbRefreshBtn` |
 
