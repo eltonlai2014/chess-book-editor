@@ -1,4 +1,4 @@
-# One-shot setup for the XQF editor on a fresh machine.
+﻿# One-shot setup for the XQF editor on a fresh machine.
 #
 #   1. Install Python 3.10+ from python.org (tick "Add to PATH"; the default
 #      installer includes tkinter, which the folder/file pickers need).

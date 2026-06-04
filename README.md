@@ -113,8 +113,18 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 
 然後瀏覽器開 <http://127.0.0.1:5174/>。
 
-> 除錯時想開 Werkzeug debugger：`$env:FLASK_DEBUG=1` 再啟動。預設**關閉**——
-> debugger 是互動式 RCE 主控台，散布版不該開著。
+**開發期間建議用 `run-dev.ps1`**——它會先砍掉殘留的舊 server、釋放埠 5174，再起一隻
+帶 `FLASK_DEBUG=1`（後端改檔自動重載）的乾淨進程：
+
+```powershell
+.\run-dev.ps1            # 自動重載
+.\run-dev.ps1 -NoDebug   # 不要 reloader（單進程）
+```
+
+> 為何需要它：debug 關著時 Werkzeug 不會自動重啟，而 Windows 的 `SO_REUSEADDR`
+> 讓你重跑 `app.py` 能 bind 同一埠卻搶不到連線——舊進程會默默賴著、繼續回應舊碼
+> （改了後端卻「怎麼還在」就是這個）。`run-dev.ps1` 先清乾淨就不會這樣。
+> 直接 `python backend\app.py` 仍可，但記得先確認沒有舊 server 還活著。
 
 ## 選擇棋譜庫
 

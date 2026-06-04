@@ -55,8 +55,11 @@ Persistence layer (the original foundation, still the correctness anchor):
 .\setup.ps1
 
 # Run the editor (serves the frontend too); open http://127.0.0.1:5174/
-.\.venv\Scripts\python.exe backend\app.py
+.\run-dev.ps1                  # dev: kills stale servers, frees :5174, hot-reload
+.\.venv\Scripts\python.exe backend\app.py   # plain run (no reloader; debug OFF)
 # Werkzeug debugger is OFF by default; opt in with $env:FLASK_DEBUG=1
+# NOTE: debug off = no auto-reload, and SO_REUSEADDR lets a new run bind :5174
+# while a STALE server keeps answering old code. run-dev.ps1 clears that first.
 
 # Verify writer (whenever the cchess wheel or PatchedXQFWriter changes)
 .\.venv\Scripts\python.exe tests\test_roundtrip.py
