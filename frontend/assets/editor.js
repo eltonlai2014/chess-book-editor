@@ -561,6 +561,23 @@ async function loadFileTree() {
   const tree = await r.json();
   EDITOR.rootPath = tree.root || "";
   if (tree.root) updateRootDisplay(tree.root);
+  if (tree.needsRoot) {
+    // Fresh machine: no valid library root yet. Show an actionable prompt with
+    // a one-click picker instead of a raw error string (recoverSettings… may
+    // still offer a remembered root afterwards).
+    EDITOR.rootOk = false;
+    const box = $("#fileTree");
+    box.innerHTML = "";
+    const msg = document.createElement("p");
+    msg.className = "tree-hint";
+    msg.textContent = tree.error || "尚未設定棋譜根目錄。";
+    const btn = document.createElement("button");
+    btn.textContent = "📂 選擇棋譜根目錄";
+    btn.onclick = pickRoot;
+    box.appendChild(msg);
+    box.appendChild(btn);
+    return;
+  }
   if (tree.error) { EDITOR.rootOk = false; $("#fileTree").textContent = "錯誤：" + tree.error; return; }
   EDITOR.rootOk = true;
   $("#fileTree").innerHTML = "";

@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy to preferences.json on first run, or just let the app create it. Leave xqfRoot / evalDbPath / pikafishPath OUT — the UI's 📂 pickers fill them in per-machine. Hard-coding paths here is exactly the trap that breaks a fresh install.",
+  "boardTheme": "traditional",
+  "boardPerspective": "red",
+  "uiTheme": "pineash",
+  "aiAnalysisDepth": 14,
+  "aiDualDepth": false,
+  "aiDiffThreshold": 200
+}

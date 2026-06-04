@@ -122,6 +122,31 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   single-string error states) are handled in `query_chessdb` — see
   `docs/CHESSDB_CLOUD_QUERY.md` for the why.
 
+## Distribution (zip + setup.ps1, user-configured) (2026-06-04)
+
+The app is a local-only single-user tool; "cloud-hosting for everyone" is a
+non-goal (engine exec, file writes, and the shared chessdb politeness budget
+are all single-user assumptions). The supported way to share it is: **ship the
+source, let each user run it on their own machine with their own engine + data.**
+
+- **`requirements.txt` pins cchess to an exact commit**, not `@master`. The
+  writer/FEN code is validated against that revision; bump only after
+  `tests\test_roundtrip.py` passes. `setup.ps1` builds the venv from it.
+- **`FLASK_DEBUG` gates the Werkzeug debugger** (`backend/app.py`, default
+  OFF). Never ship a build that boots with debug on — it's an interactive RCE
+  console. Opt in locally with `FLASK_DEBUG=1`.
+- **`/api/xqf/list` degrades, doesn't 500, when the root is missing** — returns
+  `{needsRoot:true}` (200) and the UI shows a 📂 picker. Engine + eval-DB
+  absence were already graceful (`engine/info`/`eval/info` `exists:false` gate
+  the UI). The XQF root was the one hard-crash on a fresh machine; now fixed.
+- **Never package `preferences.json`** — it holds master's absolute paths
+  (`xqfRoot`/`evalDbPath`/`lastFile`) and is `.gitignore`d. Ship
+  `preferences.example.json` (no machine paths). Use `git archive` for the zip,
+  NOT a raw folder copy (which would sweep in the gitignored prefs + venv).
+- **Engine + positions.db are NOT bundled.** Pikafish is GPL and microarch-
+  specific (avx2 vs plain); the eval DB is the AI repo's data. Users set both
+  via the UI pickers; the app runs without either.
+
 ## Gotchas
 
 - **Don't `pip install --upgrade cchess` globally.** chess-book-ai uses the

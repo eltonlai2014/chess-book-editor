@@ -199,7 +199,16 @@ def _tree(node: Path, root: Path) -> dict:
 def list_xqf():
     root = get_xqf_root()
     if not root.exists():
-        return jsonify({"error": f"XQF root missing: {root}", "root": str(root)}), 500
+        # First run on a fresh machine: the default root is master's path and
+        # won't exist. Don't 500 — that paints a broken error screen. Return a
+        # 200 with needsRoot so the UI can invite the user to pick a root via
+        # the native folder picker. (A real 500 stays reserved for unexpected
+        # failures.)
+        return jsonify({
+            "needsRoot": True,
+            "root": str(root),
+            "error": "尚未設定棋譜根目錄，請點「📂 選擇目錄」挑選存放 .XQF 的資料夾。",
+        })
     root_view = _tree(root, root)
     root_view["rel"] = ""
     root_view["root"] = str(root)
@@ -938,4 +947,10 @@ def save():
 if __name__ == "__main__":
     # threaded=True so a long-lived SSE analysis stream doesn't block other
     # requests (page, move-info, a second analyze after navigation).
-    app.run(host="127.0.0.1", port=5174, debug=True, threaded=True)
+    #
+    # debug defaults OFF: the Werkzeug debugger is an interactive-RCE console,
+    # not something to ship to other users. It binds 127.0.0.1 so the blast
+    # radius is local, but a distributed build must not boot with it on. Opt in
+    # for your own dev with FLASK_DEBUG=1.
+    debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+    app.run(host="127.0.0.1", port=5174, debug=debug, threaded=True)
