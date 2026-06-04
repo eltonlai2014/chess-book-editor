@@ -68,7 +68,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | `GET /` | `index`:100 | 出 index.html |
 | `GET /assets/<f>` | `assets`:105 | 靜態檔 |
 | `GET/POST /api/preferences` | `get_preferences`:131 / `set_preferences`:136 | preferences.json 讀寫 |
-| `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500） |
+| `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf` 的目錄（如 png/）剪掉不顯示 |
 | `GET /api/xqf/root` | `get_root`:204 | 目前根目錄（`get_xqf_root`:82） |
 | `POST /api/xqf/pick-root` | `pick_root_dialog`:209 | tkinter 資料夾對話框 |
 | `POST /api/xqf/root` | `set_root`:254 | 設根目錄 |

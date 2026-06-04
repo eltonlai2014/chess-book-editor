@@ -565,11 +565,13 @@ h2 {
 }
 #fileTree ul {
   list-style: none;
-  padding-left: 14px;
-  margin: 0;
-  border-left: 1px dotted var(--line);
+  /* margin-left nudges the dotted guide line to sit ~under the parent folder
+     icon (📁); padding-left then indents the children to the right of it. */
+  margin: 0 0 0 14px;
+  padding-left: 13px;
+  border-left: 1px solid var(--line-strong);
 }
-#fileTree > ul { padding-left: 0; border-left: none; }
+#fileTree > ul { margin-left: 0; padding-left: 0; border-left: none; }
 #fileTree li {
   padding: 4px 8px;
   margin: 1px 0;
@@ -582,7 +584,7 @@ h2 {
   border-left: 3px solid transparent;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-#fileTree li.dir { color: var(--text-muted); cursor: default; padding-left: 4px; }
+#fileTree li.dir { color: var(--text-muted); cursor: default; }
 #fileTree li.dir > span.dirname {
   cursor: pointer;
   display: inline-block;

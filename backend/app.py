@@ -170,8 +170,13 @@ def _safe_resolve(rel: str) -> Path:
     return target
 
 
-def _tree(node: Path, root: Path) -> dict:
-    """Recursive directory listing. .XQF files are leaves; dirs recurse."""
+def _tree(node: Path, root: Path) -> dict | None:
+    """Recursive directory listing. .XQF files are leaves; dirs recurse.
+
+    A directory whose subtree contains **no** .XQF file is pruned (returns
+    ``None``) so image-only / asset folders like ``png/`` don't clutter the
+    library tree. The pruning is recursive: a dir holding only such empty dirs
+    is itself empty and dropped."""
     entry = {"name": node.name, "rel": str(node.relative_to(root)).replace("\\", "/")}
     if node.is_dir():
         children = []
@@ -179,7 +184,9 @@ def _tree(node: Path, root: Path) -> dict:
             if child.name.startswith(".") or child.name.startswith("__"):
                 continue  # skip .git, .claude, __tmp_test__, etc.
             if child.is_dir():
-                children.append(_tree(child, root))
+                sub = _tree(child, root)
+                if sub is not None:   # drop subdirs with no .XQF anywhere inside
+                    children.append(sub)
             elif child.suffix.lower() == ".xqf":
                 children.append({
                     "name": child.name,
@@ -187,6 +194,8 @@ def _tree(node: Path, root: Path) -> dict:
                     "type": "file",
                     "size": child.stat().st_size,
                 })
+        if not children:
+            return None   # no .XQF in this whole subtree -> hide the directory
         entry["type"] = "dir"
         entry["children"] = children
     else:
@@ -210,6 +219,10 @@ def list_xqf():
             "error": "尚未設定棋譜根目錄，請點「📂 選擇目錄」挑選存放 .XQF 的資料夾。",
         })
     root_view = _tree(root, root)
+    if root_view is None:
+        # Root exists but holds no .XQF anywhere — show an empty library tree
+        # rather than crashing on the None.
+        root_view = {"name": root.name, "type": "dir", "children": []}
     root_view["rel"] = ""
     root_view["root"] = str(root)
     return jsonify(root_view)
