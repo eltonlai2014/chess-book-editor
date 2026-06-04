@@ -15,6 +15,7 @@ Local-only by design (binds 127.0.0.1), no auth:
     POST /api/eval/pick-db             -> {ok, path?} via native file picker
     POST /api/eval/db    body {path}   -> persist new eval DB path to prefs
     POST /api/eval/batch body {fens:[...]} -> {fen:{d12?,d22?,d28?,d32?,cdb?}}
+    GET  /api/chessdb?fen=<fen>        -> live cloud-library lookup (cache-first)
     GET  /api/engine/info              -> {path, exists, ok?, name?} (UCI handshake)
     POST /api/engine/pick              -> {ok, path?} via native file picker
     POST /api/engine/path body {path}  -> persist Pikafish path to prefs
@@ -51,6 +52,7 @@ from backend.xqf_service import (  # noqa: E402
     save_xqf,
 )
 from backend.eval_service import db_info as eval_db_info, lookup_batch as eval_lookup_batch  # noqa: E402
+from backend.chessdb_service import lookup as chessdb_lookup  # noqa: E402
 from backend.xqf_service import pv_to_chinese  # noqa: E402
 
 
@@ -75,6 +77,10 @@ DEFAULT_PIKAFISH = (
 )
 FRONTEND_ROOT = Path(__file__).resolve().parent.parent / "frontend"
 PREFS_PATH = Path(__file__).resolve().parent.parent / "preferences.json"
+# Editor's OWN writable chessdb cache for live chessdb.cn lookups. Kept apart
+# from the read-only positions.db (AI repo) and the AI pipeline's
+# chessdb_cache.json — see backend/chessdb_service.py.
+CHESSDB_CACHE_PATH = Path(__file__).resolve().parent.parent / "output" / "editor_chessdb_cache.db"
 
 app = Flask(__name__)
 
@@ -883,6 +889,33 @@ def eval_batch():
     except sqlite3.DatabaseError as e:
         return jsonify({"error": f"eval db read failed: {e}"}), 500
     return jsonify({"db_path": str(db), "evals": evals})
+
+
+@app.get("/api/chessdb")
+def chessdb_query():
+    """Cache-first chessdb.cn cloud-library lookup for one position.
+
+    Query: ``fen`` (required, ``<position> <side>``); ``fresh=1`` skips both
+    caches and forces a live re-query. Resolution: read-only positions.db →
+    editor's own cache → live chessdb.cn (written back to the cache). Returns
+    the same ``cdb`` shape as /api/eval/batch's ``cdb`` field plus a ``source``
+    flag, so the frontend renders it identically.
+
+    Live network failures degrade to ``{status:'error', moves:[]}`` (HTTP 200)
+    rather than a hard error — a missing cloud row shouldn't break navigation.
+    """
+    fen = (request.args.get("fen") or "").strip()
+    if not fen:
+        return jsonify({"error": "fen is required"}), 400
+    fresh = request.args.get("fresh") in ("1", "true", "yes")
+    try:
+        result = chessdb_lookup(_get_eval_db(), CHESSDB_CACHE_PATH, fen, fresh=fresh)
+    except Exception as e:
+        # Network glitch / timeout / unparseable response: don't 500, just
+        # report no data so the UI shows "雲庫無資料" and navigation continues.
+        return jsonify({"status": "error", "moves": [], "best": None,
+                        "source": "live", "error": str(e)})
+    return jsonify(result)
 
 
 @app.post("/api/xqf/save")

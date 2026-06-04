@@ -21,6 +21,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
   ├─ xqf_service.py   XQF book ⇄ JSON、中文著法、PV 轉譜、合法著點
   ├─ vendor/io_xqf_patched.py  PatchedXQFWriter（XQF 寫檔，修上游 3 bug）
   ├─ eval_service.py  唯讀讀取 chess-book-ai 的 positions.db（評估/雲庫勝率）
+  ├─ chessdb_service.py  即時查 chessdb.cn 雲庫（cache-first；寫 editor 自有快取）
   └─ (subprocess) pikafish  即時分析，execs 既有 binary，逐層 stream，不落地
         ▲
         └─ 唯讀共享資料：../chess-book-ai/output/positions.db、D:\Elton\TestArea\chess-book\
@@ -41,6 +42,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。 | app.py `analyze_line`；memory `project-ai-line-depth` |
 | **App shell 用 flex** | body flex column＋header 自動高＋main `flex:1`＋`overflow:hidden`；**勿寫死 header 高度**（曾因 `calc(100vh-52px)` 比實際矮而溢出產生捲軸）。 | editor.css `body`/`header`/`main` |
 | **positions.db 唯讀** | `?mode=ro` 開啟，永不 INSERT/UPDATE，檔案歸 AI repo 管。 | eval_service.py `_open_ro` |
+| **雲庫 cache-first＋自有快取** | 即時查 chessdb.cn 前先讀唯讀 positions.db→再讀 editor 自有 `output/editor_chessdb_cache.db`（**唯一可寫**的雲庫快取）→miss 才打網路並寫回。**禁寫 positions.db、禁碰 AI repo 的 chessdb_cache.json**。逐局面查（非整檔 batch）以守 chessdb 速率禮貌。 | chessdb_service.py `lookup`；CHESSDB_CLOUD_QUERY.md |
 | **著法字形** | 紅方：馬→傌 士→仕 象→相 車→俥 將→帥；**砲不換**（保留砲）。黑方：砲→包。 | xqf_service.py `_apply_side_glyphs` / board.js `PIECE_CHAR`(紅 C=砲) |
 | **FEN 兩段式** | 編輯器用 `<board> <w\|b>`，無回合計數。餵 pikafish 才補 ` - - 0 1` 成六段。漂移會讓 DB 命中率掉到 ~0%。 | xqf_service / app.py 分析前拼接 |
 | **分數＝紅方 POV cp** | cp 是行棋方 POV；紅方分＝cp×flip（黑行棋 flip=-1）。WDL 黑行棋時 W/L 互換。cp **不乘 100**（已驗證）。 | app.py `_parse_info_line` |
@@ -74,6 +76,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | `GET /api/eval/info` | `eval_info`:385 | DB 狀態（`db_info`） |
 | `POST /api/eval/pick-db` `/db` | `pick_eval_db_dialog`:395 / `set_eval_db`:440 | 選/設評估 DB |
 | `POST /api/eval/batch` | `eval_batch`:740 | 批量查 FEN 評估（`lookup_batch`） |
+| `GET /api/chessdb?fen=` | `chessdb_query` | 即時雲庫查（cache-first；`fresh=1` 跳快取重查）。回傳同 `cdb` 形狀＋`source` |
 | `GET /api/engine/info` | `engine_info`:517 | pikafish 設定 chip（`_get_pikafish`/`_pikafish_info`） |
 | `POST /api/engine/pick` `/path` | `pick_engine_dialog`:523 / `set_engine_path`:567 | 選/設引擎執行檔 |
 | `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:733 | 單局面即時分析串流；逐行解析 `_parse_info_line` |
@@ -100,6 +103,16 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 唯讀連線 | `_open_ro`:37 |
 | DB 狀態 | `db_info`:46 |
 | 批量 FEN 查詢 | `lookup_batch`:66（`_chunks`:114 分批） |
+
+### 雲庫即時查（backend/chessdb_service.py）
+
+| 功能 | 函式 |
+|---|---|
+| cache-first 解析（positions.db→自有快取→live；`fresh` 跳快取） | `lookup` |
+| 即時打 chessdb.cn（NUL guard／trim／錯誤狀態） | `query_chessdb` |
+| FEN 修剪成 `<position> <side>` | `trim_fen` |
+| 讀唯讀 positions.db chessdb 表 | `_read_positions_db` |
+| editor 自有可寫快取（建表/讀/寫） | `_ensure_cache`/`_read_cache`/`_write_cache` |
 
 ### 前端 — 棋盤渲染器（frontend/assets/board.js，共用、可漂移）
 
@@ -151,11 +164,24 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 畫單支箭頭（描邊+本體） / 編號徽章（最後畫=最上層） | `boardArrow`:1204 / `boardArrowBadge`:1247 |
 | 每主題箭頭色盤 / 取目前主題色 | `ARROW_THEMES`:1293 / `arrowPalette`:1302 |
 
-**評估列（唯讀，來自 positions.db）**
+**評估列（深度分數來自唯讀 positions.db；「雲」格獨立於 DB，可即時查）**
 | 功能 | 函式:行 |
 |---|---|
-| 取本檔評估 / 畫評估列 | `fetchEvalsForFile`:845 / `renderEvalLine`:908 |
+| 取本檔評估 / 畫評估列（深度格 gated on DB；雲格＋建議格獨立） | `fetchEvalsForFile`:845 / `renderEvalLine`:908 |
 | 分數格式 / 著法查詢 | `fmtEvalScore`:866 / `notationFor`:889 |
+
+**☁ 雲庫即時查（chessdb.cn）—— 雲庫 tab + 評估列「雲」格**
+| 功能 | 函式 |
+|---|---|
+| **查哪個局面**：分支點＝前一步（非走完本步之後）。同引擎「前一步」用的 `analysisFen` | `cdbFen` |
+| 導航時 lazy 查 `cdbFen()`（debounce 220ms；已有 cdb 即跳過） | `ensureCdbLive` |
+| 實際抓取（merge 進 `evalsByFen[cdbFen].cdb`；`fresh` 跳快取；失敗不快取以利重試） | `fetchCdbLive` |
+| 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳；標出目前所在變化 `.current`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
+| 點列＝在**分支點**加同層變化（非當前著的子著）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
+| 「重查」按鈕（`fresh=1` 跳快取重打 `cdbFen()`） | boot 段綁 `#cdbRefreshBtn` |
+
+> **為何查前一步**：雲庫列要呈現「該分支點上紅/黑可以怎麼走」（兵五進一及其替代著），而不是「走完本步後對手如何因應」。所以 cloud 一律 key 在 `cdbFen()`（前一步）；評估列的深度分數格仍 key 在 `currentFen()`（本局面靜態評估），兩者刻意不同 FEN。
+> 雲庫資料形狀＝後端 `cdb`（`{status,moves,best,source}`），與 `/api/eval/batch` 一致，故 batch 命中與即時查可共用 `renderEvalLine`/`renderCdbTab`。分數是行棋方 POV cp，顯示時 ×flip 轉紅方視角（同 `_parse_info_line` 慣例）。
 
 **即時引擎分析（SSE）—— 引擎分析 tab**
 | 功能 | 函式:行 |
@@ -217,7 +243,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | header（logo「棋鑑」/主題/視角/賽事/儲存） | h1 含 inline `.appLogo` SVG | metaBtn/saveBtn 在此 |
 | 檔案樹 pane | settingsBtn / newXqfBtn | |
 | 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | |
-| 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+引擎分析 |
+| 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`：`#cdbBar`+`#cdbList`)+引擎分析 |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
 
 ### 持久層（已驗證 46/46 round-trip）

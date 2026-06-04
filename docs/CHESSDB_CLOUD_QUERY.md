@@ -134,14 +134,23 @@ def query_chessdb(fen: str, timeout: int = 10) -> dict:
     return {'status': 'ok', 'moves': moves}
 ```
 
-## 8. 建議的 editor 整合（cache-first）
+## 8. editor 整合（cache-first）—— ✅ 已實作（2026-06-04）
 
-加一個 backend 端點，例如 `GET /api/chessdb?fen=...`：
+已落地為 `GET /api/chessdb?fen=...`（`backend/chessdb_service.py` `lookup`）：
 
 1. 先查 `positions.db` 的 `chessdb` 表（完整 FEN，miss 再試修剪 FEN）。
 2. 命中 → 直接回傳。
-3. Miss → `query_chessdb(fen)` 即時抓 → 回傳，並寫回一份本地快取（editor 自己的，別污染 ai repo 的 `chessdb_cache.json`，那是 ai 管線的來源檔）。
-4. 前端在「本步可選 / 著法面板」標出雲庫最佳著、勝率、與所選著法的雲庫分差，呼應 ai 站 traps/brilliants 的雲庫欄位。
+3. Miss → 查 editor **自有**快取 `output/editor_chessdb_cache.db`；再 miss 才
+   `query_chessdb(fen)` 即時抓 → 回傳並寫回**自有快取**（不寫唯讀 positions.db、
+   也不碰 ai repo 的 `chessdb_cache.json`）。`fresh=1` 可跳過兩層快取重打。
+4. 前端「☁ 雲庫」tab（`renderCdbTab`）列出全部雲庫著法（中文/勝率/紅POV分/★最佳），
+   並標出目前所在變化；點列＝`addCdbMove` 在分支點加同層變化或切換過去；棋盤下方
+   評估列「雲」格顯示分支點最佳著＋勝率。導航時 `ensureCdbLive` lazy 查（debounce 220ms）。
+   **查的是「前一步＝分支點」局面**（`cdbFen`，同引擎「前一步」），所以列出的是「該分支
+   可以怎麼走」（本著＋替代著），而非「走完本步後對手如何因應」。
+
+> 實作細節與設計原則見 [ARCHITECTURE.md](../ARCHITECTURE.md)（§2 雲庫 cache-first
+> 列、§3 chessdb_service 表）與 [CLAUDE.md](../CLAUDE.md)「Live cloud-library query」節。
 
 ## 9. ply 窗口（ai 管線策略，editor 可不照搬）
 

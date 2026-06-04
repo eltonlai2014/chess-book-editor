@@ -97,10 +97,18 @@
         <div id="rpVars" class="rpSection rpVars">
           <div class="rpTabs" role="tablist">
             <button id="rpTabVars"   class="rpTab active" data-tab="vars"   role="tab">本步的所有走法</button>
+            <button id="rpTabCdb"    class="rpTab"        data-tab="cdb"    role="tab">☁ 雲庫</button>
             <button id="rpTabEngine" class="rpTab"        data-tab="engine" role="tab">🐟 引擎分析</button>
           </div>
           <div id="rpVarsBody" class="rpTabBody" data-tab="vars">
             <div id="varPicker"></div>
+          </div>
+          <div id="rpCdbBody" class="rpTabBody" data-tab="cdb" hidden>
+            <div class="cdbBar">
+              <span id="cdbState" class="engineState">—</span>
+              <button id="cdbRefreshBtn" class="iconBtn" title="重新向 chessdb.cn 查詢本局面（略過快取）">⟳ 重查</button>
+            </div>
+            <div id="cdbList" class="cdbList"></div>
           </div>
           <div id="rpEngineBody" class="rpTabBody" data-tab="engine" hidden>
             <div class="engineBar">

@@ -91,6 +91,37 @@ for the full design and schema.
   `backend/test_eval_integration.py` measures hit rate against the DB and
   will tank to ~0% if either side's FEN serialiser drifts.
 
+## Live cloud-library query (chessdb.cn) (2026-06-04)
+
+The editor lets the user set up arbitrary positions, so `positions.db` (the
+read-only AI cache) misses most of them. `backend/chessdb_service.py` fills the
+gap with a **cache-first live lookup** of chessdb.cn, exposed as
+`GET /api/chessdb?fen=` (`fresh=1` skips caches and re-queries).
+
+- **Three-tier resolution**: read-only positions.db → editor's **own** writable
+  cache (`output/editor_chessdb_cache.db`) → live chessdb.cn (written back to
+  the editor cache). **Never write positions.db** (read-only, AI repo owns it)
+  and **never touch the AI repo's `chessdb_cache.json`** (its pipeline's source).
+  The editor cache is the only chessdb store this repo writes.
+- **Query per-position, not per-file.** The frontend (`ensureCdbLive`, debounced)
+  fires one request for the position you land on — NOT a batch over every FEN in
+  the file. That's deliberate: it honours chessdb's ~5 req/s politeness rule
+  (see `docs/CHESSDB_CLOUD_QUERY.md` §6). Don't "optimise" this into a bulk sweep.
+- **Cloud queries the BRANCH POINT (前一步), not the post-move position.** The
+  cloud list must show "what moves are playable at this decision" (the active
+  move + its alternatives), not "how the opponent replies to the move just
+  played". So cloud is keyed to `cdbFen()` (= `analysisFen`, one ply back) and
+  clicking a cloud move adds it as a *sibling* at the branch point
+  (`addCdbMove`→`insertMoveAt(branchPath,…)`), NOT a child of the active move.
+  The depth-eval cells in `#evalLine` stay on `currentFen()` (static eval of the
+  position as shown) — deliberately a different FEN from the 雲 cell.
+- **Return shape mirrors `eval_service`'s `cdb`** (`{status, moves, best,
+  source}`) so cached (batch) and live results share `renderEvalLine` /
+  `renderCdbTab`. Scores are mover-POV cp; UI flips to red POV for display.
+- **Known traps** (NUL byte, FEN trim to `<position> <side>`, http-not-https,
+  single-string error states) are handled in `query_chessdb` — see
+  `docs/CHESSDB_CLOUD_QUERY.md` for the why.
+
 ## Gotchas
 
 - **Don't `pip install --upgrade cchess` globally.** chess-book-ai uses the

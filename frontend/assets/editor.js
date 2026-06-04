@@ -22,6 +22,10 @@ const EDITOR = {
   // fetchEvalsForFile() after each selectFile. {fen -> {d12?,d22?,d28?,d32?,cdb?}}.
   // Empty object when the DB is missing or the file's FENs aren't in it.
   evalsByFen: {},
+  // Live chessdb.cn cloud-library lookup state. positions.db only covers the
+  // AI library; the editor queries chessdb.cn on navigation for whatever the
+  // user has on the board, merging results into evalsByFen[fen].cdb.
+  cdbLive: { fen: null, timer: null, loading: false, error: null },
   evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
   engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
@@ -226,6 +230,15 @@ function parseSquare(sq) {
 function currentFen() {
   if (!EDITOR.data) return null;
   return fenAndLastIccsFor(EDITOR.activePath).fen;
+}
+// The position whose cloud-library variations we show: the branch point the
+// active move was chosen FROM (one ply back), NOT the position after it.
+// chessdb returns the moves available at a position; we want THIS branch's
+// alternatives (兵五進一 and its siblings), not the opponent's replies to the
+// move just played. Same FEN the engine "前一步" analysis uses (analysisFen).
+function cdbFen() {
+  if (!EDITOR.data) return null;
+  return analysisFen();
 }
 function pieceAt(sq) {
   // Returns piece char (e.g. "R" / "k") or null if empty / no game loaded.
@@ -935,39 +948,55 @@ async function renderEvalLine() {
   if (!el) return;
   el.innerHTML = "";
   if (!EDITOR.data) return;
-  if (!EDITOR.evalDbInfo || !EDITOR.evalDbInfo.exists) {
-    el.innerHTML = `<span class="evalNote">引擎資料未連線</span>`;
-    return;
-  }
   const fen = currentFen();
-  const entry = EDITOR.evalsByFen[fen];
-  if (!entry || Object.keys(entry).length === 0) {
-    el.innerHTML = `<span class="evalNote">此局面未分析</span>`;
-    return;
-  }
+  const entry = EDITOR.evalsByFen[fen] || {};
 
   const cells = [];
-  for (const d of [12, 22, 28, 32]) {
-    const e = entry[`d${d}`];
-    if (!e) continue;
-    const suffix = (e.mate == null) ? `<span class="evalLabel"> 分</span>` : "";
-    cells.push(`<span class="evalCell"><span class="evalLabel">深${d}</span> <span class="evalScore">${fmtEvalScore(e, fen)}</span>${suffix}</span>`);
+  // --- engine eval cells (depth scores), gated on positions.db ---
+  const haveDb = EDITOR.evalDbInfo && EDITOR.evalDbInfo.exists;
+  let bestIccs = null;
+  if (haveDb) {
+    for (const d of [12, 22, 28, 32]) {
+      const e = entry[`d${d}`];
+      if (!e) continue;
+      const suffix = (e.mate == null) ? `<span class="evalLabel"> 分</span>` : "";
+      cells.push(`<span class="evalCell"><span class="evalLabel">深${d}</span> <span class="evalScore">${fmtEvalScore(e, fen)}</span>${suffix}</span>`);
+    }
+    // Prefer deepest available eval's best move for the suggestion line.
+    const deepest = entry.d32 || entry.d28 || entry.d22 || entry.d12;
+    bestIccs = deepest && deepest.best_iccs;
   }
-  // Prefer deepest available eval's best move for the suggestion line.
-  // Both 建議 and 雲庫 show the Chinese move notation (not the ICCS code),
-  // resolved async via /api/xqf/move-info (legal moves from this fen).
-  const deepest = entry.d32 || entry.d28 || entry.d22 || entry.d12;
-  const bestIccs = deepest && deepest.best_iccs;
+
+  // --- cloud-library cell (chessdb.cn) — keyed to the BRANCH POINT (前一步,
+  // cdbFen), not the post-move position, so 雲 shows the cloud's top move at
+  // this decision (comparable to 建議), not the opponent's reply. Independent
+  // of positions.db, so it shows even for user-set positions the engine DB has
+  // never seen. The Chinese notation is resolved async via /api/xqf/move-info.
+  let cdbIccs = null;
+  const cFen = cdbFen();
+  const cEntry = (cFen && EDITOR.evalsByFen[cFen]) || {};
+  const cl = EDITOR.cdbLive;
+  if (cEntry.cdb && cEntry.cdb.best) {
+    const b = cEntry.cdb.best;
+    cdbIccs = b.iccs;
+    const wr = b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—";
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${wr})</span>`);
+  } else if (cl.loading && cl.fen === cFen) {
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalNote">查詢中…</span></span>`);
+  } else if (cEntry.cdb && cEntry.cdb.status && cEntry.cdb.status !== "ok") {
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalNote">無資料</span></span>`);
+  }
+
   let bestHtml = "";
   if (bestIccs) {
     bestHtml = `<span class="evalCell evalBest"><span class="evalLabel">建議</span> <span class="evalMove" data-iccs="${bestIccs}">…</span></span>`;
   }
-  let cdbIccs = null;
-  if (entry.cdb && entry.cdb.best) {
-    const b = entry.cdb.best;
-    cdbIccs = b.iccs;
-    const wr = b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—";
-    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${wr})</span>`);
+
+  if (cells.length === 0 && !bestHtml) {
+    el.innerHTML = haveDb
+      ? `<span class="evalNote">此局面未分析</span>`
+      : `<span class="evalNote">引擎資料未連線</span>`;
+    return;
   }
   el.innerHTML = cells.join("") + bestHtml;
 
@@ -980,10 +1009,176 @@ async function renderEvalLine() {
     });
   }
   if (cdbIccs) {
-    notationFor(fen, cdbIccs).then((notation) => {
+    notationFor(cFen, cdbIccs).then((notation) => {
       const span = el.querySelector(`.evalMove[data-cdb-iccs="${cdbIccs}"]`);
       if (span) span.textContent = notation || cdbIccs;
     });
+  }
+}
+
+// ---------- live chessdb.cn cloud-library lookup ----------
+// positions.db only covers the AI library; the editor lets the user set up
+// any position, so on navigation we lazily query chessdb.cn for the current
+// FEN and merge the result into evalsByFen[fen].cdb. Cache-first server-side
+// (positions.db → editor cache → live), debounced here so fast arrow-key
+// paging fires one request for the position you land on, not every step.
+
+function ensureCdbLive(fen) {
+  if (!fen || !EDITOR.data) return;
+  clearTimeout(EDITOR.cdbLive.timer);
+  const entry = EDITOR.evalsByFen[fen];
+  if (entry && entry.cdb) {            // already have it (batch or prior fetch)
+    EDITOR.cdbLive.loading = false;
+    EDITOR.cdbLive.error = null;
+    renderCdbTab();
+    return;
+  }
+  EDITOR.cdbLive.fen = fen;
+  EDITOR.cdbLive.loading = true;
+  EDITOR.cdbLive.error = null;
+  renderCdbTab();                       // show 查詢中…
+  renderEvalLine();                     // evalLine 雲 cell → 查詢中…
+  EDITOR.cdbLive.timer = setTimeout(() => fetchCdbLive(fen, false), 220);
+}
+
+async function fetchCdbLive(fen, fresh) {
+  if (!fen) return;
+  EDITOR.cdbLive.fen = fen;
+  EDITOR.cdbLive.loading = true;
+  EDITOR.cdbLive.error = null;
+  renderCdbTab();
+  try {
+    const r = await fetch(
+      "/api/chessdb?fen=" + encodeURIComponent(fen) + (fresh ? "&fresh=1" : ""));
+    const body = await r.json();
+    if (body.status === "error") throw new Error(body.error || "查詢失敗");
+    if (body.error && !body.status) throw new Error(body.error);
+    if (!EDITOR.evalsByFen[fen]) EDITOR.evalsByFen[fen] = {};
+    EDITOR.evalsByFen[fen].cdb = {
+      status: body.status,
+      moves: body.moves || [],
+      best: body.best || null,
+      source: body.source,
+    };
+  } catch (e) {
+    // Don't cache transient failures into evalsByFen — leave it absent so the
+    // next visit (or 重查) retries instead of sticking on "查詢失敗".
+    EDITOR.cdbLive.error = e.message || "網路錯誤";
+  } finally {
+    EDITOR.cdbLive.loading = false;
+    if (cdbFen() === fen) { renderCdbTab(); renderEvalLine(); }
+  }
+}
+
+// Map chessdb non-ok statuses to a human label for the 雲庫 tab.
+const CDB_STATUS_LABEL = {
+  unknown: "雲庫尚無此局面",
+  "invalid board": "局面不合法",
+  checkmate: "已將死",
+  stalemate: "已困斃",
+  nobestmove: "無著可走",
+  error: "查詢失敗",
+};
+
+function renderCdbTab() {
+  const list = $("#cdbList");
+  const stateEl = $("#cdbState");
+  if (!list) return;
+  const setState = (t) => { if (stateEl) stateEl.textContent = t; };
+  if (!EDITOR.data) { list.innerHTML = ""; setState("—"); return; }
+  const fen = cdbFen();   // branch point (前一步) — see cdbFen() / ensureCdbLive
+  const entry = fen && EDITOR.evalsByFen[fen];
+  const cdb = entry && entry.cdb;
+  const cl = EDITOR.cdbLive;
+  // The move actually taken from this branch point (so we can mark it in the
+  // cloud list — "you are on this variation"). null at the initial position.
+  const activeNode = nodeAt(EDITOR.activePath);
+  const activeIccs = activeNode ? activeNode.iccs : null;
+
+  if (!cdb) {
+    if (cl.loading && cl.fen === fen) {
+      setState("查詢中…");
+      list.innerHTML = `<div class="cdbEmpty">向 chessdb.cn 查詢中…</div>`;
+    } else if (cl.error && cl.fen === fen) {
+      setState("查詢失敗");
+      list.innerHTML = `<div class="cdbEmpty cdbErr">查詢失敗：${cl.error}</div>`;
+    } else {
+      setState("—");
+      list.innerHTML = `<div class="cdbEmpty">尚無雲庫資料</div>`;
+    }
+    return;
+  }
+
+  const moves = cdb.moves || [];
+  if (cdb.status !== "ok" || moves.length === 0) {
+    const label = CDB_STATUS_LABEL[cdb.status] || "雲庫無資料";
+    setState(label);
+    list.innerHTML = `<div class="cdbEmpty">${label}</div>`;
+    return;
+  }
+
+  const side = (fen.trim().split(/\s+/)[1]) || "w";
+  const flip = side === "b" ? -1 : 1;
+  const srcLabel = { db: "庫", cache: "快取", live: "即時" }[cdb.source] || "";
+  setState(`${moves.length} 個著法${srcLabel ? "・" + srcLabel : ""}`);
+
+  list.innerHTML = "";
+  moves.forEach((m, i) => {
+    const sRed = m.score == null ? null : Math.round(m.score * flip);
+    const sTxt = sRed == null ? "?" : (sRed > 0 ? "+" : "") + sRed;
+    const wr = m.winrate == null ? "—" : m.winrate.toFixed(1) + "%";
+    const isCurrent = activeIccs && m.iccs === activeIccs;
+    const row = document.createElement("div");
+    row.className = "cdbOpt" + (i === 0 ? " best" : "") + (isCurrent ? " current" : "");
+    row.innerHTML =
+      `<span class="cdbRank">${i === 0 ? "★" : i + 1}</span>` +
+      `<span class="cdbMove" data-iccs="${m.iccs}">…</span>` +
+      `<span class="cdbWr">${wr}</span>` +
+      `<span class="cdbScore ${deltaSignClass(sRed)}">${sTxt}</span>` +
+      (isCurrent ? `<span class="cdbHere" title="目前所在變化">←</span>` : "");
+    row.title = `${m.iccs}　雲庫分 ${sTxt}（紅方視角）　勝率 ${wr}`
+      + (m.note ? `　${m.note}` : "")
+      + (isCurrent ? `\n目前所在變化` : `\n點擊：加入此分支／切換至此著`);
+    row.onclick = () => addCdbMove(m.iccs);
+    list.appendChild(row);
+    notationFor(fen, m.iccs).then((n) => {
+      const span = row.querySelector(`.cdbMove[data-iccs="${m.iccs}"]`);
+      if (span) span.textContent = n || m.iccs;
+    });
+  });
+}
+
+// Add a cloud-library move as a variation AT THE BRANCH POINT (前一步), i.e. a
+// sibling of the active move — NOT a child of it. The cloud list is the set of
+// moves playable from cdbFen(); clicking one means "also try this here". If the
+// move already exists among the branch's continuations, insertMoveAt navigates
+// to it instead of duplicating.
+async function addCdbMove(iccs) {
+  const fen = cdbFen();
+  if (!fen) return;
+  const branchPath = EDITOR.activePath.length ? EDITOR.activePath.slice(0, -1) : [];
+  setStatus("驗證走法…");
+  try {
+    const r = await fetch("/api/xqf/move-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, iccs }),
+    });
+    const resp = await r.json();
+    if (resp.error) { setStatus(resp.error, "err"); return; }
+    const outcome = await insertMoveAt(branchPath, {
+      iccs,
+      notation: resp.notation,
+      side: resp.side,
+      ply: branchPath.length + 1,
+      annote: "",
+      children: [],
+    });
+    if (outcome === "added") setStatus(`已加入分支 ${resp.notation}`, "ok");
+    else if (outcome === "existing") setStatus(`已切換至 ${resp.notation}`, "ok");
+    else setStatus("");  // cancelled
+  } catch (e) {
+    setStatus("新增失敗：" + e.message, "err");
   }
 }
 
@@ -1201,6 +1396,7 @@ function refreshActive() {
   $("#navLast").disabled = !next;
 
   renderEvalLine();
+  ensureCdbLive(cdbFen());   // lazy chessdb.cn lookup for the branch point (前一步)
   if (EDITOR.aiAnalysis.points.length) renderAiView();   // move the trend cursor
 }
 
@@ -1835,6 +2031,7 @@ const ICON = {
   search: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   chart: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
   note: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>',
+  cloud: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 9.5 4 4 0 0 0 7 17.5"/></svg>',
 };
 function iconLabel(icon, label) {
   return (ICON[icon] || "") + `<span>${label}</span>`;
@@ -2605,7 +2802,11 @@ $("#engineCurBtn").innerHTML = iconLabel("search", "本步");
 $("#engineClearBtn").innerHTML = iconLabel("trash", "清除");
 $("#engineExportBtn").innerHTML = iconLabel("clipboard", "導出");
 $("#rpTabVars").innerHTML = iconLabel("branch", "走法");
+$("#rpTabCdb").innerHTML = iconLabel("cloud", "雲庫");
 $("#rpTabEngine").innerHTML = iconLabel("cpu", "引擎分析");
+// 雲庫 tab: 重查 forces a fresh chessdb.cn query (skips both caches) of the
+// branch point (前一步), matching what the tab shows.
+$("#cdbRefreshBtn").onclick = () => { const f = cdbFen(); if (f) fetchCdbLive(f, true); };
 $("#anTabAnnote").innerHTML = iconLabel("note", "注解");
 $("#anTabAi").innerHTML = iconLabel("chart", "AI分析");
 // Unify the rest of the system's buttons on the same icon set.
