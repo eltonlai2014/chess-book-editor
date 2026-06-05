@@ -1,18 +1,21 @@
 <!doctype html>
 <html lang="zh-Hant" data-board="traditional">
+
 <head>
   <meta charset="utf-8">
   <title>棋鑑 — 象棋譜分析</title>
-  <link rel="stylesheet" href="/assets/editor.css">
+  <link rel="stylesheet" href="/assets/editor.css?v=10">
 </head>
+
 <body>
   <header>
     <h1>
       <svg class="appLogo" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="2"/>
-        <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="1" opacity="0.45"/>
-        <polyline points="9 20 13.5 15 17.5 18 23 10.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="23" cy="10.5" r="1.7" fill="currentColor"/>
+        <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="2" />
+        <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="1" opacity="0.45" />
+        <polyline points="9 20 13.5 15 17.5 18 23 10.5" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="23" cy="10.5" r="1.7" fill="currentColor" />
       </svg>棋鑑
     </h1>
     <div class="actions">
@@ -51,11 +54,11 @@
       <h2 id="fileTitle">尚未載入</h2>
       <svg id="board" viewBox="0 0 540 600" width="540" height="600"></svg>
       <div id="navBar">
-        <button id="navFirst"  title="回開局 (Home)">|◀</button>
-        <button id="navPrev"   title="上一步 (←)">◀</button>
+        <button id="navFirst" title="回開局 (Home)">|◀</button>
+        <button id="navPrev" title="上一步 (←)">◀</button>
         <button id="navBranch" title="回到上一個分支點 (B)">⎇ 分支</button>
-        <button id="navNext"   title="下一步 (→)">▶</button>
-        <button id="navLast"   title="最末步 (End)">▶|</button>
+        <button id="navNext" title="下一步 (→)">▶</button>
+        <button id="navLast" title="最末步 (End)">▶|</button>
         <span id="moveInfo"></span>
       </div>
       <div id="evalLine" title="來自 chess-book-ai 的引擎評估（唯讀）"></div>
@@ -64,6 +67,7 @@
       <div id="rpMoves" class="rpSection rpMoves">
         <h2 class="panelHead">
           <span>棋譜</span>
+          <button id="exportGifBtn" class="iconBtn" title="把目前主線匯出成動畫 GIF">🎬</button>
           <button id="navDelete" class="danger iconBtn" title="刪除目前走法及其後續 (Delete)">🗑</button>
         </h2>
         <div id="moveList"></div>
@@ -73,7 +77,7 @@
         <div id="rpAnnote" class="rpSection rpAnnote">
           <div class="rpTabs" role="tablist">
             <button id="anTabAnnote" class="rpTab active" data-tab="annote" role="tab">注解</button>
-            <button id="anTabAi"     class="rpTab"        data-tab="ai"     role="tab">AI分析</button>
+            <button id="anTabAi" class="rpTab" data-tab="ai" role="tab">AI分析</button>
             <div id="aiBar" class="aiBar" hidden>
               <button id="aiAnalyzeBtn" class="iconBtn" title="用皮卡魚在設定層數下，逐步分析目前分支每個局面並畫出走勢圖">分析本分支</button>
               <label class="aiDualToggle" title="同時用第二（較深）層數分析，標出深淺分歧的步（層數與門檻在 ⚙ 設定）">
@@ -96,10 +100,10 @@
         <div class="splitter splitter-h" data-resize="rpAnnote" data-pref="splitAnnoteH" data-direction="row"></div>
         <div id="rpVars" class="rpSection rpVars">
           <div class="rpTabs" role="tablist">
-            <button id="rpTabVars"    class="rpTab active" data-tab="vars"    role="tab">本步的所有走法</button>
-            <button id="rpTabCdb"     class="rpTab"        data-tab="cdb"     role="tab">☁ 雲庫</button>
-            <button id="rpTabCdbLine" class="rpTab"        data-tab="cdbline" role="tab">☁ 雲庫演繹</button>
-            <button id="rpTabEngine"  class="rpTab"        data-tab="engine"  role="tab">🐟 引擎分析</button>
+            <button id="rpTabVars" class="rpTab active" data-tab="vars" role="tab">本步的所有走法</button>
+            <button id="rpTabCdb" class="rpTab" data-tab="cdb" role="tab">☁ 雲庫</button>
+            <button id="rpTabCdbLine" class="rpTab" data-tab="cdbline" role="tab">☁ 雲庫演繹</button>
+            <button id="rpTabEngine" class="rpTab" data-tab="engine" role="tab">🐟 引擎分析</button>
           </div>
           <div id="rpVarsBody" class="rpTabBody" data-tab="vars">
             <div id="varPicker"></div>
@@ -113,7 +117,8 @@
           </div>
           <div id="rpCdbLineBody" class="rpTabBody" data-tab="cdbline" hidden>
             <div class="engineBar">
-              <button id="cdbLineRunBtn" class="iconBtn engineToggle" title="從本局面起，雙方都走雲庫最佳著，逐步推演一條主線（步數見 ⚙ 設定）">▶ 演繹</button>
+              <button id="cdbLineRunBtn" class="iconBtn engineToggle" title="從本局面起，雙方都走雲庫最佳著，逐步推演一條主線（步數見 ⚙ 設定）">▶
+                演繹</button>
               <button id="cdbLineDemoBtn" class="iconBtn" title="在彈出棋盤上演示這條雲庫主線" disabled>▷ 演示</button>
               <button id="cdbLineAddBtn" class="iconBtn" title="把這條雲庫主線加入棋譜分支" disabled>⎘ 加入</button>
               <span id="cdbLineState" class="engineState">尚未演繹</span>
@@ -138,7 +143,8 @@
   <input type="checkbox" id="redPerspective" checked style="display:none">
 
   <div id="confirmModal" class="modal confirmModal" hidden>
-    <div class="modalDialog confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="modalDialog confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle"
+      aria-describedby="confirmMessage">
       <h3 id="confirmTitle">請確認</h3>
       <div id="confirmMessage" class="confirmMessage"></div>
       <div class="modalActions confirmActions">
@@ -196,15 +202,16 @@
        touching the move tree (use 加入 for that). -->
   <div id="demoModal" class="modal" hidden>
     <div class="modalDialog demoDialog" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
-      <h3 id="demoTitle"><span>變化例演示</span><button id="demoClose" class="modalClose" aria-label="關閉" title="關閉">✕</button></h3>
+      <h3 id="demoTitle"><span>變化例演示</span><button id="demoClose" class="modalClose" aria-label="關閉"
+          title="關閉">✕</button></h3>
       <svg id="demoBoard" viewBox="0 0 540 600" width="414" height="460"></svg>
       <div id="demoMoveInfo" class="demoMoveInfo">起始局面</div>
       <div class="demoControls">
         <button id="demoFirst" class="iconBtn" title="回起點">⏮</button>
-        <button id="demoPrev"  class="iconBtn" title="上一步">◀</button>
-        <button id="demoPlay"  class="iconBtn" title="自動播放 / 暫停"></button>
-        <button id="demoNext"  class="iconBtn" title="下一步">▶</button>
-        <button id="demoLast"  class="iconBtn" title="到結尾">⏭</button>
+        <button id="demoPrev" class="iconBtn" title="上一步">◀</button>
+        <button id="demoPlay" class="iconBtn" title="自動播放 / 暫停"></button>
+        <button id="demoNext" class="iconBtn" title="下一步">▶</button>
+        <button id="demoLast" class="iconBtn" title="到結尾">⏭</button>
         <label class="demoInterval">間隔
           <input id="demoInterval" type="number" min="0.2" max="10" step="0.1" value="2"> 秒
         </label>
@@ -216,54 +223,81 @@
        classes preserved so the existing render/picker JS works unchanged. -->
   <div id="settingsModal" class="modal" hidden>
     <div class="modalDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <h3 id="settingsTitle"><span>設定</span><button id="settingsCloseX" class="modalClose" aria-label="關閉" title="關閉">✕</button></h3>
+      <h3 id="settingsTitle"><span>設定</span><button id="settingsCloseX" class="modalClose" aria-label="關閉"
+          title="關閉">✕</button></h3>
       <div class="settingsForm">
-        <div class="settingRow">
-          <label>棋譜根目錄</label>
-          <div class="rootPath">
-            <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
-            <button id="rootPickBtn" title="選擇目錄…">📁</button>
+        <section class="settingsGroup">
+          <h4 class="settingsGroupTitle">資料來源</h4>
+          <div class="settingRow">
+            <label>棋譜根目錄</label>
+            <div class="rootPath">
+              <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
+              <button id="rootPickBtn" title="選擇目錄…">📁</button>
+            </div>
           </div>
-        </div>
-        <div class="settingRow">
-          <label>評估資料庫（唯讀）</label>
-          <div class="evalDbRow evalDbRowSide">
-            <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
-            <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
+          <div class="settingRow">
+            <label>評估資料庫（唯讀）</label>
+            <div class="evalDbRow evalDbRowSide">
+              <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
+              <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
+            </div>
           </div>
-        </div>
-        <div class="settingRow">
-          <label>皮卡魚引擎（即時分析）</label>
-          <div class="evalDbRow evalDbRowSide engineRowSide">
-            <span id="enginePath" title="皮卡魚引擎執行檔位置（即時分析用）">🐟 載入中…</span>
-            <button id="enginePickBtn" class="iconBtn" title="選擇皮卡魚引擎執行檔…">📁</button>
+          <div class="settingRow">
+            <label>皮卡魚引擎（即時分析）</label>
+            <div class="evalDbRow evalDbRowSide engineRowSide">
+              <span id="enginePath" title="皮卡魚引擎執行檔位置（即時分析用）">🐟 載入中…</span>
+              <button id="enginePickBtn" class="iconBtn" title="選擇皮卡魚引擎執行檔…">📁</button>
+            </div>
           </div>
-        </div>
-        <div class="settingRow">
-          <label>AI 分析層數（走勢圖；層數越高越慢越準）</label>
-          <input id="aiDepthInput" type="number" min="1" max="30" step="1" value="12"
-                 title="「分析本分支」逐步分析每個局面所用的皮卡魚搜尋深度">
-        </div>
-        <div class="settingRow">
-          <label>AI 第二分析層數（雙深度比對；建議比上者深）</label>
-          <input id="aiDepth2Input" type="number" min="1" max="30" step="1" value="20"
-                 title="勾選「雙深度」時的第二（較深）搜尋深度。一次深算同時取得兩個深度的分數">
-        </div>
-        <div class="settingRow">
-          <label>雙深度分歧門檻（cp；超過即標記該步）</label>
-          <input id="aiDiffThreshInput" type="number" min="0" max="2000" step="10" value="200"
-                 title="兩個深度的分數相差超過此值時，於走勢圖該步標出警示符號">
-        </div>
-        <div class="settingRow">
-          <label>雲庫演繹步數（沿雲庫最佳著推演的最大步數）</label>
-          <input id="cdbLineDepthInput" type="number" min="1" max="30" step="1" value="12"
-                 title="「☁ 雲庫演繹」最多往前推幾步；雲庫無資料時會提前停止">
-        </div>
-        <div class="settingRow">
-          <label>雲庫演繹查詢間隔（ms；僅即時查時等待）</label>
-          <input id="cdbLineThrottleInput" type="number" min="100" max="2000" step="50" value="250"
-                 title="演繹時每次「即時查 chessdb.cn」之間的等待毫秒數（快取命中不等）。越小越快但越可能被 chessdb 限流；保守值 250">
-        </div>
+        </section>
+
+        <section class="settingsGroup">
+          <h4 class="settingsGroupTitle">引擎分析</h4>
+          <div class="settingGrid">
+            <div class="settingRow">
+              <label title="「分析本分支」逐步分析每個局面所用的皮卡魚搜尋深度。層數越高越慢越準">AI 分析層數</label>
+              <input id="aiDepthInput" type="number" min="1" max="30" step="1" value="12"
+                title="「分析本分支」逐步分析每個局面所用的皮卡魚搜尋深度">
+            </div>
+            <div class="settingRow">
+              <label title="勾選「雙深度」時的第二（較深）搜尋深度，建議比上者深。一次深算同時取得兩個深度的分數">AI 第二層數</label>
+              <input id="aiDepth2Input" type="number" min="1" max="30" step="1" value="20"
+                title="勾選「雙深度」時的第二（較深）搜尋深度。一次深算同時取得兩個深度的分數">
+            </div>
+            <div class="settingRow">
+              <label title="兩個深度的分數相差超過此值時，於走勢圖該步標出警示符號">分歧門檻（cp）</label>
+              <input id="aiDiffThreshInput" type="number" min="0" max="2000" step="10" value="200"
+                title="兩個深度的分數相差超過此值時，於走勢圖該步標出警示符號">
+            </div>
+          </div>
+        </section>
+
+        <section class="settingsGroup">
+          <h4 class="settingsGroupTitle">雲庫演繹</h4>
+          <div class="settingGrid">
+            <div class="settingRow">
+              <label title="「☁ 雲庫演繹」最多往前推幾步；雲庫無資料時會提前停止">演繹步數</label>
+              <input id="cdbLineDepthInput" type="number" min="1" max="30" step="1" value="12"
+                title="「☁ 雲庫演繹」最多往前推幾步；雲庫無資料時會提前停止">
+            </div>
+            <div class="settingRow">
+              <label title="演繹時每次「即時查 chessdb.cn」之間的等待毫秒數（快取命中不等）。越小越快但越可能被 chessdb 限流；保守值 250">查詢間隔（ms）</label>
+              <input id="cdbLineThrottleInput" type="number" min="100" max="2000" step="50" value="250"
+                title="演繹時每次「即時查 chessdb.cn」之間的等待毫秒數（快取命中不等）。越小越快但越可能被 chessdb 限流；保守值 250">
+            </div>
+          </div>
+        </section>
+
+        <section class="settingsGroup">
+          <h4 class="settingsGroupTitle">匯出動畫</h4>
+          <div class="settingGrid">
+            <div class="settingRow">
+              <label title="🎬 匯出 GIF 時每一手停留的秒數（最後一手會自動停久一點）">影格間隔（秒）</label>
+              <input id="gifDelayInput" type="number" min="0.2" max="5" step="0.05" value="0.65"
+                title="🎬 匯出 GIF 時每一手停留的秒數（最後一手會自動停久一點）">
+            </div>
+          </div>
+        </section>
       </div>
       <div class="modalActions">
         <button id="settingsClose" class="primary">完成</button>
@@ -272,5 +306,8 @@
   </div>
   <script src="/assets/board.js"></script>
   <script src="/assets/editor.js"></script>
+  <script src="/assets/gifenc.global.js"></script>
+  <script src="/assets/gifexport.js"></script>
 </body>
+
 </html>

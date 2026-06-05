@@ -9,56 +9,69 @@
 
 :root {
   /* Surfaces — warm-dark, neutral but tinted slightly brown to match wood themes */
-  --bg-0:   #15130f;   /* outermost / chrome */
-  --bg-1:   #1d1a16;   /* main background */
-  --bg-2:   #25211c;   /* panel surface */
-  --bg-3:   #2f2a23;   /* panel header / chip */
-  --bg-4:   #3a342c;   /* hover */
+  --bg-0: #15130f;
+  /* outermost / chrome */
+  --bg-1: #1d1a16;
+  /* main background */
+  --bg-2: #25211c;
+  /* panel surface */
+  --bg-3: #2f2a23;
+  /* panel header / chip */
+  --bg-4: #3a342c;
+  /* hover */
 
   /* Lines */
-  --line:   #3a342c;
+  --line: #3a342c;
   --line-strong: #4a4237;
 
   /* Text */
-  --text:        #ebe3d4;
-  --text-muted:  #a8a094;
-  --text-faint:  #6e675c;
+  --text: #ebe3d4;
+  --text-muted: #a8a094;
+  --text-faint: #6e675c;
 
   /* Accents — `*-rgb` triples mirror `*` hex values for use in rgba(). Change
      both when retuning a theme; they're a pair. */
-  --accent:            #d4a043;   /* gold (gilded board) */
-  --accent-rgb:        212, 160, 67;
-  --accent-strong:     #e8b75c;
+  --accent: #d4a043;
+  /* gold (gilded board) */
+  --accent-rgb: 212, 160, 67;
+  --accent-strong: #e8b75c;
   --accent-strong-rgb: 232, 183, 92;
-  --accent-soft:       rgba(var(--accent-rgb), 0.15);
-  --red:               #c0392b;   /* cinnabar (red side) */
-  --info:              #5fa8d6;   /* selected highlight */
-  --ok:                #7ec47e;
-  --err:               #d97070;
-  --err-rgb:           217, 112, 112;
+  --accent-soft: rgba(var(--accent-rgb), 0.15);
+  --red: #c0392b;
+  /* cinnabar (red side) */
+  --info: #5fa8d6;
+  /* selected highlight */
+  --ok: #7ec47e;
+  --err: #d97070;
+  --err-rgb: 217, 112, 112;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.35);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
 
   --radius-sm: 3px;
-  --radius:    5px;
+  --radius: 5px;
   --radius-lg: 8px;
 
   /* === Layout magic numbers ===
      Centralised here so the panel-header negative-margin trick (calc the
      side margin = -(--rp-pad-x), right adds --scrollbar-w to span the gutter)
      stays in sync if any one value moves. */
-  --rp-pad-x:       14px;    /* .rpSection horizontal padding */
-  --rp-pad-y:       12px;    /* .rpSection vertical padding */
-  --board-pad-x:    12px;    /* #boardPane horizontal padding */
-  --header-pad-x:   16px;    /* inset between section border and header text */
-  --scrollbar-w:    10px;    /* matches *::-webkit-scrollbar { width: 10px } */
+  --rp-pad-x: 14px;
+  /* .rpSection horizontal padding */
+  --rp-pad-y: 12px;
+  /* .rpSection vertical padding */
+  --board-pad-x: 12px;
+  /* #boardPane horizontal padding */
+  --header-pad-x: 16px;
+  /* inset between section border and header text */
+  --scrollbar-w: 10px;
+  /* matches *::-webkit-scrollbar { width: 10px } */
 
   /* === Button system tokens === */
-  --btn-radius:       8px;
-  --btn-transition:   background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
-  --btn-glass-bg:     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  --btn-radius: 8px;
+  --btn-transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+  --btn-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
   --btn-gold-hover-bg: linear-gradient(180deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.06));
   --btn-danger-hover-bg: linear-gradient(180deg, rgba(var(--err-rgb), 0.18), rgba(var(--err-rgb), 0.08));
 }
@@ -177,8 +190,12 @@ html[data-ui-theme="pineash"] {
   --info: #8fb2bf;
 }
 
-* { box-sizing: border-box; }
-html, body {
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
   margin: 0;
   height: 100%;
   font-family:
@@ -191,20 +208,35 @@ html, body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
 /* Fixed full-height app shell: header auto-height + main fills the rest, so
    there's no hardcoded header-height assumption to overflow the viewport
    (that was producing a stray right-side page scrollbar). */
-body { display: flex; flex-direction: column; overflow: hidden; }
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
 /* ---------- scrollbars ---------- */
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 *::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 5px;
   border: 2px solid var(--bg-1);
 }
-*::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+}
 
 /* ===== Button system =================================================
    Three intents — primary / outline / ghost — share the rules below.
@@ -234,6 +266,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   cursor: pointer;
   transition: var(--btn-transition);
 }
+
 #saveBtn:not(:disabled):hover,
 .modalActions button.primary:hover:not(:disabled) {
   background: var(--accent-strong);
@@ -254,16 +287,24 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   font-weight: 500;
   transition: var(--btn-transition);
 }
+
 .actions button:hover:not(:disabled),
 .modalActions button:hover:not(:disabled) {
   background: var(--bg-4);
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
 .actions button:active:not(:disabled),
-.modalActions button:active:not(:disabled) { background: var(--bg-2); }
+.modalActions button:active:not(:disabled) {
+  background: var(--bg-2);
+}
+
 .actions button:disabled,
-.modalActions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.modalActions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* --- Ghost (transparent + glass + faint gold border) --- */
 #navBar button,
@@ -279,6 +320,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   line-height: 1;
   transition: var(--btn-transition);
 }
+
 #navBar button:hover:not(:disabled),
 .iconBtn:hover:not(:disabled):not(.danger),
 .rootPath #rootPickBtn:hover:not(:disabled),
@@ -289,10 +331,15 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-color: rgba(var(--accent-strong-rgb), 0.24);
   transform: translateY(-1px);
 }
+
 #navBar button:disabled,
 .iconBtn:disabled,
 .rootPath #rootPickBtn:disabled,
-.evalDbRowSide #evalDbPickBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.evalDbRowSide #evalDbPickBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 #navBar button:active:not(:disabled) {
   background: rgba(var(--accent-rgb), 0.10);
   color: var(--accent);
@@ -306,6 +353,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-color: rgba(var(--err-rgb), 0.40);
   transform: translateY(-1px);
 }
+
 .iconBtn.danger:active:not(:disabled) {
   background: rgba(var(--err-rgb), 0.18);
   color: var(--err);
@@ -324,6 +372,7 @@ header {
   flex: 0 0 auto;
   z-index: 2;
 }
+
 header h1 {
   display: flex;
   align-items: center;
@@ -334,25 +383,44 @@ header h1 {
   color: var(--text);
   letter-spacing: 0.04em;
 }
-.appLogo { width: 22px; height: 22px; color: var(--accent); flex: 0 0 auto; }
+
+.appLogo {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  flex: 0 0 auto;
+}
 
 /* .actions = header right-side controls (theme picker, view toggle, meta /
    save buttons, status). Button styling lives in the button system above. */
-.actions { display: flex; gap: 14px; align-items: center; }
+.actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
 
 .boardThemePicker {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
+
 .boardThemePicker select {
-  background: var(--bg-3); color: var(--text);
+  background: var(--bg-3);
+  color: var(--text);
   border: 1px solid var(--line-strong);
-  padding: 5px 10px; border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   cursor: pointer;
   transition: border-color 120ms ease;
 }
-.boardThemePicker select:hover { border-color: var(--accent); }
+
+.boardThemePicker select:hover {
+  border-color: var(--accent);
+}
 
 .viewToggle {
   position: relative;
@@ -361,11 +429,13 @@ header h1 {
   cursor: pointer;
   user-select: none;
 }
+
 .viewToggle input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
+
 .viewToggleTrack {
   display: inline-flex;
   align-items: center;
@@ -375,10 +445,14 @@ header h1 {
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: linear-gradient(180deg, var(--bg-3), var(--bg-2));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
-.viewToggle:hover .viewToggleTrack { border-color: var(--accent); }
+
+.viewToggle:hover .viewToggleTrack {
+  border-color: var(--accent);
+}
+
 .viewToggleText {
   font-size: 12px;
   font-weight: 600;
@@ -387,27 +461,32 @@ header h1 {
   text-align: center;
   transition: color 120ms ease;
 }
+
 .viewToggleThumb {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: radial-gradient(circle at 34% 34%, rgba(255,244,220,0.52), rgba(255,244,220,0.10) 42%, transparent 62%), linear-gradient(180deg, #dbc07c, #9d7940);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.24), inset 0 1px 1px rgba(255,255,255,0.12);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: radial-gradient(circle at 34% 34%, rgba(255, 244, 220, 0.52), rgba(255, 244, 220, 0.10) 42%, transparent 62%), linear-gradient(180deg, #dbc07c, #9d7940);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24), inset 0 1px 1px rgba(255, 255, 255, 0.12);
   transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
-.viewToggle input:not(:checked) + .viewToggleTrack .viewToggleText:first-child {
+
+.viewToggle input:not(:checked)+.viewToggleTrack .viewToggleText:first-child {
   color: var(--accent-strong);
 }
-.viewToggle input:checked + .viewToggleTrack .viewToggleText:last-child {
+
+.viewToggle input:checked+.viewToggleTrack .viewToggleText:last-child {
   color: #b9ddf0;
 }
-.viewToggle input:checked + .viewToggleTrack .viewToggleThumb {
-  border-color: rgba(255,255,255,0.08);
-  background: radial-gradient(circle at 34% 34%, rgba(234,244,248,0.42), rgba(234,244,248,0.10) 42%, transparent 62%), linear-gradient(180deg, #8aa3b1, #54636f);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.26), inset 0 1px 1px rgba(255,255,255,0.10);
+
+.viewToggle input:checked+.viewToggleTrack .viewToggleThumb {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 34% 34%, rgba(234, 244, 248, 0.42), rgba(234, 244, 248, 0.10) 42%, transparent 62%), linear-gradient(180deg, #8aa3b1, #54636f);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.26), inset 0 1px 1px rgba(255, 255, 255, 0.10);
 }
-.viewToggle input:focus-visible + .viewToggleTrack {
+
+.viewToggle input:focus-visible+.viewToggleTrack {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -419,8 +498,15 @@ header h1 {
   font-variant: small-caps;
   letter-spacing: 0.04em;
 }
-#status.ok  { color: var(--ok);  }
-#status.err { color: var(--err); }
+
+#status.ok {
+  color: var(--ok);
+}
+
+#status.err {
+  color: var(--err);
+}
+
 #status:not(:empty)::before {
   content: "●";
   margin-right: 6px;
@@ -443,28 +529,48 @@ main {
     radial-gradient(circle at top center, rgba(var(--accent-rgb), 0.05), transparent 38%),
     linear-gradient(180deg, #191611 0%, var(--bg-1) 100%);
 }
-#filePane  { flex: 0 0 250px; min-width: 180px; }
-#boardPane { flex: 0 0 568px; }
-#rightPane { flex: 1 1 0; min-width: 320px; display: flex; flex-direction: row; overflow: hidden; gap: 10px; }
+
+#filePane {
+  flex: 0 0 250px;
+  min-width: 180px;
+}
+
+#boardPane {
+  flex: 0 0 568px;
+}
+
+#rightPane {
+  flex: 1 1 0;
+  min-width: 320px;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  gap: 10px;
+}
+
 #rpMoves {
   display: flex;
   flex-direction: column;
   /* Owns the scroll container so the scrollbar sits at the card border.
      The sticky panelHead stickies to this — works because we're its
      nearest scrollable ancestor. */
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 棋譜 should never scroll sideways — long rows clip/ellipsis instead */
   /* No padding-y: header sits flush at the top, #moveList carries its
      own top inset. Avoids `margin-top: calc(-1 * var(--rp-pad-y))` on
      the sticky header, which interacts badly with flex column + sticky. */
   padding-top: 0;
   padding-bottom: 0;
 }
-aside, section {
+
+aside,
+section {
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(47,42,35,0.55) 0%, rgba(29,26,22,0.92) 100%);
+  background: linear-gradient(180deg, rgba(47, 42, 35, 0.55) 0%, rgba(29, 26, 22, 0.92) 100%);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 /* ---------- splitters ---------- */
@@ -475,16 +581,43 @@ aside, section {
   z-index: 1;
   transition: background 120ms ease;
 }
-.splitter-v { cursor: col-resize; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-.splitter-h { cursor: row-resize; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); flex: 0 0 6px; }
+
+.splitter-v {
+  cursor: col-resize;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+.splitter-h {
+  cursor: row-resize;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 6px;
+}
+
 .splitter::before {
   /* Wider hit target than the visible bar so it's easier to grab. */
-  content: ""; position: absolute;
+  content: "";
+  position: absolute;
 }
-.splitter-v::before { inset: 0 -3px; }
-.splitter-h::before { inset: -3px 0; }
-.splitter:hover, .splitter.dragging { background: var(--accent); }
-.splitter:hover { border-color: var(--accent-strong); }
+
+.splitter-v::before {
+  inset: 0 -3px;
+}
+
+.splitter-h::before {
+  inset: -3px 0;
+}
+
+.splitter:hover,
+.splitter.dragging {
+  background: var(--accent);
+}
+
+.splitter:hover {
+  border-color: var(--accent-strong);
+}
+
 .splitter::after {
   /* Subtle visual grip marker */
   content: "";
@@ -493,11 +626,37 @@ aside, section {
   opacity: 0.4;
   border-radius: 2px;
 }
-.splitter-v::after { top: 50%; left: 2px; width: 2px; height: 24px; transform: translateY(-50%); }
-.splitter-h::after { left: 50%; top: 2px; height: 2px; width: 24px; transform: translateX(-50%); }
-.splitter:hover::after, .splitter.dragging::after { background: #fff; opacity: 0.8; }
-body.dragging { cursor: col-resize; user-select: none; }
-body.dragging.dragging-row { cursor: row-resize; }
+
+.splitter-v::after {
+  top: 50%;
+  left: 2px;
+  width: 2px;
+  height: 24px;
+  transform: translateY(-50%);
+}
+
+.splitter-h::after {
+  left: 50%;
+  top: 2px;
+  height: 2px;
+  width: 24px;
+  transform: translateX(-50%);
+}
+
+.splitter:hover::after,
+.splitter.dragging::after {
+  background: #fff;
+  opacity: 0.8;
+}
+
+body.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.dragging.dragging-row {
+  cursor: row-resize;
+}
 
 /* Panel header — bigger and more deliberate than body text. Gold underline
    gives each section a clear lead. Hierarchy: h1 18 > h2 16 ≥ all content
@@ -514,14 +673,111 @@ h2 {
 }
 
 /* ---------- left: file tree ---------- */
-#filePane { padding: 0; overflow: auto; }
+#filePane {
+  padding: 0;
+  overflow: auto;
+}
+
 /* Settings dialog: stack labelled rows; chips fill the dialog width (drop the
    file-pane side margins they no longer live under). */
-.settingsForm { display: flex; flex-direction: column; gap: 14px; }
-.settingRow { display: flex; flex-direction: column; gap: 5px; }
-.settingRow > label { font-size: 12px; color: var(--text-muted); }
+/* gap is the inter-section breathing room (replaces the per-section </br> hack);
+   padding-bottom keeps the last section off the 完成 button. */
+.settingsForm {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-bottom: 8px;
+}
+
+/* Grouped sections: a faint header rule keeps "data source / engine / cloud /
+   export" visually separate now that the form has grown to ~9 fields. */
+.settingsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Each section gets a little bottom padding so its last field has breathing
+   room — and the final section isn't jammed against 完成 (the inter-section
+   gap doesn't apply after the last one). */
+.settingsForm .settingsGroup {
+  padding-bottom: 6px;
+}
+
+.settingsGroupTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  /* padding-left indents the title text (replaces the &nbsp; hack); the
+     underline still spans full width since border-bottom covers the padding. */
+  padding-left: 16px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.22);
+}
+
+/* Short numeric fields pack two-per-row to keep the modal from growing tall.
+   Path rows stay full-width (they live outside .settingGrid). */
+.settingGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+
+.settingRow {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settingRow>label {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-left: 16px;
+}
+
+/* margin-left aligns the input capsules' left edge with the indented titles +
+   labels (which carry padding-left:16px), so the whole column reads as one
+   left edge instead of the boxes sticking out further left than their labels. */
 .settingsForm .rootPath,
-.settingsForm .evalDbRowSide { margin: 0; }
+.settingsForm .evalDbRowSide {
+  margin: 0 0 0 16px;
+}
+
+/* Roomier inner padding for the boxes themselves so their content (📂 path
+   text, the numbers) isn't jammed against the box's own left edge. Scoped to
+   .settingsForm so the file-pane chip keeps its tighter sidebar sizing. */
+/* Natural-height capsule with content vertically centred. The earlier 40px
+   min-height added empty space that all pooled at the top → content looked
+   stuck to the bottom. Symmetric padding sizes the box to its content instead. */
+.settingsForm .rootPath {
+  padding: 7px 14px;
+  align-items: center;
+}
+
+.settingsForm .evalDbRowSide {
+  padding: 7px 14px;
+  align-items: center;
+}
+
+/* Fixed height + zero vertical padding → the browser vertically centres the
+   single-line value reliably (symmetric padding alone was leaving it low). */
+.settingsForm .settingRow input[type="number"] {
+  height: 34px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  margin-left: 16px;
+}
+
+/* Shorter pick buttons so the capsule isn't forced tall by the 28px button.
+   Scoped to .settingsForm; the file-pane chip keeps its own sizing. */
+.settingsForm .rootPath #rootPickBtn,
+.settingsForm .evalDbRowSide #evalDbPickBtn,
+.settingsForm .evalDbRowSide #enginePickBtn {
+  height: 24px;
+}
+
 .rootPath {
   display: flex;
   align-items: center;
@@ -534,13 +790,17 @@ h2 {
   border-radius: 8px;
   margin: 0 12px 12px;
   font-family: "SF Mono", "Consolas", monospace;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
+
 .rootPath #rootPathDisplay {
   flex: 1 1 auto;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-width: 0;
 }
+
 /* Sidebar chip pick buttons — ghost base + hover come from button system;
    here only the chip-specific size + rounded shape. */
 .rootPath #rootPickBtn,
@@ -553,16 +813,30 @@ h2 {
   border-radius: 9px;
   font-size: 13px;
 }
-.rootPath #rootPickBtn:disabled { cursor: wait; }
+
+.rootPath #rootPickBtn:disabled {
+  cursor: wait;
+}
+
 .evalDbRowSide {
   margin: 0 12px 12px;
   font-size: 11px;
   padding: 7px 10px;
 }
+
 .evalDbRowSide #evalDbPath,
 .evalDbRowSide #enginePath {
   font-family: "SF Mono", "Consolas", monospace;
+  /* flex:1 makes the path text fill the capsule so the pick button is pushed
+     to the right edge. #evalDbPath got this via .evalDbRow #evalDbPath, but
+     #enginePath was missing it → its 📁 button floated mid-capsule. */
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 #fileTree ul {
   list-style: none;
   /* margin-left nudges the dotted guide line to sit ~under the parent folder
@@ -571,7 +845,13 @@ h2 {
   padding-left: 13px;
   border-left: 1px solid var(--line-strong);
 }
-#fileTree > ul { margin-left: 0; padding-left: 0; border-left: none; }
+
+#fileTree>ul {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}
+
 #fileTree li {
   padding: 4px 8px;
   margin: 1px 0;
@@ -579,26 +859,36 @@ h2 {
   font-size: 15px;
   line-height: 1.4;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-radius: var(--radius-sm);
   border-left: 3px solid transparent;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-#fileTree li.dir { color: var(--text-muted); cursor: default; }
-#fileTree li.dir > span.dirname {
+
+#fileTree li.dir {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+#fileTree li.dir>span.dirname {
   cursor: pointer;
   display: inline-block;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-#fileTree li.dir > span.dirname:hover {
+
+#fileTree li.dir>span.dirname:hover {
   color: var(--accent);
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.04));
 }
+
 #fileTree li.file:hover {
-  background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
   color: var(--text);
 }
+
 #fileTree li.file.active {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.24), rgba(var(--accent-rgb), 0.10));
   color: #fff2d8;
@@ -609,17 +899,21 @@ h2 {
 
 /* ---------- centre: board + nav ---------- */
 #boardPane {
-  display: flex; flex-direction: column; align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: var(--rp-pad-y) var(--board-pad-x) 14px;
   overflow: hidden;
   width: 568px;
   background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
+
 #fileTitle {
   color: var(--accent-strong);
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.02em; text-transform: none;
+  letter-spacing: 0.02em;
+  text-transform: none;
   /* Side margins cancel boardPane's --board-pad-x so the underline meets
      the panel border, matching the 檔案/棋譜/注解 headers. padding-x bumps
      to keep text in its original visual position. */
@@ -627,21 +921,25 @@ h2 {
   padding: 14px calc(var(--board-pad-x) + var(--header-pad-x)) 10px;
   align-self: stretch;
   text-align: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   flex: 0 0 auto;
   border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
-  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
   text-shadow: 0 0 18px rgba(var(--accent-strong-rgb), 0.10);
 }
+
 #board {
   margin: 4px 0 12px;
   flex: 0 0 auto;
   display: block;
   border-radius: 10px;
   box-shadow:
-    0 2px 6px rgba(0,0,0,0.5),
-    0 20px 30px rgba(0,0,0,0.28);
+    0 2px 6px rgba(0, 0, 0, 0.5),
+    0 20px 30px rgba(0, 0, 0, 0.28);
 }
+
 /* Left-aligned flex row: buttons first, moveInfo follows. moveInfo growing
    never pushes the buttons because they're anchored at the left. */
 #navBar {
@@ -651,21 +949,28 @@ h2 {
   width: 100%;
   flex: 0 0 auto;
   padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(58,52,44,0.40), rgba(37,33,28,0.88));
+  background: linear-gradient(180deg, rgba(58, 52, 44, 0.40), rgba(37, 33, 28, 0.88));
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
+
 /* #navBar buttons inherit base + hover from the ghost variant. Slight
    tweaks: monospace + bigger font for chess-notation glyphs, wider min-width
    for square symbols, lighter color override (text not text-muted). */
 #navBar button {
   color: var(--text);
   padding: 6px 12px;
-  font-family: monospace; font-size: 15px;
+  font-family: monospace;
+  font-size: 15px;
   min-width: 44px;
 }
-#navBar button:disabled { opacity: 0.25; }   /* slightly more muted than other ghosts */
+
+#navBar button:disabled {
+  opacity: 0.25;
+}
+
+/* slightly more muted than other ghosts */
 
 /* Panel header with inline icon button (e.g. 棋譜 / 🗑) — keeps the small-caps
    title look but adds a flex baseline so the button sits flush with the rule. */
@@ -677,8 +982,9 @@ h2.panelHead {
   margin: 0 0 12px;
   padding: 14px 16px 10px;
   border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
-  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
 }
+
 /* Pull section headers out through .rpSection's inner padding so the
    underline reaches the card border (gradient fills edge-to-edge, reading
    as a header strip). Top corners follow the card's rounded edge.
@@ -693,31 +999,38 @@ h2.panelHead {
    Background = an opaque base matching .rpSection's dark gradient + a
    faint highlight on top. The opaque base is critical for #rpMoves
    where the header is sticky and the moveList scrolls underneath. */
-#rpMoves > .panelHead,
-.rpSection > .panelHead {
+#rpMoves>.panelHead,
+.rpSection>.panelHead {
   margin-left: calc(-1 * var(--rp-pad-x));
   margin-right: calc(-1 * (var(--rp-pad-x) + var(--scrollbar-w)));
   padding: 14px calc(var(--rp-pad-x) + var(--header-pad-x)) 10px;
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0)),
-    linear-gradient(180deg, rgba(44,38,31,1), rgba(27,24,20,1));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(44, 38, 31, 1), rgba(27, 24, 20, 1));
 }
-#rpMoves > .panelHead {
+
+#rpMoves>.panelHead {
   position: sticky;
   top: 0;
   z-index: 2;
-  margin-top: 0;           /* #rpMoves padding-top: 0, so no offset needed */
+  margin-top: 0;
+  /* #rpMoves padding-top: 0, so no offset needed */
   margin-bottom: 0;
   box-sizing: border-box;
   border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
 }
-.rpSection > .panelHead {
+
+.rpSection>.panelHead {
   margin-top: calc(-1 * var(--rp-pad-y));
   margin-bottom: 12px;
 }
-h2.panelHead > span { flex: 1 1 auto; }
+
+h2.panelHead>span {
+  flex: 1 1 auto;
+}
+
 /* .iconBtn = small square button used inline in panel headers (🗑, ➕新增).
    Ghost base + hover come from the button system above; here only the
    sizing + the parent-h2 text-transform cancel. */
@@ -728,20 +1041,29 @@ h2.panelHead > span { flex: 1 1 auto; }
   padding: 0 8px;
   border-radius: 9px;
   font-size: 13px;
-  text-transform: none;       /* cancel parent h2 small-caps inheritance */
+  text-transform: none;
+  /* cancel parent h2 small-caps inheritance */
   letter-spacing: normal;
 }
-.iconBtn:disabled { opacity: 0.25; }
+
+.iconBtn:disabled {
+  opacity: 0.25;
+}
+
 #moveInfo {
   margin-left: 12px;
   font-size: 13px;
   color: #bfb5a2;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
   min-width: 0;
-  flex: 1 1 auto;     /* take remaining width — ellipsis truncates if too long */
+  flex: 1 1 auto;
+  /* take remaining width — ellipsis truncates if too long */
   letter-spacing: 0.02em;
 }
+
 #moveInfo:not(:empty)::before {
   content: "▸";
   color: var(--accent);
@@ -753,102 +1075,277 @@ h2.panelHead > span { flex: 1 1 auto; }
   padding: var(--rp-pad-y) var(--rp-pad-x);
   overflow: auto;
   scrollbar-gutter: stable;
-  min-height: 0; min-width: 0;
-  background: linear-gradient(180deg, rgba(44,38,31,0.94), rgba(27,24,20,0.98));
+  min-height: 0;
+  min-width: 0;
+  background: linear-gradient(180deg, rgba(44, 38, 31, 0.94), rgba(27, 24, 20, 0.98));
   border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   border-radius: 12px;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 8px 20px rgba(0,0,0,0.14);
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 8px 20px rgba(0, 0, 0, 0.14);
 }
-.rpMoves     { flex: 0 0 360px; min-width: 200px; }   /* resizable via splitter */
-.rpRightCol  { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; overflow: hidden; }
+
+.rpMoves {
+  flex: 0 0 360px;
+  min-width: 200px;
+}
+
+/* resizable via splitter */
+.rpRightCol {
+  flex: 1 1 0;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* 注解 — fixed-ish height, resizable via the splitter below it (original). */
 .rpAnnote {
   flex: 0 0 280px;
   min-height: 100px;
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
+
 /* 走法 + 引擎分析 share the lower section through a tab strip; 注解 stays
    above as its own resizable section (master prefers the original stack). */
 .rpVars {
   flex: 1 1 0;
   min-height: 80px;
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   scrollbar-gutter: auto;
 }
-#rpMoves, .rpRightCol, .rpAnnote, .rpVars { background: transparent; }
-/* Match .rpVars' inset so the 注解/AI分析 tabs line up with 走法/引擎分析 below. */
-.rpAnnote { padding-left: var(--rp-pad-x); padding-right: var(--rp-pad-x); overflow-x: hidden; scrollbar-gutter: auto; }
-.rpAnnote > .panelHead {
-  margin-left: 0; margin-right: 0;
-  padding-left: 16px; padding-right: 16px;
-  width: 100%; box-sizing: border-box;
-}
-#annoteBox { margin-left: 16px; margin-right: 16px; max-width: calc(100% - 32px); }
 
-.rpTabs { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-bottom: 10px; }
+#rpMoves,
+.rpRightCol,
+.rpAnnote,
+.rpVars {
+  background: transparent;
+}
+
+/* Match .rpVars' inset so the 注解/AI分析 tabs line up with 走法/引擎分析 below. */
+.rpAnnote {
+  padding-left: var(--rp-pad-x);
+  padding-right: var(--rp-pad-x);
+  overflow-x: hidden;
+  scrollbar-gutter: auto;
+}
+
+.rpAnnote>.panelHead {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 16px;
+  padding-right: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#annoteBox {
+  margin-left: 16px;
+  margin-right: 16px;
+  max-width: calc(100% - 32px);
+}
+
+.rpTabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-bottom: 10px;
+}
+
 .rpTab {
-  flex: 0 0 auto; padding: 6px 12px;
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 13px; font-weight: 600; color: var(--text-muted);
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
   background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.06), transparent);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
-  border-radius: 9px; cursor: pointer; transition: var(--btn-transition);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: var(--btn-transition);
 }
-.rpTab:hover:not(.active) { color: var(--accent-strong); border-color: rgba(var(--accent-strong-rgb), 0.28); }
+
+.rpTab:hover:not(.active) {
+  color: var(--accent-strong);
+  border-color: rgba(var(--accent-strong-rgb), 0.28);
+}
+
 .rpTab.active {
   color: var(--bg-1);
   background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.95), rgba(var(--accent-strong-rgb), 0.82));
   border-color: rgba(var(--accent-strong-rgb), 0.55);
 }
-.rpTabBody { flex: 1 1 0; min-height: 0; overflow: auto; }
+
+.rpTabBody {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
+
 /* !important so a body's own display:flex (e.g. #rpEngineBody / #anBodyAi)
    can't override the inactive-tab hide — every tab strip hides the same way. */
-.rpTabBody[hidden] { display: none !important; }
+.rpTabBody[hidden] {
+  display: none !important;
+}
 
 /* 引擎分析 — control bar + scrolling history (newest on top, Pikafish-style). */
-#rpEngineBody { display: flex; flex-direction: column; gap: 8px; }
-#rpCdbBody { display: flex; flex-direction: column; gap: 4px; }
-.engineBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 0 auto; }
+#rpEngineBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#rpCdbBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.engineBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
 /* All four bar buttons share one width so the row reads as a uniform set. */
-.engineBar .iconBtn { height: 30px; min-width: 86px; justify-content: center; border-radius: 999px; font-size: 13px; padding: 0 12px; }
-.engineState { font-size: 12px; color: var(--text-muted); margin-left: auto; }
-.engineHistory { flex: 1 1 0; min-height: 0; overflow: auto; }
-.engEntry { padding: 6px 2px; border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.10); }
-.engEntry:first-child .engMeta .engBig { color: #fff1d8; }
-.engMeta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--text-muted); }
-.engMeta .engBig { color: var(--accent-strong); font-weight: 700; font-variant-numeric: tabular-nums; }
-.engMeta .wdlW, .engMeta .wdlD, .engMeta .wdlL { font-variant-numeric: tabular-nums; }
-.engMeta .wdlW { color: #74c79b; }   /* 勝 — green */
-.engMeta .wdlD { color: var(--text-faint); }  /* 和 — muted */
-.engMeta .wdlL { color: #e08a90; }   /* 負 — red */
+.engineBar .iconBtn {
+  height: 30px;
+  min-width: 86px;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13px;
+  padding: 0 12px;
+}
+
+.engineState {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.engineHistory {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.engEntry {
+  padding: 6px 2px;
+  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.10);
+}
+
+.engEntry:first-child .engMeta .engBig {
+  color: #fff1d8;
+}
+
+.engMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.engMeta .engBig {
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.engMeta .wdlW,
+.engMeta .wdlD,
+.engMeta .wdlL {
+  font-variant-numeric: tabular-nums;
+}
+
+.engMeta .wdlW {
+  color: #74c79b;
+}
+
+/* 勝 — green */
+.engMeta .wdlD {
+  color: var(--text-faint);
+}
+
+/* 和 — muted */
+.engMeta .wdlL {
+  color: #e08a90;
+}
+
+/* 負 — red */
 .engPv {
   margin-top: 3px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
-  font-size: 14px; line-height: 1.7; color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
 }
-.varEmpty { color: var(--text-faint); font-style: italic; padding: 6px 2px; }
+
+.varEmpty {
+  color: var(--text-faint);
+  font-style: italic;
+  padding: 6px 2px;
+}
 
 /* Inline icons — one stroke set across the whole app. */
-.ico { width: 15px; height: 15px; flex: 0 0 auto; }
-/* Center icon (+ optional label) in every icon-bearing button. */
-.iconBtn, .engDemo, .engAdd,
-#navBar button, #metaBtn, #saveBtn, .rootPath #rootPickBtn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+.ico {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
+
+/* Center icon (+ optional label) in every icon-bearing button. */
+.iconBtn,
+.engDemo,
+.engAdd,
+#navBar button,
+#metaBtn,
+#saveBtn,
+.rootPath #rootPickBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
 /* Per-line 演示 / 加入 — small pills on the right of each history row. */
-.engActions { display: inline-flex; gap: 6px; margin-left: auto; }
-.engDemo, .engAdd {
-  height: 24px; padding: 0 10px; font-size: 12px; border-radius: 999px; cursor: pointer;
+.engActions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.engDemo,
+.engAdd {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  cursor: pointer;
   color: var(--text-muted);
   background: var(--btn-glass-bg);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.16);
   transition: var(--btn-transition);
 }
-.engDemo .ico, .engAdd .ico { width: 13px; height: 13px; }
-.engDemo:hover, .engAdd:hover {
+
+.engDemo .ico,
+.engAdd .ico {
+  width: 13px;
+  height: 13px;
+}
+
+.engDemo:hover,
+.engAdd:hover {
   color: var(--accent-strong);
   border-color: rgba(var(--accent-strong-rgb), 0.32);
   background: var(--btn-gold-hover-bg);
@@ -858,26 +1355,77 @@ h2.panelHead > span { flex: 1 1 auto; }
 /* 演示 dialog — board + transport controls. */
 /* Block layout (not flex) so the h3 bleeds full-width like the other dialogs;
    board / info / controls are centred individually. */
-.demoDialog { max-width: none; width: auto; }
-.demoDialog #demoBoard { display: block; margin: 4px auto 8px; background: transparent; }
-.demoMoveInfo { text-align: center; font-size: 14px; color: var(--accent-strong); min-height: 20px; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
-.demoControls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.demoControls .iconBtn { min-width: 38px; height: 32px; font-size: 15px; border-radius: 8px; padding: 0 8px; }
-.demoInterval { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; }
+.demoDialog {
+  max-width: none;
+  width: auto;
+}
+
+.demoDialog #demoBoard {
+  display: block;
+  margin: 4px auto 8px;
+  background: transparent;
+}
+
+.demoMoveInfo {
+  text-align: center;
+  font-size: 14px;
+  color: var(--accent-strong);
+  min-height: 20px;
+  margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.demoControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.demoControls .iconBtn {
+  min-width: 38px;
+  height: 32px;
+  font-size: 15px;
+  border-radius: 8px;
+  padding: 0 8px;
+}
+
+.demoInterval {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .demoInterval input {
-  width: 54px; padding: 4px 6px;
-  background: var(--bg-1); color: var(--text);
-  border: 1px solid rgba(var(--accent-strong-rgb), 0.18); border-radius: 6px;
+  width: 54px;
+  padding: 4px 6px;
+  background: var(--bg-1);
+  color: var(--text);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
+  border-radius: 6px;
 }
 
 /* 棋譜 panel header */
-.moveListHeader { margin-bottom: 10px; }
-.moveListHeader h2 { margin: 0 0 4px; border-bottom: none; padding-bottom: 0; }
+.moveListHeader {
+  margin-bottom: 10px;
+}
+
+.moveListHeader h2 {
+  margin: 0 0 4px;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
 .srcPath {
   font-size: 11px;
   color: var(--text-muted);
   font-family: "SF Mono", "Consolas", monospace;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
@@ -896,8 +1444,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 16px;
   line-height: 1.75;
 }
+
 .plyLine {
-  display: flex; align-items: baseline; cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  cursor: pointer;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   user-select: none;
@@ -905,7 +1456,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-left: 2px solid transparent;
   transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
 }
-.plyLine:hover { background: var(--bg-3); }
+
+.plyLine:hover {
+  background: var(--bg-3);
+}
+
 .plyLine.active {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
   border-left-color: var(--accent-strong);
@@ -913,33 +1468,49 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-weight: 600;
   box-shadow: inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.16);
 }
+
 .plyLine .plyNum {
   color: var(--text-faint);
   min-width: 38px;
   font-variant-numeric: tabular-nums;
-  text-align: right; padding-right: 10px;
+  text-align: right;
+  padding-right: 10px;
   font-family: "SF Mono", "Consolas", monospace;
   font-size: 13px;
   flex: 0 0 auto;
 }
-.plyLine.active .plyNum { color: var(--accent); }
+
+.plyLine.active .plyNum {
+  color: var(--accent);
+}
+
 .plyLine .plyText {
   flex: 1 1 auto;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.plyLine.black { color: var(--text-muted); }
-.plyLine.black.active { color: var(--accent-strong); }
+
+.plyLine.black {
+  color: var(--text-muted);
+}
+
+.plyLine.black.active {
+  color: var(--accent-strong);
+}
+
 .plyMark {
   margin-left: 6px;
   font-size: 10px;
   flex: 0 0 auto;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   color: var(--text-muted);
   padding: 1px 7px;
   border-radius: 999px;
   line-height: 1.4;
 }
+
 .plyLine.active .plyMark {
   border-color: var(--accent);
   color: var(--accent-strong);
@@ -948,18 +1519,28 @@ h2.panelHead > span { flex: 1 1 auto; }
 /* Trap / brilliant row highlight — matches chess-book-ai's amber-trap +
    violet-brilliant convention. Border-left replaces the active accent only
    when the row is NOT active, so navigation highlight still wins visually. */
-.plyLine.ply-trap:not(.active)      { border-left-color: #c0763a; background: rgba(192, 118, 58, 0.08); }
-.plyLine.ply-brilliant:not(.active) { border-left-color: #9b7cd9; background: rgba(155, 124, 217, 0.08); }
+.plyLine.ply-trap:not(.active) {
+  border-left-color: #c0763a;
+  background: rgba(192, 118, 58, 0.08);
+}
+
+.plyLine.ply-brilliant:not(.active) {
+  border-left-color: #9b7cd9;
+  background: rgba(155, 124, 217, 0.08);
+}
+
 .plyMark-trap {
   border-color: #c0763a !important;
   color: #e09864 !important;
   background: rgba(192, 118, 58, 0.12);
 }
+
 .plyMark-brilliant {
   border-color: #9b7cd9 !important;
   color: #b8a0e8 !important;
   background: rgba(155, 124, 217, 0.12);
 }
+
 .initLine {
   color: var(--text-faint);
   font-style: italic;
@@ -969,11 +1550,14 @@ h2.panelHead > span { flex: 1 1 auto; }
 }
 
 /* 注解 */
-.rpAnnote > .panelHead { flex: 0 0 auto; }
+.rpAnnote>.panelHead {
+  flex: 0 0 auto;
+}
+
 #annoteBox {
   flex: 1 1 auto;
   width: 100%;
-  background: linear-gradient(180deg, rgba(30,27,22,0.96), rgba(24,21,18,0.98));
+  background: linear-gradient(180deg, rgba(30, 27, 22, 0.96), rgba(24, 21, 18, 0.98));
   color: var(--text);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
   border-radius: 10px;
@@ -982,30 +1566,46 @@ h2.panelHead > span { flex: 1 1 auto; }
   line-height: 1.7;
   padding: 12px 14px;
   resize: none;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
+
 #annoteBox:focus {
   outline: none;
   border-color: rgba(var(--accent-strong-rgb), 0.40);
-  background: linear-gradient(180deg, rgba(42,37,30,0.98), rgba(27,24,20,0.98));
+  background: linear-gradient(180deg, rgba(42, 37, 30, 0.98), rgba(27, 24, 20, 0.98));
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 0 3px rgba(var(--accent-rgb), 0.10);
 }
+
 #annoteBox:disabled {
   color: var(--text-faint);
   background: var(--bg-1);
   border-color: var(--line);
 }
-#annoteBox::placeholder { color: var(--text-faint); font-style: italic; }
+
+#annoteBox::placeholder {
+  color: var(--text-faint);
+  font-style: italic;
+}
 
 /* 注解 / AI分析 share one tab strip; each body fills the section below it
    (hiding handled by the shared .rpTabBody[hidden] rule above). */
-#anBodyAnnote { display: flex; flex-direction: column; gap: 8px; }
+#anBodyAnnote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 /* Preset verdict chips above the annote box — click replaces the annote. */
-.annotePresetBar { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.annotePresetBar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* 3D pill: top→bottom gradient (domed), inset top highlight + bottom shadow,
    a soft drop shadow underneath. Tone just recolours via the --chip-* custom
    props, so the relief treatment + hover-lift / active-press is defined once
@@ -1029,6 +1629,7 @@ h2.panelHead > span { flex: 1 1 auto; }
     inset 0 -1px 1px rgba(0, 0, 0, 0.22);
   transition: transform 90ms ease, box-shadow 90ms ease, filter 100ms ease, border-color 100ms ease;
 }
+
 .annoteChip:hover {
   transform: translateY(-1px);
   filter: brightness(1.10);
@@ -1038,6 +1639,7 @@ h2.panelHead > span { flex: 1 1 auto; }
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 0 -1px 1px rgba(0, 0, 0, 0.22);
 }
+
 .annoteChip:active {
   transform: translateY(1px);
   filter: brightness(0.97);
@@ -1045,6 +1647,7 @@ h2.panelHead > span { flex: 1 1 auto; }
     0 1px 1px rgba(0, 0, 0, 0.30),
     inset 0 2px 4px rgba(0, 0, 0, 0.32);
 }
+
 /* Verdict colours: red-side advantage = 紅底白字, black-side = 藍底白字.
    The pair is matched in weight (similar saturation/lightness) so neither
    shouts over the other on the warm dark UI; 均勢 etc. keep the neutral chip. */
@@ -1054,20 +1657,48 @@ h2.panelHead > span { flex: 1 1 auto; }
   --chip-bot: #c4402f;
   --chip-border: #a5302466;
 }
+
 .annoteChip.tone-black {
   color: #fff;
   --chip-top: #4f8cd2;
   --chip-bot: #2f69ad;
   --chip-border: #2563a866;
 }
-#anBodyAnnote #annoteBox { margin: 0; max-width: 100%; }
+
+#anBodyAnnote #annoteBox {
+  margin: 0;
+  max-width: 100%;
+}
 
 /* AI 分析 — trigger sits in the tab strip (right-aligned); the body holds the
    red-POV score trend + per-ply list. */
-#anBodyAi { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
-.aiBar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.aiBar[hidden] { display: none; }
-.aiBar .iconBtn { height: 28px; min-width: 0; justify-content: center; border-radius: 999px; font-size: 12.5px; padding: 0 12px; }
+#anBodyAi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.aiBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.aiBar[hidden] {
+  display: none;
+}
+
+.aiBar .iconBtn {
+  height: 28px;
+  min-width: 0;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 12.5px;
+  padding: 0 12px;
+}
+
 /* Fixed-width, right-aligned status so the live count (1/79 → 73/79) and the
    分析中→完成 label swap grow leftward inside a stable box instead of resizing
    the bar and nudging the button/checkbox. */
@@ -1078,60 +1709,221 @@ h2.panelHead > span { flex: 1 1 auto; }
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.aiBar .aiDualToggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); cursor: pointer; white-space: nowrap; user-select: none; }
-.aiBar .aiDualToggle input { accent-color: var(--accent-strong); cursor: pointer; margin: 0; }
-/* Chart fills the AI body (no whitespace below); readout is a fixed strip. */
-.aiChartWrap { position: relative; flex: 1 1 0; min-height: 90px; }
-.aiChart {
-  width: 100%; height: 100%; display: block; cursor: crosshair;
-  background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.06), rgba(var(--accent-strong-rgb), 0.02));
-  border: 1px solid rgba(var(--accent-strong-rgb), 0.14); border-radius: 10px;
+
+.aiBar .aiDualToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
 }
+
+.aiBar .aiDualToggle input {
+  accent-color: var(--accent-strong);
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Chart fills the AI body (no whitespace below); readout is a fixed strip. */
+.aiChartWrap {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 90px;
+}
+
+.aiChart {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  background: linear-gradient(180deg, rgba(var(--accent-strong-rgb), 0.06), rgba(var(--accent-strong-rgb), 0.02));
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
+  border-radius: 10px;
+}
+
 /* Reference-style palette: faint grid, blue eval line, red/black side dots,
    orange query ring. Fixed semantic colours (not theme-tinted). */
-.aiChart .aiGrid    { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 2 4; opacity: .22; }
-.aiChart .aiZero    { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
-.aiChart .aiAxisTxt { fill: var(--text-faint); font-size: 10px; font-variant-numeric: tabular-nums; }
-.aiChart .aiLine    { stroke: rgba(238, 232, 220, 0.72); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-.aiChart .aiCursor  { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .6; }
-.aiChart .aiDotRed  { fill: #e2594f; stroke: rgba(20, 16, 12, 0.45); stroke-width: 0.6; }
-.aiChart .aiDotBlk  { fill: #eae4d8; stroke: rgba(20, 16, 12, 0.45); stroke-width: 0.6; }
-.aiChart .aiRing    { stroke: #f3a73a; stroke-width: 2.2; }
-.aiChart .aiFlag    { fill: #f4a521; stroke: rgba(20, 16, 10, 0.45); stroke-width: 0.8; }
-.aiChart .aiBusyPill { fill: rgba(var(--accent-strong-rgb), 0.14); stroke: rgba(var(--accent-strong-rgb), 0.45); stroke-width: 1; animation: aiPulse 1.2s ease-in-out infinite; }
-.aiChart .aiBusyTxt  { fill: var(--accent-strong); font-size: 13px; font-weight: 600; }
-@keyframes aiPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.aiChart .aiGrid {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  opacity: .22;
+}
+
+.aiChart .aiZero {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: .55;
+}
+
+.aiChart .aiAxisTxt {
+  fill: var(--text-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.aiChart .aiLine {
+  stroke: rgba(238, 232, 220, 0.72);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.aiChart .aiCursor {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: .6;
+}
+
+.aiChart .aiDotRed {
+  fill: #e2594f;
+  stroke: rgba(20, 16, 12, 0.45);
+  stroke-width: 0.6;
+}
+
+.aiChart .aiDotBlk {
+  fill: #eae4d8;
+  stroke: rgba(20, 16, 12, 0.45);
+  stroke-width: 0.6;
+}
+
+.aiChart .aiRing {
+  stroke: #f3a73a;
+  stroke-width: 2.2;
+}
+
+.aiChart .aiFlag {
+  fill: #f4a521;
+  stroke: rgba(20, 16, 10, 0.45);
+  stroke-width: 0.8;
+}
+
+.aiChart .aiBusyPill {
+  fill: rgba(var(--accent-strong-rgb), 0.14);
+  stroke: rgba(var(--accent-strong-rgb), 0.45);
+  stroke-width: 1;
+  animation: aiPulse 1.2s ease-in-out infinite;
+}
+
+.aiChart .aiBusyTxt {
+  fill: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@keyframes aiPulse {
+
+  0%,
+  100% {
+    opacity: .55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
 
 /* Board loading badge — same pulsing-pill look as the AI sweep, shown over the
    empty #board while a chessbook loads (UI open / file switch). .static kills
    the pulse for idle / error states. */
-#board .boardBusyPill { fill: rgba(var(--accent-strong-rgb), 0.12); stroke: rgba(var(--accent-strong-rgb), 0.42); stroke-width: 1; animation: aiPulse 1.2s ease-in-out infinite; }
-#board .boardBusyPill.static { animation: none; opacity: .55; }
-#board .boardBusyTxt  { fill: var(--accent-strong); font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+#board .boardBusyPill {
+  fill: rgba(var(--accent-strong-rgb), 0.12);
+  stroke: rgba(var(--accent-strong-rgb), 0.42);
+  stroke-width: 1;
+  animation: aiPulse 1.2s ease-in-out infinite;
+}
+
+#board .boardBusyPill.static {
+  animation: none;
+  opacity: .55;
+}
+
+#board .boardBusyTxt {
+  fill: var(--accent-strong);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: .5px;
+}
 
 /* Single-row readout under the chart — the point under the query line. */
-.aiReadout { flex: 0 0 auto; }
+.aiReadout {
+  flex: 0 0 auto;
+}
+
 .aiRead {
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  padding: 7px 11px; font-size: 14px; border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  font-size: 14px;
+  border-radius: 8px;
   border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
   background: rgba(var(--accent-strong-rgb), 0.05);
 }
-.aiRead.active { background: rgba(var(--accent-strong-rgb), 0.16); border-color: rgba(var(--accent-strong-rgb), 0.42); }
-.aiReadLabel { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.aiReadScore { color: var(--accent-strong); font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.aiRead.active {
+  background: rgba(var(--accent-strong-rgb), 0.16);
+  border-color: rgba(var(--accent-strong-rgb), 0.42);
+}
+
+.aiReadLabel {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aiReadScore {
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Dual-depth readout: two labelled scores + the Δ gap (amber when flagged). */
-.aiReadDual { display: inline-flex; align-items: baseline; gap: 12px; }
-.aiReadDual .aiScorePair { font-size: 15px; }
-.aiReadDual .aiScorePair i { color: var(--text-faint); font-style: normal; font-size: 11px; font-weight: 600; margin-right: 3px; }
-.aiReadDual .aiDiff { font-size: 13px; font-weight: 600; color: var(--text-muted); }
-.aiReadDual .aiDiff.flag { color: #f4a521; }
+.aiReadDual {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.aiReadDual .aiScorePair {
+  font-size: 15px;
+}
+
+.aiReadDual .aiScorePair i {
+  color: var(--text-faint);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 3px;
+}
+
+.aiReadDual .aiDiff {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.aiReadDual .aiDiff.flag {
+  color: #f4a521;
+}
 
 /* settings — numeric input (AI analysis depth) */
 .settingRow input[type="number"] {
-  width: 96px; padding: 7px 9px; font-size: 13px;
-  background: var(--bg-2); color: var(--text);
-  border: 1px solid rgba(var(--accent-strong-rgb), 0.22); border-radius: 8px;
+  width: 96px;
+  padding: 7px 9px;
+  font-size: 13px;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.22);
+  border-radius: 8px;
 }
 
 /* DB path strip — small monospace chip above the eval line. Mirrors the
@@ -1154,15 +1946,19 @@ h2.panelHead > span { flex: 1 1 auto; }
   align-self: stretch;
   min-width: 0;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 8px 18px rgba(0,0,0,0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(0, 0, 0, 0.12);
 }
+
 .evalDbRow #evalDbPath {
   flex: 1 1 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-width: 0;
   cursor: help;
 }
+
 /* Pick button: ghost base + sizing already come from the button system;
    no per-chip overrides needed here anymore. */
 .evalDbRow.warn {
@@ -1177,7 +1973,7 @@ h2.panelHead > span { flex: 1 1 auto; }
 #evalLine {
   margin-top: 8px;
   padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(37,33,28,0.96), rgba(32,28,23,0.98));
+  background: linear-gradient(180deg, rgba(37, 33, 28, 0.96), rgba(32, 28, 23, 0.98));
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
   font-size: 13px;
@@ -1192,33 +1988,48 @@ h2.panelHead > span { flex: 1 1 auto; }
   width: 100%;
   align-self: stretch;
   text-align: left;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
-#evalLine .evalNote { font-style: italic; }
-#evalLine .evalCell { white-space: nowrap; }
+
+#evalLine .evalNote {
+  font-style: italic;
+}
+
+#evalLine .evalCell {
+  white-space: nowrap;
+}
+
 #evalLine .evalLabel {
   color: #9f957f;
   margin-right: 4px;
   letter-spacing: 0.03em;
 }
+
 #evalLine .evalScore {
   color: #eadcc0;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+
 #evalLine .evalBest .evalMove {
   color: #e8bb60;
   font-weight: 600;
 }
-#evalLine .evalCdb { color: var(--text); }
+
+#evalLine .evalCdb {
+  color: var(--text);
+}
 
 /* 本步的所有走法 */
 #varPicker {
   font-size: 15px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
 }
+
 .varOpt {
-  display: flex; align-items: center; gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-height: 40px;
   padding: 5px 10px;
   margin: 2px 0;
@@ -1229,7 +2040,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-left: 2px solid transparent;
   transition: background 100ms ease, border-color 100ms ease;
 }
-.varOpt:hover { background: var(--bg-3); }
+
+.varOpt:hover {
+  background: var(--bg-3);
+}
+
 .varOpt .varLetter {
   color: var(--text-faint);
   font-weight: 600;
@@ -1238,6 +2053,7 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-family: "SF Mono", "Consolas", monospace;
   font-size: 13px;
 }
+
 .varOpt.active {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
   border-color: rgba(var(--accent-strong-rgb), 0.16);
@@ -1245,7 +2061,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   color: #fff1d8;
   box-shadow: none;
 }
-.varOpt.active .varLetter { color: var(--accent); }
+
+.varOpt.active .varLetter {
+  color: var(--accent);
+}
+
 .varOpt .varArrow {
   margin-left: auto;
   color: var(--accent);
@@ -1258,7 +2078,10 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 14px;
   line-height: 1;
 }
-.varOpt:not(.active) .varArrow { visibility: hidden; }
+
+.varOpt:not(.active) .varArrow {
+  visibility: hidden;
+}
 
 /* Reorder controls — ▲▼ move a variation to any slot (children[0] = main
    line), plus the ← marker on the active row, grouped at the right edge. */
@@ -1269,7 +2092,12 @@ h2.panelHead > span { flex: 1 1 auto; }
   gap: 4px;
   flex: 0 0 auto;
 }
-.varCtrl .varArrow { margin-left: 0; min-width: 24px; }
+
+.varCtrl .varArrow {
+  margin-left: 0;
+  min-width: 24px;
+}
+
 .varOpt .varMoveBtn {
   width: 26px;
   height: 26px;
@@ -1287,34 +2115,59 @@ h2.panelHead > span { flex: 1 1 auto; }
   cursor: pointer;
   transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
 }
+
 .varOpt .varMoveBtn:hover:not(:disabled) {
   background: var(--bg-3);
   color: var(--accent);
   border-color: rgba(var(--accent-strong-rgb), 0.3);
 }
-.varOpt .varMoveBtn:disabled { opacity: .28; cursor: default; }
+
+.varOpt .varMoveBtn:disabled {
+  opacity: .28;
+  cursor: default;
+}
 
 /* ---------- ☁ 雲庫 (chessdb.cn cloud-library) tab ---------- */
 .cdbBar {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 2px 2px 6px;
   flex: 0 0 auto;
 }
-.cdbBar .engineState { margin-left: 0; }
+
+.cdbBar .engineState {
+  margin-left: 0;
+}
+
 .cdbBar .iconBtn {
   margin-left: auto;
-  height: 26px; padding: 0 10px;
-  border-radius: 999px; font-size: 12px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
 }
+
 .cdbList {
   font-size: 15px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
   overflow-y: auto;
 }
-.cdbEmpty { color: var(--text-faint); font-style: italic; padding: 6px 2px; }
-.cdbEmpty.cdbErr { color: #d98b7a; }
+
+.cdbEmpty {
+  color: var(--text-faint);
+  font-style: italic;
+  padding: 6px 2px;
+}
+
+.cdbEmpty.cdbErr {
+  color: #d98b7a;
+}
+
 .cdbOpt {
-  display: flex; align-items: center; gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-height: 38px;
   padding: 5px 10px;
   margin: 2px 0;
@@ -1325,49 +2178,94 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-left: 2px solid transparent;
   transition: background 100ms ease, border-color 100ms ease;
 }
-.cdbOpt:hover { background: var(--bg-3); }
+
+.cdbOpt:hover {
+  background: var(--bg-3);
+}
+
 .cdbOpt.best {
   border-left-color: #e8bb60;
-  background: linear-gradient(90deg, rgba(232,187,96,0.12), rgba(232,187,96,0.02));
+  background: linear-gradient(90deg, rgba(232, 187, 96, 0.12), rgba(232, 187, 96, 0.02));
 }
+
 .cdbOpt.current {
   border-color: rgba(var(--accent-strong-rgb), 0.35);
   border-left-color: var(--accent-strong);
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.04));
   color: #fff1d8;
 }
-.cdbOpt .cdbHere { flex: 0 0 auto; color: var(--accent); font-weight: 700; }
+
+.cdbOpt .cdbHere {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .cdbOpt .cdbRank {
-  min-width: 22px; flex: 0 0 auto;
+  min-width: 22px;
+  flex: 0 0 auto;
   color: var(--text-faint);
-  font-weight: 600; font-size: 13px;
+  font-weight: 600;
+  font-size: 13px;
   font-family: "SF Mono", "Consolas", monospace;
   text-align: center;
 }
-.cdbOpt.best .cdbRank { color: #e8bb60; }
-.cdbOpt .cdbMove { flex: 1 1 auto; color: #eadcc0; }
+
+.cdbOpt.best .cdbRank {
+  color: #e8bb60;
+}
+
+.cdbOpt .cdbMove {
+  flex: 1 1 auto;
+  color: #eadcc0;
+}
+
 .cdbOpt .cdbWr {
   flex: 0 0 auto;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   font-size: 13px;
 }
+
 .cdbOpt .cdbScore {
   flex: 0 0 auto;
-  min-width: 46px; text-align: right;
+  min-width: 46px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: #cdc6aa;
 }
+
 /* Red-POV signed colouring (editor.css doesn't load the site's delta-* set). */
-.cdbScore.delta-pos-strong { color: #6fcf7d; }
-.cdbScore.delta-pos-mild   { color: #9bd6a4; }
-.cdbScore.delta-neg-strong { color: #e07a6b; }
-.cdbScore.delta-neg-mild   { color: #d6a59b; }
-.cdbScore.delta-neutral    { color: #b9ad92; }
+.cdbScore.delta-pos-strong {
+  color: #6fcf7d;
+}
+
+.cdbScore.delta-pos-mild {
+  color: #9bd6a4;
+}
+
+.cdbScore.delta-neg-strong {
+  color: #e07a6b;
+}
+
+.cdbScore.delta-neg-mild {
+  color: #d6a59b;
+}
+
+.cdbScore.delta-neutral {
+  color: #b9ad92;
+}
 
 /* ☁ 雲庫演繹: the forward chessdb main line, rendered as a flowing sequence. */
-.cdbLineSeq { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 6px 2px; line-height: 1.7; }
+.cdbLineSeq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 2px;
+  line-height: 1.7;
+}
+
 .cdbLineMove {
   white-space: nowrap;
   padding: 2px 8px;
@@ -1375,13 +2273,38 @@ h2.panelHead > span { flex: 1 1 auto; }
   background: var(--bg-3);
   color: #eadcc0;
 }
-.cdbLineMove > b { color: var(--text-muted); font-weight: 600; margin-right: 2px; }
-.cdbLineScore { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: 2px; }
-.cdbLineScore.delta-pos-strong { color: #6fcf7d; }
-.cdbLineScore.delta-pos-mild   { color: #9bd6a4; }
-.cdbLineScore.delta-neg-strong { color: #e07a6b; }
-.cdbLineScore.delta-neg-mild   { color: #d6a59b; }
-.cdbLineScore.delta-neutral    { color: #b9ad92; }
+
+.cdbLineMove>b {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.cdbLineScore {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.cdbLineScore.delta-pos-strong {
+  color: #6fcf7d;
+}
+
+.cdbLineScore.delta-pos-mild {
+  color: #9bd6a4;
+}
+
+.cdbLineScore.delta-neg-strong {
+  color: #e07a6b;
+}
+
+.cdbLineScore.delta-neg-mild {
+  color: #d6a59b;
+}
+
+.cdbLineScore.delta-neutral {
+  color: #b9ad92;
+}
 
 /* ---------- modal (metadata editor) ---------- */
 .modal {
@@ -1393,7 +2316,11 @@ h2.panelHead > span { flex: 1 1 auto; }
   justify-content: center;
   z-index: 10;
 }
-.modal[hidden] { display: none; }
+
+.modal[hidden] {
+  display: none;
+}
+
 .modalDialog {
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
@@ -1403,10 +2330,36 @@ h2.panelHead > span { flex: 1 1 auto; }
   min-width: 360px;
   max-width: 480px;
 }
+
+/* Settings modal is wider than the generic dialog: the two-column numeric grid
+   plus the long path chips need ~560px or labels get squeezed at 480px. Extra
+   horizontal padding so section titles + fields don't hug the left edge.
+   box-sizing:border-box keeps the 30px padding INSIDE the width (the base
+   dialog isn't border-box), and min-width:0 lets it shrink on a narrow
+   webview instead of overflowing off the left edge. */
+#settingsModal .modalDialog {
+  box-sizing: border-box;
+  width: min(580px, calc(100vw - 24px));
+  max-width: none;
+  min-width: 0;
+  padding: 18px 24px 20px;
+}
+
+/* The base h3 full-bleed uses -22px margins tied to the generic 22px padding;
+   this dialog has 30px padding, so widen the negative margin + inner padding to
+   keep the header strip flush to the edges instead of stopping 8px short. */
+#settingsModal .modalDialog h3 {
+  margin-left: -24px;
+  margin-right: -24px;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
 .confirmModal {
   background: rgba(9, 11, 14, 0.58);
   backdrop-filter: blur(6px);
 }
+
 .confirmDialog {
   width: min(480px, calc(100vw - 32px));
   min-width: 0;
@@ -1415,9 +2368,10 @@ h2.panelHead > span { flex: 1 1 auto; }
   border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   background:
     radial-gradient(circle at top, rgba(var(--accent-rgb), 0.08), transparent 42%),
-    linear-gradient(180deg, rgba(37,33,28,0.98), rgba(28,25,21,0.98));
-  box-shadow: 0 18px 48px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.04);
+    linear-gradient(180deg, rgba(37, 33, 28, 0.98), rgba(28, 25, 21, 0.98));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
+
 /* Higher specificity (two classes) so these win over .modalDialog h3
    regardless of source order — confirmDialog has the larger top padding. */
 .modalDialog.confirmDialog h3 {
@@ -1426,6 +2380,7 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
 }
+
 .confirmMessage {
   color: var(--text);
   font-size: 15px;
@@ -1433,14 +2388,17 @@ h2.panelHead > span { flex: 1 1 auto; }
   white-space: pre-line;
   padding: 2px 0 4px;
 }
+
 .confirmActions {
   margin-top: 18px;
   justify-content: flex-end;
 }
+
 .confirmActions button {
   min-width: 88px;
   border-radius: 999px;
 }
+
 .modalDialog h3 {
   /* Full-bleed header strip: negative margins pull the title out through the
      dialog's 18/22px padding so the band + divider reach all edges (matches
@@ -1465,24 +2423,37 @@ h2.panelHead > span { flex: 1 1 auto; }
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
 }
+
 /* Title-bar close (✕) for dialogs that carry one (demo / settings). */
 .modalClose {
   flex: 0 0 auto;
-  width: 26px; height: 26px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 14px; line-height: 1;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
   color: var(--accent-strong);
   background: transparent;
   border: 1px solid rgba(var(--accent-strong-rgb), 0.30);
-  border-radius: 8px; cursor: pointer;
+  border-radius: 8px;
+  cursor: pointer;
   transition: var(--btn-transition);
 }
-.modalClose:hover { background: rgba(var(--accent-strong-rgb), 0.16); color: var(--text); }
+
+.modalClose:hover {
+  background: rgba(var(--accent-strong-rgb), 0.16);
+  color: var(--text);
+}
+
 .metaForm {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 14px;
 }
+
 .metaForm label {
   display: flex;
   flex-direction: column;
@@ -1490,12 +2461,17 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 12px;
   color: var(--text-muted);
 }
+
 .metaForm label:has(#metaField-title),
 .metaForm label:has(#metaField-event) {
   grid-column: span 2;
 }
+
 /* New-XQF modal: every row full-width (only 3 short fields). */
-#newModal .metaForm label { grid-column: span 2; }
+#newModal .metaForm label {
+  grid-column: span 2;
+}
+
 .metaForm input,
 .metaForm select {
   background: var(--bg-1);
@@ -1506,20 +2482,25 @@ h2.panelHead > span { flex: 1 1 auto; }
   font-size: 13px;
   font-family: inherit;
 }
+
 .metaForm input:focus,
 .metaForm select:focus {
   outline: none;
   border-color: var(--accent);
 }
+
 .modalActions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
 }
+
 /* Modal buttons inherit outline (default) + primary (.primary) from the
    button system above; only width override (slightly wider padding). */
-.modalActions button { padding: 6px 16px; }
+.modalActions button {
+  padding: 6px 16px;
+}
 
 /* ---------- focus rings (keyboard accessibility) ---------- */
 button:focus-visible,

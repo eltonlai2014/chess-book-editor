@@ -102,15 +102,24 @@ def get_xqf_root() -> Path:
 
 
 # ---------- static frontend (local dev only — Flask serves the SPA) --------
+# Local-only dev tool: serve the frontend with no-store so edits to
+# index.html / editor.css / *.js show up on a plain reload. Flask's default
+# ETag/Last-Modified revalidation isn't honoured by some embedded webviews
+# (VSCode Simple Browser), which left stale CSS sticking around after edits.
+
+def _no_store(resp: Response) -> Response:
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
+
 
 @app.get("/")
 def index():
-    return send_from_directory(FRONTEND_ROOT, "index.html")
+    return _no_store(send_from_directory(FRONTEND_ROOT, "index.html"))
 
 
 @app.get("/assets/<path:fname>")
 def assets(fname):
-    return send_from_directory(FRONTEND_ROOT / "assets", fname)
+    return _no_store(send_from_directory(FRONTEND_ROOT / "assets", fname))
 
 
 # ---------- user preferences --------------------------------------------------

@@ -66,8 +66,8 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 
 | 路由 | 函式:行 | 作用 |
 |---|---|---|
-| `GET /` | `index`:100 | 出 index.html |
-| `GET /assets/<f>` | `assets`:105 | 靜態檔 |
+| `GET /` | `index`:100 | 出 index.html（`_no_store` 包，前端不快取） |
+| `GET /assets/<f>` | `assets`:105 | 靜態檔（`_no_store`：`Cache-Control: no-store`，改 CSS/JS 一般重整就生效；VSCode 內建 Simple Browser 仍會吃舊快取，UI 驗證用外部 Edge） |
 | `GET/POST /api/preferences` | `get_preferences`:131 / `set_preferences`:136 | preferences.json 讀寫 |
 | `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf` 的目錄（如 png/）剪掉不顯示 |
 | `GET /api/xqf/root` | `get_root`:204 | 目前根目錄（`get_xqf_root`:82） |
@@ -229,10 +229,21 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 畫 / 跳步 / 自動播放 | `renderDemo`:2177 / `demoGo`:2197 / `demoTogglePlay`:2204 / `demoStopPlay`:2190 |
 | **把 PV 加進走子樹** | `addPvLine`:2234 |
 
+**🎬 GIF 匯出（整條主線 → 動畫 GIF；純前端、後端零改動）**
+| 功能 | 函式（frontend/assets/gifexport.js，除非另註） |
+|---|---|
+| 主流程：`currentLine()` 逐手 → `drawBoard()`(board.js) 畫離屏 SVG → 光柵化進 `<canvas>`（底部字幕條：檔名＋第N步/共M步）→ `gifenc` 編碼 → 下載 | `exportGif` |
+| 影格清單（起始局面＋每手 post-move FEN＋last-move 高亮） | `buildFrames` |
+| **字型內嵌**（離屏光柵化時頁面 `<link>` webfont 不生效）：抓 `PIECE_FONTS[style].googleUrl` 已子集化(&text=)的 CSS → 把 `url(...woff2)` 換 base64 data URI → 注入每格 SVG `<defs><style>`；抓失敗退回系統 CJK 字型，不擋匯出。抓一次快取 | `loadEmbeddedFontCss` / `injectFontStyle` |
+| SVG→canvas 走 Blob URL（字型 base64 太大，免每格 encodeURIComponent）／字幕條／每手停留 ms（末格 ×2.5） | `svgToImage` / `paintCaption` / `frameDelayMs` |
+| 編碼器：vendored `gifenc`（無相依、無 worker、不走 runtime CDN），IIFE 包成 `window.gifenc`（GIFEncoder/quantize/applyPalette） | frontend/assets/gifenc.global.js |
+| 觸發鈕在棋譜列標頭 `#exportGifBtn`（🎬，純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |
+
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |
 |---|---|
 | 偏好讀寫（伺服器 preferences.json） | `loadPreferences`:64 / `savePreference`:71 |
+| GIF 影格間隔（秒，預設 0.65；設定欄 `#gifDelayInput`） | `gifFrameDelaySec`（pref `gifFrameDelaySec`；gifexport.js `frameDelayMs` 讀它） |
 | localStorage「最後可用」備份 + 開機回復提示 | `LS_KEYS`/`lsGet`/`lsSet`:87–89 / `recoverSettingsFromLocalStorage`:2515 |
 | 設定 dialog（標題列 ✕＋完成） | `openSettingsModal`:2282 / `closeSettingsModal`:2283 |
 | 根目錄 chip / 選擇 / 套用 | `updateRootDisplay`:543 / `pickRoot`:555 / `applyRoot`:572 |

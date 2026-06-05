@@ -1299,6 +1299,12 @@ function cdbLineThrottle() {
   return Number.isFinite(m) && m >= 0 && m <= 5000 ? m : 250;
 }
 
+// 🎬 匯出 GIF 時每一手停留的秒數。gifexport.js 也讀這個 getter（共用全域）。
+function gifFrameDelaySec() {
+  const s = parseFloat(PREFS.gifFrameDelaySec);
+  return Number.isFinite(s) && s >= 0.2 && s <= 5 ? s : 0.65;
+}
+
 // Build the {fen, path, pvUci, pv} entry openDemo/addPvLine expect from the
 // derived line (start position + the chessdb-best move sequence).
 function cdbLineEntry() {
@@ -3037,6 +3043,17 @@ if (aiDiffThreshInput) {
     if (EDITOR.aiAnalysis.points.length) renderAiView();
   });
 }
+const gifDelayInput = $("#gifDelayInput");
+if (gifDelayInput) {
+  gifDelayInput.addEventListener("change", () => {
+    let v = parseFloat(gifDelayInput.value);
+    if (!Number.isFinite(v)) v = 0.65;
+    v = Math.max(0.2, Math.min(5, v));
+    v = Math.round(v * 100) / 100;
+    gifDelayInput.value = v;
+    savePreference("gifFrameDelaySec", v);
+  });
+}
 const aiDualChk = $("#aiDualChk");
 if (aiDualChk) {
   aiDualChk.addEventListener("change", () => savePreference("aiDualDepth", aiDualChk.checked));
@@ -3251,6 +3268,8 @@ async function recoverSettingsFromLocalStorage() {
   if (cdbLineDepthEl) cdbLineDepthEl.value = cdbLineDepth();
   const cdbLineThrottleEl = $("#cdbLineThrottleInput");
   if (cdbLineThrottleEl) cdbLineThrottleEl.value = cdbLineThrottle();
+  const gifDelayEl = $("#gifDelayInput");
+  if (gifDelayEl) gifDelayEl.value = gifFrameDelaySec();
   renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
   // Pulsing badge on the empty board while the tree + last file load, so the
