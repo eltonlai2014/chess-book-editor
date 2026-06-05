@@ -187,11 +187,11 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 **☁ 雲庫演繹（cdbline tab）—— 從本局面沿雲庫最佳著往前推一條主線**
 | 功能 | 函式 |
 |---|---|
-| 推演迴圈：自 `currentFen()` 起，逐步查 `/api/chessdb` best→`applyIccs` 進到下一盤→再查，最多 `cdbLineDepth()` 步。**按鈕觸發、非自動**；cache 命中免費，**只有 `source==='live'` 才 sleep 250ms**（守 chessdb 禮貌）。終止＝到步數／雲庫無資料（出書）／殺棋 | `deriveCdbLine`（state `EDITOR.cdbLine`）|
+| 推演迴圈：自 `currentFen()` 起，逐步查 `/api/chessdb` best→`applyIccs` 進到下一盤→再查，最多 `cdbLineDepth()` 步。**按鈕觸發、非自動**；cache 命中免費，**只有 `source==='live'` 才 sleep `cdbLineThrottle()`**（pref `cdbLineThrottleMs`，預設250，守 chessdb 禮貌）。終止＝到步數／雲庫無資料（出書）／殺棋 | `deriveCdbLine`（state `EDITOR.cdbLine`）|
 | 進度/結果渲染（步序＋紅POV分/`#±N`；演示·加入按鈕 enable/disable） | `renderCdbLineView` |
 | 演示／加入：組 `{fen,path,pvUci,pv}` entry **複用** `openDemo`／`addPvLine`（無新 demo/加入邏輯） | `cdbLineEntry` |
 | 過期清除：導航離開起始局面（`refreshActive`）或換檔換目錄即 `clearCdbLine` | `clearCdbLine` |
-| 步數設定 pref `cdbLineDepth`（預設 12） | `cdbLineDepth`；設定欄 `#cdbLineDepthInput` |
+| 設定 pref：`cdbLineDepth`（步數，預設12）、`cdbLineThrottleMs`（live 查詢間隔 ms，預設250） | `cdbLineDepth`/`cdbLineThrottle`；設定欄 `#cdbLineDepthInput`/`#cdbLineThrottleInput` |
 
 > **為何這不違反「雲庫逐盤面、勿批掃」原則**：它是**按鈕觸發的單次連查**（非隨導航自動、非整檔掃），且 cache-first＋live 才節流 250ms，仍守 chessdb ~5 req/s。離開開局庫後很快 `status≠ok` 自動停，多半跑不滿 12 步。
 | 點列＝在**分支點**加同層變化（非當前著的子著）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |

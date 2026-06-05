@@ -1291,6 +1291,14 @@ function cdbLineDepth() {
   return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 12;
 }
 
+// Sleep between LIVE chessdb lookups during 演繹 (cache hits don't wait). Lower
+// = faster but more likely to trip chessdb's ~5 req/s limit; 250ms is the
+// conservative default. Clamped so a stray pref can't go fully unthrottled.
+function cdbLineThrottle() {
+  const m = parseInt(PREFS.cdbLineThrottleMs, 10);
+  return Number.isFinite(m) && m >= 0 && m <= 5000 ? m : 250;
+}
+
 // Build the {fen, path, pvUci, pv} entry openDemo/addPvLine expect from the
 // derived line (start position + the chessdb-best move sequence).
 function cdbLineEntry() {
@@ -1345,7 +1353,7 @@ async function deriveCdbLine() {
       fen = applyIccs(fen, best.iccs);          // advance to the next position
       if (mate != null) { s.endReason = "將死終局"; break; }
       if (i === maxDepth - 1) { s.endReason = "已達設定步數"; break; }
-      if (cdb.source === "live") await sleep(250);   // politeness: only throttle live misses
+      if (cdb.source === "live") await sleep(cdbLineThrottle());   // politeness: only throttle live misses
     }
   } finally {
     s.running = false;
@@ -3007,6 +3015,16 @@ if (cdbLineDepthInput) {
     savePreference("cdbLineDepth", v);
   });
 }
+const cdbLineThrottleInput = $("#cdbLineThrottleInput");
+if (cdbLineThrottleInput) {
+  cdbLineThrottleInput.addEventListener("change", () => {
+    let v = parseInt(cdbLineThrottleInput.value, 10);
+    if (!Number.isFinite(v)) v = 250;
+    v = Math.max(100, Math.min(2000, v));
+    cdbLineThrottleInput.value = v;
+    savePreference("cdbLineThrottleMs", v);
+  });
+}
 const aiDiffThreshInput = $("#aiDiffThreshInput");
 if (aiDiffThreshInput) {
   aiDiffThreshInput.addEventListener("change", () => {
@@ -3231,6 +3249,8 @@ async function recoverSettingsFromLocalStorage() {
   if (aiDualEl) aiDualEl.checked = aiDualEnabled();
   const cdbLineDepthEl = $("#cdbLineDepthInput");
   if (cdbLineDepthEl) cdbLineDepthEl.value = cdbLineDepth();
+  const cdbLineThrottleEl = $("#cdbLineThrottleInput");
+  if (cdbLineThrottleEl) cdbLineThrottleEl.value = cdbLineThrottle();
   renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
   // Pulsing badge on the empty board while the tree + last file load, so the

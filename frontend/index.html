@@ -259,6 +259,11 @@
           <input id="cdbLineDepthInput" type="number" min="1" max="30" step="1" value="12"
                  title="「☁ 雲庫演繹」最多往前推幾步；雲庫無資料時會提前停止">
         </div>
+        <div class="settingRow">
+          <label>雲庫演繹查詢間隔（ms；僅即時查時等待）</label>
+          <input id="cdbLineThrottleInput" type="number" min="100" max="2000" step="50" value="250"
+                 title="演繹時每次「即時查 chessdb.cn」之間的等待毫秒數（快取命中不等）。越小越快但越可能被 chessdb 限流；保守值 250">
+        </div>
       </div>
       <div class="modalActions">
         <button id="settingsClose" class="primary">完成</button>
