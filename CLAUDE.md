@@ -123,6 +123,12 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   fires one request for the position you land on — NOT a batch over every FEN in
   the file. That's deliberate: it honours chessdb's ~5 req/s politeness rule
   (see `docs/CHESSDB_CLOUD_QUERY.md` §6). Don't "optimise" this into a bulk sweep.
+- **The ONE sanctioned multi-query is 雲庫演繹 (`deriveCdbLine`).** It walks the
+  chessdb best move forward up to `cdbLineDepth` plies. It stays within the rule
+  by being **button-triggered (never auto on navigation)**, cache-first, and
+  sleeping 250ms **only on live misses**. It also self-terminates the moment
+  chessdb has no row (out of book), so it rarely runs the full depth. Keep those
+  three guards if you touch it.
 - **Cloud queries the BRANCH POINT (前一步), not the post-move position.** The
   cloud list must show "what moves are playable at this decision" (the active
   move + its alternatives), not "how the opponent replies to the move just

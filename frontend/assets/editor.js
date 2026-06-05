@@ -30,6 +30,7 @@ const EDITOR = {
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
   engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
   aiAnalysis: { running: false, points: [], queryIdx: null },  // depth-limited whole-line sweep → trend chart (queryIdx = hovered point)
+  cdbLine: { running: false, steps: [], startFen: null, startPath: [], endReason: "" },  // 雲庫演繹: forward chessdb principal variation
   demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // 演示 playback state
   rootOk: true,       // false when the configured library root is missing (drives LS recovery)
   rootPath: "",       // last root reported by the server (valid or not)
@@ -634,6 +635,7 @@ async function applyRoot(path) {
   stopAnalysis("尚未開始");
   clearAnalysisHistory();
   clearAiAnalysis();
+  clearCdbLine();
   $("#saveBtn").disabled = true;
   $("#metaBtn").disabled = true;
   $("#fileTitle").textContent = "尚未載入";
@@ -1271,6 +1273,116 @@ async function addCdbMove(iccs) {
   }
 }
 
+// ---------- ☁ 雲庫演繹: forward chessdb principal variation -------------------
+// From the CURRENT position, repeatedly take chessdb's best move, apply it, and
+// query the next position — building one "if both sides play the cloud's best"
+// main line up to cdbLineDepth() plies. On-demand only (a button), NOT auto on
+// navigation: it is a sequential burst of live lookups, so it must respect
+// chessdb's politeness budget. Cache hits (positions.db / editor cache) are
+// free; only live misses sleep 250ms between calls. The line naturally stops
+// where the book ends (chessdb has no row) — that endpoint is itself a signal.
+// Display / 演示 / 加入 reuse the engine line's openDemo + addPvLine via a
+// {fen, path, pvUci, pv} entry, so there is no new demo/add logic here.
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function cdbLineDepth() {
+  const d = parseInt(PREFS.cdbLineDepth, 10);
+  return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 12;
+}
+
+// Build the {fen, path, pvUci, pv} entry openDemo/addPvLine expect from the
+// derived line (start position + the chessdb-best move sequence).
+function cdbLineEntry() {
+  const s = EDITOR.cdbLine;
+  return {
+    fen: s.startFen,
+    path: s.startPath,
+    pvUci: s.steps.map((x) => x.iccs),
+    pv: s.steps.map((x) => x.notation),
+  };
+}
+
+function clearCdbLine() {
+  EDITOR.cdbLine = { running: false, steps: [], startFen: null, startPath: [], endReason: "" };
+  renderCdbLineView();
+}
+
+async function deriveCdbLine() {
+  if (!EDITOR.data) { setStatus("尚未載入棋譜", "err"); return; }
+  const s = EDITOR.cdbLine;
+  if (s.running) return;
+  s.running = true;
+  s.steps = [];
+  s.endReason = "";
+  s.startFen = currentFen();
+  s.startPath = [...EDITOR.activePath];
+  const maxDepth = cdbLineDepth();
+  renderCdbLineView();
+  let fen = s.startFen;
+  try {
+    for (let i = 0; i < maxDepth; i++) {
+      let cdb;
+      try {
+        const r = await fetch(`/api/chessdb?fen=${encodeURIComponent(fen)}`);
+        cdb = await r.json();
+      } catch (_) {
+        s.endReason = "查詢失敗（網路）";
+        break;
+      }
+      if (!cdb || cdb.status !== "ok" || !cdb.best || !cdb.best.iccs) {
+        s.endReason = i === 0 ? "雲庫無此局面" : "雲庫到此無資料";
+        break;
+      }
+      const best = cdb.best;
+      const side = (fen.trim().split(/\s+/)[1]) || "w";
+      const flip = side === "b" ? -1 : 1;
+      const scoreRed = best.score != null ? Math.round(best.score * flip) : null;
+      const mate = mateFromCdbScore(scoreRed);
+      const notation = (await notationFor(fen, best.iccs)) || best.iccs;
+      s.steps.push({ iccs: best.iccs, notation, scoreRed, mate });
+      renderCdbLineView();                      // progressive: show each step as it lands
+      fen = applyIccs(fen, best.iccs);          // advance to the next position
+      if (mate != null) { s.endReason = "將死終局"; break; }
+      if (i === maxDepth - 1) { s.endReason = "已達設定步數"; break; }
+      if (cdb.source === "live") await sleep(250);   // politeness: only throttle live misses
+    }
+  } finally {
+    s.running = false;
+    renderCdbLineView();
+  }
+}
+
+function renderCdbLineView() {
+  const list = $("#cdbLineList");
+  if (!list) return;
+  const s = EDITOR.cdbLine;
+  const stateEl = $("#cdbLineState");
+  const runBtn = $("#cdbLineRunBtn");
+  const demoBtn = $("#cdbLineDemoBtn");
+  const addBtn = $("#cdbLineAddBtn");
+  if (runBtn) runBtn.disabled = s.running;
+  const hasLine = s.steps.length > 0 && !s.running;
+  if (demoBtn) demoBtn.disabled = !hasLine;
+  if (addBtn) addBtn.disabled = !hasLine;
+  if (stateEl) {
+    stateEl.textContent = s.running
+      ? `演繹中… 已 ${s.steps.length} 步`
+      : (s.steps.length ? `${s.steps.length} 步${s.endReason ? "・" + s.endReason : ""}` : "尚未演繹");
+  }
+  if (!s.steps.length) {
+    list.innerHTML = `<div class="cdbEmpty">按「演繹」從本局面沿雲庫最佳著推演一條主線（最多 ${cdbLineDepth()} 步；雲庫無資料即止）。</div>`;
+    return;
+  }
+  const parts = s.steps.map((st, i) => {
+    const sc = st.mate != null
+      ? st.mate
+      : (st.scoreRed != null ? (st.scoreRed > 0 ? "+" : "") + st.scoreRed : "?");
+    return `<span class="cdbLineMove"><b>${i + 1}.</b> ${st.notation} <span class="cdbLineScore ${deltaSignClass(st.scoreRed)}">${sc}</span></span>`;
+  });
+  list.innerHTML = `<div class="cdbLineSeq">${parts.join(" ")}</div>`;
+}
+
 // ---------- 棋譜 (move list) — XQStudio style: linearised current path ----------
 
 function currentLine() {
@@ -1487,6 +1599,11 @@ function refreshActive() {
   renderEvalLine();
   ensureCdbLive(cdbFen());   // lazy chessdb.cn lookup for the branch point (前一步)
   if (EDITOR.aiAnalysis.points.length) renderAiView();   // move the trend cursor
+  // A derived 雲庫演繹 line belongs to the position it started from; once the
+  // board moves elsewhere it's stale — drop it so the panel doesn't show a line
+  // for a different position (the user re-runs 演繹 on demand).
+  const cdl = EDITOR.cdbLine;
+  if (cdl.steps.length && !cdl.running && cdl.startFen !== currentFen()) clearCdbLine();
 }
 
 // ---------- board move-hint arrows ----------
@@ -2138,6 +2255,7 @@ function switchRpTab(tab) {
   // The 雲庫 list defers its Chinese-notation translation until visible — fill
   // it now that the tab is shown (batched; no-op if already cached).
   if (tab === "cdb") fillCdbNotations();
+  if (tab === "cdbline") renderCdbLineView();
 }
 function switchAnnoteTab(tab) {
   switchTabsIn($("#rpAnnote"), tab);
@@ -2825,6 +2943,10 @@ $("#engineToggleBtn").onclick = toggleAnalysis;
 $("#engineCurBtn").onclick = analyzeCurrentStep;
 $("#engineClearBtn").onclick = clearAnalysisHistory;
 $("#engineExportBtn").onclick = exportAnalysisHistory;
+// ☁ 雲庫演繹: derive (on-demand) + reuse the engine line's demo / add-to-tree.
+if ($("#cdbLineRunBtn")) $("#cdbLineRunBtn").onclick = deriveCdbLine;
+if ($("#cdbLineDemoBtn")) $("#cdbLineDemoBtn").onclick = () => openDemo(cdbLineEntry());
+if ($("#cdbLineAddBtn")) $("#cdbLineAddBtn").onclick = () => addPvLine(cdbLineEntry());
 // AI 分析 (whole-line trend) — run button + chart query line (hover to read
 // each step's move + score; click to jump the board to that position).
 $("#aiAnalyzeBtn").onclick = analyzeCurrentLine;
@@ -2872,6 +2994,17 @@ if (aiDepth2Input) {
     v = Math.max(1, Math.min(30, v));
     aiDepth2Input.value = v;
     savePreference("aiAnalysisDepth2", v);
+  });
+}
+// ☁ 雲庫演繹 max plies — adjustable in settings, persisted to prefs.
+const cdbLineDepthInput = $("#cdbLineDepthInput");
+if (cdbLineDepthInput) {
+  cdbLineDepthInput.addEventListener("change", () => {
+    let v = parseInt(cdbLineDepthInput.value, 10);
+    if (!Number.isFinite(v)) v = 12;
+    v = Math.max(1, Math.min(30, v));
+    cdbLineDepthInput.value = v;
+    savePreference("cdbLineDepth", v);
   });
 }
 const aiDiffThreshInput = $("#aiDiffThreshInput");
@@ -3096,6 +3229,8 @@ async function recoverSettingsFromLocalStorage() {
   if (aiDiffThreshEl) aiDiffThreshEl.value = aiDiffThreshold();
   const aiDualEl = $("#aiDualChk");
   if (aiDualEl) aiDualEl.checked = aiDualEnabled();
+  const cdbLineDepthEl = $("#cdbLineDepthInput");
+  if (cdbLineDepthEl) cdbLineDepthEl.value = cdbLineDepth();
   renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
   // Pulsing badge on the empty board while the tree + last file load, so the

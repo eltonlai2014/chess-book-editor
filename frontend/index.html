@@ -96,9 +96,10 @@
         <div class="splitter splitter-h" data-resize="rpAnnote" data-pref="splitAnnoteH" data-direction="row"></div>
         <div id="rpVars" class="rpSection rpVars">
           <div class="rpTabs" role="tablist">
-            <button id="rpTabVars"   class="rpTab active" data-tab="vars"   role="tab">本步的所有走法</button>
-            <button id="rpTabCdb"    class="rpTab"        data-tab="cdb"    role="tab">☁ 雲庫</button>
-            <button id="rpTabEngine" class="rpTab"        data-tab="engine" role="tab">🐟 引擎分析</button>
+            <button id="rpTabVars"    class="rpTab active" data-tab="vars"    role="tab">本步的所有走法</button>
+            <button id="rpTabCdb"     class="rpTab"        data-tab="cdb"     role="tab">☁ 雲庫</button>
+            <button id="rpTabCdbLine" class="rpTab"        data-tab="cdbline" role="tab">☁ 雲庫演繹</button>
+            <button id="rpTabEngine"  class="rpTab"        data-tab="engine"  role="tab">🐟 引擎分析</button>
           </div>
           <div id="rpVarsBody" class="rpTabBody" data-tab="vars">
             <div id="varPicker"></div>
@@ -109,6 +110,15 @@
               <button id="cdbRefreshBtn" class="iconBtn" title="重新向 chessdb.cn 查詢本局面（略過快取）">⟳ 重查</button>
             </div>
             <div id="cdbList" class="cdbList"></div>
+          </div>
+          <div id="rpCdbLineBody" class="rpTabBody" data-tab="cdbline" hidden>
+            <div class="engineBar">
+              <button id="cdbLineRunBtn" class="iconBtn engineToggle" title="從本局面起，雙方都走雲庫最佳著，逐步推演一條主線（步數見 ⚙ 設定）">▶ 演繹</button>
+              <button id="cdbLineDemoBtn" class="iconBtn" title="在彈出棋盤上演示這條雲庫主線" disabled>▷ 演示</button>
+              <button id="cdbLineAddBtn" class="iconBtn" title="把這條雲庫主線加入棋譜分支" disabled>⎘ 加入</button>
+              <span id="cdbLineState" class="engineState">尚未演繹</span>
+            </div>
+            <div id="cdbLineList" class="engineHistory"></div>
           </div>
           <div id="rpEngineBody" class="rpTabBody" data-tab="engine" hidden>
             <div class="engineBar">
@@ -243,6 +253,11 @@
           <label>雙深度分歧門檻（cp；超過即標記該步）</label>
           <input id="aiDiffThreshInput" type="number" min="0" max="2000" step="10" value="200"
                  title="兩個深度的分數相差超過此值時，於走勢圖該步標出警示符號">
+        </div>
+        <div class="settingRow">
+          <label>雲庫演繹步數（沿雲庫最佳著推演的最大步數）</label>
+          <input id="cdbLineDepthInput" type="number" min="1" max="30" step="1" value="12"
+                 title="「☁ 雲庫演繹」最多往前推幾步；雲庫無資料時會提前停止">
         </div>
       </div>
       <div class="modalActions">

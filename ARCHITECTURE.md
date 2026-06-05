@@ -183,6 +183,17 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 實際抓取（merge 進 `evalsByFen[cdbFen].cdb`；`fresh` 跳快取；失敗不快取以利重試） | `fetchCdbLive` |
 | 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳；標出目前所在變化 `.current`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
 | 雲庫著法翻中文：**僅在 tab 可見時翻 + 一次 batch**（避免落點時對隱藏 tab 狂打 move-info） | `fillCdbNotations`（gate on `#rpCdbBody.hidden`）/ `notationsForBatch`；`switchRpTab('cdb')` 切過去時補翻 |
+
+**☁ 雲庫演繹（cdbline tab）—— 從本局面沿雲庫最佳著往前推一條主線**
+| 功能 | 函式 |
+|---|---|
+| 推演迴圈：自 `currentFen()` 起，逐步查 `/api/chessdb` best→`applyIccs` 進到下一盤→再查，最多 `cdbLineDepth()` 步。**按鈕觸發、非自動**；cache 命中免費，**只有 `source==='live'` 才 sleep 250ms**（守 chessdb 禮貌）。終止＝到步數／雲庫無資料（出書）／殺棋 | `deriveCdbLine`（state `EDITOR.cdbLine`）|
+| 進度/結果渲染（步序＋紅POV分/`#±N`；演示·加入按鈕 enable/disable） | `renderCdbLineView` |
+| 演示／加入：組 `{fen,path,pvUci,pv}` entry **複用** `openDemo`／`addPvLine`（無新 demo/加入邏輯） | `cdbLineEntry` |
+| 過期清除：導航離開起始局面（`refreshActive`）或換檔換目錄即 `clearCdbLine` | `clearCdbLine` |
+| 步數設定 pref `cdbLineDepth`（預設 12） | `cdbLineDepth`；設定欄 `#cdbLineDepthInput` |
+
+> **為何這不違反「雲庫逐盤面、勿批掃」原則**：它是**按鈕觸發的單次連查**（非隨導航自動、非整檔掃），且 cache-first＋live 才節流 250ms，仍守 chessdb ~5 req/s。離開開局庫後很快 `status≠ok` 自動停，多半跑不滿 12 步。
 | 點列＝在**分支點**加同層變化（非當前著的子著）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
 | 「重查」按鈕（`fresh=1` 跳快取重打 `cdbFen()`） | boot 段綁 `#cdbRefreshBtn` |
 
@@ -249,7 +260,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | header（logo「棋鑑」/主題/視角/賽事/儲存） | h1 含 inline `.appLogo` SVG | metaBtn/saveBtn 在此 |
 | 檔案樹 pane | settingsBtn / newXqfBtn | |
 | 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | |
-| 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`：`#cdbBar`+`#cdbList`)+引擎分析 |
+| 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析 |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
 
 ### 持久層（已驗證全庫 round-trip）

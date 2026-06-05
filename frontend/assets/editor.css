@@ -1366,6 +1366,23 @@ h2.panelHead > span { flex: 1 1 auto; }
 .cdbScore.delta-neg-mild   { color: #d6a59b; }
 .cdbScore.delta-neutral    { color: #b9ad92; }
 
+/* ☁ 雲庫演繹: the forward chessdb main line, rendered as a flowing sequence. */
+.cdbLineSeq { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 6px 2px; line-height: 1.7; }
+.cdbLineMove {
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  color: #eadcc0;
+}
+.cdbLineMove > b { color: var(--text-muted); font-weight: 600; margin-right: 2px; }
+.cdbLineScore { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: 2px; }
+.cdbLineScore.delta-pos-strong { color: #6fcf7d; }
+.cdbLineScore.delta-pos-mild   { color: #9bd6a4; }
+.cdbLineScore.delta-neg-strong { color: #e07a6b; }
+.cdbLineScore.delta-neg-mild   { color: #d6a59b; }
+.cdbLineScore.delta-neutral    { color: #b9ad92; }
+
 /* ---------- modal (metadata editor) ---------- */
 .modal {
   position: fixed;
