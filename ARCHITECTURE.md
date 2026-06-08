@@ -283,6 +283,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | XQStudio 驗證樣本 | `samples/`、`tools/emit_sample.py` |
 | 門檻同步檢查 | `backend/test_trap_spotcheck.py` / `test_eval_integration.py` |
 | cchess 內附 wheel（離線安裝來源） | `vendor/wheels/`、`requirements.txt`、`setup.ps1` |
+| 桌面打包（免裝 Python，pywebview 殼＋PyInstaller） | 入口 `desktop.py`（daemon thread 起 Flask＋開原生視窗；`--check`＝headless 煙霧測）、`desktop.spec`（onedir）、`requirements-desktop.txt`/`requirements-build.txt`；凍結路徑分流 `backend/app.py` `_resource_base`（唯讀→`_MEIPASS`）/`_data_base`（可寫→exe 旁） |
 
 ---
 

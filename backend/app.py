@@ -76,12 +76,30 @@ DEFAULT_PIKAFISH = (
     Path(__file__).resolve().parent.parent.parent
     / "chess-book-ai" / "engine" / "Windows" / "pikafish-avx2.exe"
 )
-FRONTEND_ROOT = Path(__file__).resolve().parent.parent / "frontend"
-PREFS_PATH = Path(__file__).resolve().parent.parent / "preferences.json"
+def _resource_base() -> Path:
+    """Root of read-only bundled resources (the ``frontend/`` SPA). Under a
+    PyInstaller build these are unpacked to ``sys._MEIPASS``; in a source run
+    it's the repo root (this file's grandparent)."""
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    return Path(__file__).resolve().parent.parent
+
+
+def _data_base() -> Path:
+    """Root for WRITABLE state (``preferences.json``, ``output/`` cache). Under
+    a PyInstaller build this is the folder next to the .exe — NOT ``_MEIPASS``,
+    which is a temp dir wiped on exit (onefile) and conceptually read-only."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+FRONTEND_ROOT = _resource_base() / "frontend"
+PREFS_PATH = _data_base() / "preferences.json"
 # Editor's OWN writable chessdb cache for live chessdb.cn lookups. Kept apart
 # from the read-only positions.db (AI repo) and the AI pipeline's
 # chessdb_cache.json — see backend/chessdb_service.py.
-CHESSDB_CACHE_PATH = Path(__file__).resolve().parent.parent / "output" / "editor_chessdb_cache.db"
+CHESSDB_CACHE_PATH = _data_base() / "output" / "editor_chessdb_cache.db"
 
 app = Flask(__name__)
 

@@ -1,0 +1,10 @@
+# Extra dependency for the pywebview desktop shell (desktop.py) — POC.
+#
+# Kept SEPARATE from requirements.txt: the browser+server flow (run-dev.ps1)
+# must not grow a GUI dependency. Install only when trying the desktop window:
+#   .\.venv\Scripts\pip.exe install -r requirements-desktop.txt
+#
+# On Windows, pywebview uses the WebView2 (Edge Chromium) backend, which is
+# pre-installed on Windows 11. pywebview pulls in pythonnet/clr-loader to talk
+# to it — no Chromium is shipped by us.
+pywebview>=5.3

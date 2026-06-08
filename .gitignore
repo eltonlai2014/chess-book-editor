@@ -11,6 +11,10 @@ __pycache__/
 _tmp_*.xqf
 *_tmp.xqf
 
+# PyInstaller build artifacts (desktop.spec is source and IS committed)
+build/
+dist/
+
 # Don't commit local user edits unless explicitly staged
 output/
 preferences.json

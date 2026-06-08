@@ -186,6 +186,20 @@ source, let each user run it on their own machine with their own engine + data.*
 - **Engine + positions.db are NOT bundled.** Pikafish is GPL and microarch-
   specific (avx2 vs plain); the eval DB is the AI repo's data. Users set both
   via the UI pickers; the app runs without either.
+- **Optional desktop build (`desktop.py` + `desktop.spec`, POC — not yet
+  shipped).** A second, heavier path that needs NO Python on the user's box:
+  PyInstaller freezes a pywebview shell into `dist\ChessBookEditor\` (~27MB
+  onedir). pywebview not Electron — backend is Python, so we drive the OS
+  WebView2 (Win11 built-in, no Chromium shipped) and stay one-language. The
+  source zip+`setup.ps1` path above is still the primary; the exe is for users
+  who can't run PowerShell. **Frozen path-split is load-bearing**: `_MEIPASS`
+  (read-only `frontend/`) vs exe-adjacent dir (writable `preferences.json` /
+  `output/`) — see `_resource_base`/`_data_base` in `backend/app.py`; never let
+  prefs land in the temp `_MEIPASS`. Same NOT-bundled rules apply (engine, DB,
+  library, `preferences.json`). Before shipping it: `console=False`+icon in the
+  spec, code-sign (else SmartScreen blocks), ship `preferences.example.json`
+  next to the exe. Deps split out to `requirements-desktop.txt` (pywebview) /
+  `requirements-build.txt` (pyinstaller) so the server flow stays GUI-free.
 
 ## Gotchas
 
