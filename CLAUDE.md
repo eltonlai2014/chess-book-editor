@@ -129,14 +129,18 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   sleeping 250ms **only on live misses**. It also self-terminates the moment
   chessdb has no row (out of book), so it rarely runs the full depth. Keep those
   three guards if you touch it.
-- **Cloud queries the BRANCH POINT (前一步), not the post-move position.** The
-  cloud list must show "what moves are playable at this decision" (the active
-  move + its alternatives), not "how the opponent replies to the move just
-  played". So cloud is keyed to `cdbFen()` (= `analysisFen`, one ply back) and
-  clicking a cloud move adds it as a *sibling* at the branch point
+- **The whole `#evalLine` judges the DECISION POINT (前一步), not the post-move
+  position.** 深N scores, 建議, and 雲 all key to `cdbFen()` (= `analysisFen`, one
+  ply back), answering "was this move good, and what else was playable here" —
+  matching chess-book-ai's per-move table (whose 分 is also the pre-move eval).
+  This also gives the LAST move a score: the post-leaf position isn't in
+  positions.db, but the leaf's decision point is. Depth data comes from the
+  `fetchEvalsForFile` batch (`collectAllFens` already includes every node's
+  decision-point FEN) — no per-navigation network call.
+- **Cloud list = the branch's alternatives, not opponent replies.** Same `cdbFen`
+  framing: the 雲庫 tab lists the moves playable at the decision point (the active
+  move + its siblings). Clicking one adds it as a *sibling* at the branch point
   (`addCdbMove`→`insertMoveAt(branchPath,…)`), NOT a child of the active move.
-  The depth-eval cells in `#evalLine` stay on `currentFen()` (static eval of the
-  position as shown) — deliberately a different FEN from the 雲 cell.
 - **Return shape mirrors `eval_service`'s `cdb`** (`{status, moves, best,
   source}`) so cached (batch) and live results share `renderEvalLine` /
   `renderCdbTab`. Scores are mover-POV cp; UI flips to red POV for display.

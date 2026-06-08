@@ -197,7 +197,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 點列＝在**分支點**加同層變化（非當前著的子著）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
 | 「重查」按鈕（`fresh=1` 跳快取重打 `cdbFen()`） | boot 段綁 `#cdbRefreshBtn` |
 
-> **為何查前一步**：雲庫列要呈現「該分支點上紅/黑可以怎麼走」（兵五進一及其替代著），而不是「走完本步後對手如何因應」。所以 cloud 一律 key 在 `cdbFen()`（前一步）；評估列的深度分數格仍 key 在 `currentFen()`（本局面靜態評估），兩者刻意不同 FEN。
+> **整條評估列都看「前一步＝決策點」(`cdbFen`)**：深N分數、建議、雲全部 key 在 `cdbFen()`，回答「目前這步走得好不好、該決策點還能怎麼走」，對齊 chess-book-ai 的逐步表（其「分」也是走這步之前的評分）。**這也讓最後一步有分**：葉節點（走完之後）不在 positions.db，但它的決策點（前一步）在，故 `renderEvalLine` 用 `cdbFen` 就查得到。深度分數來自 `fetchEvalsForFile` 的 batch（`collectAllFens` 已含每個節點的決策點 FEN），不需逐步打網路。
 > 雲庫資料形狀＝後端 `cdb`（`{status,moves,best,source}`），與 `/api/eval/batch` 一致，故 batch 命中與即時查可共用 `renderEvalLine`/`renderCdbTab`。分數是行棋方 POV cp，顯示時 ×flip 轉紅方視角（同 `_parse_info_line` 慣例）。
 
 **即時引擎分析（SSE）—— 引擎分析 tab**

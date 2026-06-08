@@ -1033,8 +1033,13 @@ async function renderEvalLine() {
   if (!el) return;
   el.innerHTML = "";
   if (!EDITOR.data) return;
-  const fen = currentFen();
-  const entry = EDITOR.evalsByFen[fen] || {};
+  // The whole eval line describes the DECISION POINT (前一步, cdbFen) the active
+  // move was chosen from — NOT the position after it. So 深N / 建議 / 雲 all
+  // judge "was this move good, and what else could be played here", matching the
+  // chess-book-ai per-move table. This also gives the LAST move a score (the
+  // post-leaf position isn't in positions.db, but the leaf's decision point is).
+  const fen = cdbFen();
+  const entry = (fen && EDITOR.evalsByFen[fen]) || {};
 
   const cells = [];
   // --- engine eval cells (depth scores), gated on positions.db ---
@@ -1052,14 +1057,13 @@ async function renderEvalLine() {
     bestIccs = deepest && deepest.best_iccs;
   }
 
-  // --- cloud-library cell (chessdb.cn) — keyed to the BRANCH POINT (前一步,
-  // cdbFen), not the post-move position, so 雲 shows the cloud's top move at
-  // this decision (comparable to 建議), not the opponent's reply. Independent
-  // of positions.db, so it shows even for user-set positions the engine DB has
-  // never seen. The Chinese notation is resolved async via /api/xqf/move-info.
+  // --- cloud-library cell (chessdb.cn) — same decision-point FEN as the depth
+  // cells above (cFen === fen). 雲 shows the cloud's top move at this decision,
+  // comparable to 建議. Independent of positions.db, so it shows even for
+  // user-set positions the engine DB has never seen.
   let cdbIccs = null;
-  const cFen = cdbFen();
-  const cEntry = (cFen && EDITOR.evalsByFen[cFen]) || {};
+  const cFen = fen;
+  const cEntry = entry;
   const cl = EDITOR.cdbLive;
   if (cEntry.cdb && cEntry.cdb.best) {
     const b = cEntry.cdb.best;
