@@ -213,6 +213,15 @@ source, let each user run it on their own machine with their own engine + data.*
   docstring bug #2.
 - **Test source path is hard-coded** to `D:\Elton\TestArea\chess-book\` in
   `tests/test_roundtrip.py`. If the source library moves, update `SRC_ROOT`.
+- **AI 自動走棋靠 `go movetime`，不是新後端。** `/api/engine/analyze` 早就吃
+  `movetime`＋回 `{done,bestmove}`，自動走子只是前端 `requestBestMove` 帶
+  `movetime=步時×1000`、拿 `done.bestmove`（步時到＝當前最高分著）。`bestmove
+  (none)`＝終局即停。**別為此加後端端點。** **自動走棋一律沙盒**（`ap.recording`
+  釘死 false，UI 開關已移除）：走子在 `EDITOR.autoPlay.sandboxLine`，**不碰走子樹**，
+  停止即 `navigateTo(startPath)` 還原；要落地按 🤖AI走棋 分頁歷程**最新一步**的「加入」
+  （`addPvLine`）。換檔/換目錄走 `stopAutoPlay(null,false)` 只清狀態不還原。輸入/盤面分流的唯一開關是
+  `boardFen()`（沙盒回末筆 fen，否則 `currentFen()`）——新增會吃盤面 fen 的程式碼要用它而非
+  `currentFen()`。人機輪替（只勾一方）靠 `tryAddMove` 末的 `maybeResumeAutoPlay`。
 
 ## Master's working style (carried over from chess-book-ai)
 

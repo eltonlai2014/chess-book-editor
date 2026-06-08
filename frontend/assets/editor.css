@@ -682,11 +682,22 @@ h2 {
    file-pane side margins they no longer live under). */
 /* gap is the inter-section breathing room (replaces the per-section </br> hack);
    padding-bottom keeps the last section off the 完成 button. */
+/* Two-column layout for the section groups: 5 stacked groups made the dialog
+   taller than the viewport. CSS multi-column (masonry-style) so groups of
+   uneven height flow to fill both columns with no row-alignment gaps — a 2-col
+   GRID left a tall right group pulling a hole under the short left one.
+   break-inside:avoid keeps each group whole. Narrow viewports fall back to one
+   column; an internal scroll guard keeps the title + 完成 reachable if it's
+   still tall. */
 .settingsForm {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
+  column-count: 2;
+  column-gap: 26px;
   padding-bottom: 8px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+@media (max-width: 640px) {
+  .settingsForm { column-count: 1; }
 }
 
 /* Grouped sections: a faint header rule keeps "data source / engine / cloud /
@@ -698,10 +709,13 @@ h2 {
 }
 
 /* Each section gets a little bottom padding so its last field has breathing
-   room — and the final section isn't jammed against 完成 (the inter-section
-   gap doesn't apply after the last one). */
+   room — and the final section isn't jammed against 完成. In multi-column flow
+   margin-bottom is the inter-group spacing, and break-inside:avoid stops a
+   group from being split across the column break. */
 .settingsForm .settingsGroup {
   padding-bottom: 6px;
+  margin-bottom: 22px;
+  break-inside: avoid;
 }
 
 .settingsGroupTitle {
@@ -1297,6 +1311,12 @@ h2.panelHead>span {
   font-style: italic;
   padding: 6px 2px;
 }
+
+/* Side-coloured move text, shared by the 引擎分析 PV and the 🤖AI走棋 log:
+   red side warm-red, black side blue — same hues as the annote tone chips,
+   tuned for legibility as text on the dark panel. */
+.moveRed { color: #e8796a; }
+.moveBlk { color: #6aa6e8; }
 
 /* Inline icons — one stroke set across the whole app. */
 .ico {
@@ -2340,7 +2360,7 @@ h2.panelHead>span {
    webview instead of overflowing off the left edge. */
 #settingsModal .modalDialog {
   box-sizing: border-box;
-  width: min(580px, calc(100vw - 24px));
+  width: min(860px, calc(100vw - 24px));   /* wider: holds the two-column .settingsForm */
   max-width: none;
   min-width: 0;
   padding: 18px 24px 20px;

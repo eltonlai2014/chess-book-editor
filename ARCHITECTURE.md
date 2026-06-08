@@ -229,6 +229,25 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 畫 / 跳步 / 自動播放 | `renderDemo`:2177 / `demoGo`:2197 / `demoTogglePlay`:2204 / `demoStopPlay`:2190 |
 | **把 PV 加進走子樹** | `addPvLine`:2234 |
 
+**🤖 AI 自動走棋（pikafish 自動走子；後端零改動，複用 `/api/engine/analyze` 的 `movetime`）**
+| 功能 | 函式 |
+|---|---|
+| 主迴圈：取行棋方→該方 AI？否則暫停等人（人機輪替）→ 取最佳著→套用→下一手 | `autoPlayStep` |
+| 起/停（停止時若沙盒則 `navigateTo(startPath)` 還原；`restore=false` 給換檔用） | `startAutoPlay` / `stopAutoPlay` / `toggleAutoPlay` |
+| 取最佳著（headless SSE，`go movetime`；`done.bestmove` 為準，`(none)`＝終局）。**不複用 `startAnalysis`**（那支綁引擎 tab UI） | `requestBestMove` |
+| 套用一步：**固定走 sandbox**→`sandboxPush`（`ap.recording` 釘死 false；record→`insertMoveAt` 分支保留但不走） | `autoApplyMove` |
+| 沙盒：暫態線（不碰 `EDITOR.data`）push＋畫盤；輸入路徑用 `boardFen()`（沙盒回末筆 fen，否則 `currentFen`） | `sandboxPush` / `renderSandbox` / `boardFen`:235 / `redrawBoardView` |
+| 人落子後若輪 AI 則接手（掛在 `tryAddMove` 末） | `maybeResumeAutoPlay` |
+| **走子歷程（`autoPlay.history`，逐步記 cp/mate；最新在上）；只有最新一步有 演示/加入；每筆著法依走子方 `.moveRed`/`.moveBlk` 上色** | `renderAutoHistory` / `autoEntryUpTo`（組 `{fen,path,pvUci,pv}` 複用 `openDemo`/`addPvLine`）/ `clearAutoHistory` / `setAutoState` |
+| 起/停 toggle 鈕（在 🤖AI走棋 **分頁控制列內**，非 tab 列；`iconLabel` play/開始 ↔ stop/停止） | `updateAutoPlayBtn`；`#autoStartBtn` |
+| 🤖AI走棋 分頁（控制列：清除＋狀態 `#autoState`；歷程 `#autoHistory`）；start 時 `switchRpTab('auto')`。**無「加入棋譜」開關 → 一律沙盒；要落地按歷程最新步的 加入** | `#rpTabAuto`/`#rpAutoBody`；`#autoClearBtn` |
+| pref 存取子 | `autoAiRed`/`autoAiBlack`/`autoRedSecs`/`autoBlackSecs`/`autoMaxPlies` |
+
+> **步時語意**：`movetime` 滿即吐 `bestmove`＝當前最高分著（需求 3）。**自動走棋一律沙盒不落地**（`ap.recording` 釘死
+> false，UI 開關已移除）：moves 在 `autoPlay.sandboxLine`，停止 `navigateTo(startPath)` 還原；要保留就按歷程最新步的
+> 加入（`addPvLine`）。換檔/換目錄走 `stopAutoPlay(null,false)` 只清狀態不還原（`EDITOR.data` 已換）。`boardFen()` 是
+> `currentFen()`/沙盒末筆的唯一分流點。
+
 **🎬 GIF 匯出（整條主線 → 動畫 GIF；純前端、後端零改動）**
 | 功能 | 函式（frontend/assets/gifexport.js，除非另註） |
 |---|---|
@@ -237,12 +256,13 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | **字型內嵌**（離屏光柵化時頁面 `<link>` webfont 不生效）：抓 `PIECE_FONTS[style].googleUrl` 已子集化(&text=)的 CSS → 把 `url(...woff2)` 換 base64 data URI → 注入每格 SVG `<defs><style>`；抓失敗退回系統 CJK 字型，不擋匯出。抓一次快取 | `loadEmbeddedFontCss` / `injectFontStyle` |
 | SVG→canvas 走 Blob URL（字型 base64 太大，免每格 encodeURIComponent）／字幕條／每手停留 ms（末格 ×2.5） | `svgToImage` / `paintCaption` / `frameDelayMs` |
 | 編碼器：vendored `gifenc`（無相依、無 worker、不走 runtime CDN），IIFE 包成 `window.gifenc`（GIFEncoder/quantize/applyPalette） | frontend/assets/gifenc.global.js |
-| 觸發鈕在棋譜列標頭 `#exportGifBtn`（🎬，純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |
+| 觸發鈕在棋譜列標頭 `#exportGifBtn`（Lucide `ICON.film`，editor.js boot 注入取代 HTML 的 🎬 fallback；純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |
 
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |
 |---|---|
 | 偏好讀寫（伺服器 preferences.json） | `loadPreferences`:64 / `savePreference`:71 |
+| AI 自動走棋偏好（`autoAiRed`/`autoAiBlack`/`autoRedSecs`/`autoBlackSecs`/`autoRecordToTree`/`autoMaxPlies`） | 同 `loadPreferences`/`savePreference`；boot 段回填、change 即存 |
 | GIF 影格間隔（秒，預設 0.65；設定欄 `#gifDelayInput`） | `gifFrameDelaySec`（pref `gifFrameDelaySec`；gifexport.js `frameDelayMs` 讀它） |
 | localStorage「最後可用」備份 + 開機回復提示 | `LS_KEYS`/`lsGet`/`lsSet`:87–89 / `recoverSettingsFromLocalStorage`:2515 |
 | 設定 dialog（標題列 ✕＋完成） | `openSettingsModal`:2282 / `closeSettingsModal`:2283 |
@@ -271,8 +291,9 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | header（logo「棋鑑」/主題/視角/賽事/儲存） | h1 含 inline `.appLogo` SVG | metaBtn/saveBtn 在此 |
 | 檔案樹 pane | settingsBtn / newXqfBtn | |
 | 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | |
-| 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析 |
+| 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析+🤖AI走棋(`#rpAutoBody`：控制列 `#autoStartBtn`(start/stop)/`#autoClearBtn`/`#autoState`+歷程 `#autoHistory`) |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
+| settings 分區（兩欄瀑布流 `.settingsForm{column-count:2}`，`break-inside:avoid`） | 資料來源 / 引擎分析 / 雲庫演繹 / **AI 自動走棋**（`#autoAiRedChk`/`#autoAiBlackChk`/`#autoRedSecsInput`/`#autoBlackSecsInput`/`#autoMaxPliesInput`；**加入棋譜 `#autoRecordChk` 已移到 🤖AI走棋 分頁**）/ 匯出動畫 |
 
 ### 持久層（已驗證全庫 round-trip）
 

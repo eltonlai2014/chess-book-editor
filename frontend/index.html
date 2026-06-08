@@ -104,6 +104,7 @@
             <button id="rpTabCdb" class="rpTab" data-tab="cdb" role="tab">☁ 雲庫</button>
             <button id="rpTabCdbLine" class="rpTab" data-tab="cdbline" role="tab">☁ 雲庫演繹</button>
             <button id="rpTabEngine" class="rpTab" data-tab="engine" role="tab">🐟 引擎分析</button>
+            <button id="rpTabAuto" class="rpTab" data-tab="auto" role="tab">🤖 AI走棋</button>
           </div>
           <div id="rpVarsBody" class="rpTabBody" data-tab="vars">
             <div id="varPicker"></div>
@@ -134,6 +135,14 @@
               <span id="engineState" class="engineState">尚未開始</span>
             </div>
             <div id="engineHistory" class="engineHistory"></div>
+          </div>
+          <div id="rpAutoBody" class="rpTabBody" data-tab="auto" hidden>
+            <div class="engineBar">
+              <button id="autoStartBtn" class="iconBtn engineToggle" title="開始/停止 AI 自動走棋（步時/紅黑由 ⚙ 設定）">▶ 開始</button>
+              <button id="autoClearBtn" class="iconBtn" title="清除自動走棋歷程">🗑 清除</button>
+              <span id="autoState" class="engineState">尚未開始</span>
+            </div>
+            <div id="autoHistory" class="engineHistory"></div>
           </div>
         </div>
       </div>
@@ -284,6 +293,37 @@
               <label title="演繹時每次「即時查 chessdb.cn」之間的等待毫秒數（快取命中不等）。越小越快但越可能被 chessdb 限流；保守值 250">查詢間隔（ms）</label>
               <input id="cdbLineThrottleInput" type="number" min="100" max="2000" step="50" value="250"
                 title="演繹時每次「即時查 chessdb.cn」之間的等待毫秒數（快取命中不等）。越小越快但越可能被 chessdb 限流；保守值 250">
+            </div>
+          </div>
+        </section>
+
+        <section class="settingsGroup">
+          <h4 class="settingsGroupTitle">AI 自動走棋</h4>
+          <div class="settingGrid">
+            <div class="settingRow">
+              <label title="勾選後，紅方由皮卡魚自動走子">AI 紅方</label>
+              <input id="autoAiRedChk" type="checkbox"
+                title="勾選後，紅方由皮卡魚自動走子">
+            </div>
+            <div class="settingRow">
+              <label title="勾選後，黑方由皮卡魚自動走子">AI 黑方</label>
+              <input id="autoAiBlackChk" type="checkbox"
+                title="勾選後，黑方由皮卡魚自動走子">
+            </div>
+            <div class="settingRow">
+              <label title="紅方每步的思考秒數；時間到立即依當前最高分走子">紅方步時（秒）</label>
+              <input id="autoRedSecsInput" type="number" min="1" max="120" step="1" value="3"
+                title="紅方每步的思考秒數；時間到立即依當前最高分走子">
+            </div>
+            <div class="settingRow">
+              <label title="黑方每步的思考秒數；時間到立即依當前最高分走子">黑方步時（秒）</label>
+              <input id="autoBlackSecsInput" type="number" min="1" max="120" step="1" value="3"
+                title="黑方每步的思考秒數；時間到立即依當前最高分走子">
+            </div>
+            <div class="settingRow">
+              <label title="沙盒演示模式自走的最大步數，避免無限自走">沙盒最大步數</label>
+              <input id="autoMaxPliesInput" type="number" min="2" max="600" step="2" value="200"
+                title="沙盒演示模式自走的最大步數，避免無限自走">
             </div>
           </div>
         </section>

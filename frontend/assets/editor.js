@@ -32,6 +32,12 @@ const EDITOR = {
   aiAnalysis: { running: false, points: [], queryIdx: null },  // depth-limited whole-line sweep → trend chart (queryIdx = hovered point)
   cdbLine: { running: false, steps: [], startFen: null, startPath: [], endReason: "" },  // 雲庫演繹: forward chessdb principal variation
   demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // 演示 playback state
+  // AI 自動走棋: pikafish drives one or both sides; per-side think-time (步時),
+  // bestmove at time-out. `recording` is snapshotted at start (true = write into
+  // the tree; false = ephemeral sandbox line that never touches EDITOR.data and
+  // is discarded — board restored to `startPath` — on stop). `waitingHuman` is
+  // the 人機輪替 pause: only one side is AI, so we idle until the human moves.
+  autoPlay: { running: false, recording: true, waitingHuman: false, es: null, startPath: null, sandboxBaseFen: null, sandboxLine: [], history: [] },
   rootOk: true,       // false when the configured library root is missing (drives LS recovery)
   rootPath: "",       // last root reported by the server (valid or not)
 };
@@ -232,6 +238,18 @@ function currentFen() {
   if (!EDITOR.data) return null;
   return fenAndLastIccsFor(EDITOR.activePath).fen;
 }
+// The FEN the board is currently SHOWING and accepting input against. Normally
+// equals currentFen() (the active tree path). During a *sandbox* auto-play
+// session (running + not recording), the board shows an ephemeral line that
+// never touches EDITOR.data, so overlay rendering and human input must key off
+// that line's tip instead. Outside a sandbox session this is a pure pass-through.
+function boardFen() {
+  const ap = EDITOR.autoPlay;
+  if (ap.running && !ap.recording && ap.sandboxLine.length) {
+    return ap.sandboxLine[ap.sandboxLine.length - 1].fen;
+  }
+  return currentFen();
+}
 // The position whose cloud-library variations we show: the branch point the
 // active move was chosen FROM (one ply back), NOT the position after it.
 // chessdb returns the moves available at a position; we want THIS branch's
@@ -243,7 +261,7 @@ function cdbFen() {
 }
 function pieceAt(sq) {
   // Returns piece char (e.g. "R" / "k") or null if empty / no game loaded.
-  const fen = currentFen();
+  const fen = boardFen();
   if (!fen) return null;
   const { rows } = parseFen(fen);   // board.js helper
   const { col, row } = parseSquare(sq);
@@ -266,7 +284,7 @@ function installBoardOverlay(svg) {
   // Legal-destination markers: ring around enemy occupied square (capture),
   // small dot on empty square (move). Drawn first so they sit under the
   // click-rects but above the pieces (after halo is inserted below).
-  const fen = currentFen();
+  const fen = boardFen();
   const occupiedSet = new Set();
   if (fen) {
     const { rows } = parseFen(fen);
@@ -339,7 +357,7 @@ function installBoardOverlay(svg) {
 
 function onSquareClick(sq) {
   if (!EDITOR.data) return;
-  const fen = currentFen();
+  const fen = boardFen();
   if (!fen) return;
   const sideToMove = parseFen(fen).side;
   const piece = pieceAt(sq);
@@ -347,7 +365,7 @@ function onSquareClick(sq) {
   // Same square clicked → deselect
   if (EDITOR.selectedSquare === sq) {
     clearSelection();
-    refreshActive();
+    redrawBoardView();
     return;
   }
   // No selection yet: clicking own piece selects it; anything else is a no-op
@@ -375,8 +393,8 @@ function clearSelection() {
 async function selectSquare(sq) {
   EDITOR.selectedSquare = sq;
   EDITOR.legalTargets = [];
-  refreshActive();
-  const fen = currentFen();
+  redrawBoardView();
+  const fen = boardFen();
   const reqSquare = sq;   // capture for the race-check below
   try {
     const r = await fetch("/api/xqf/legal-targets", {
@@ -390,13 +408,13 @@ async function selectSquare(sq) {
     // while we were awaiting, drop the stale response.
     if (EDITOR.selectedSquare !== reqSquare) return;
     EDITOR.legalTargets = resp.targets;
-    refreshActive();
+    redrawBoardView();
   } catch (_) { /* network glitch — leave dots empty, click-to-move still works */ }
 }
 
 async function tryAddMove(fromSq, toSq) {
   const iccs = fromSq + toSq;
-  const fen = currentFen();
+  const fen = boardFen();
   setStatus("驗證走法…");
   try {
     const r = await fetch("/api/xqf/move-info", {
@@ -406,17 +424,28 @@ async function tryAddMove(fromSq, toSq) {
     });
     const resp = await r.json();
     if (resp.error) { setStatus(resp.error, "err"); return; }
-    const outcome = await insertMoveAt(EDITOR.activePath, {
-      iccs,
-      notation: resp.notation,
-      side: resp.side,
-      ply: EDITOR.activePath.length + 1,
-      annote: "",
-      children: [],
-    });
-    if (outcome === "added") setStatus(`已新增 ${resp.notation}`, "ok");
-    else if (outcome === "existing") setStatus(`已切換至 ${resp.notation}`, "ok");
-    else setStatus("");  // cancelled
+    const ap = EDITOR.autoPlay;
+    if (ap.running && !ap.recording) {
+      // Sandbox auto-play: the human's move joins the ephemeral line, never the
+      // tree. (boardFen() already pointed move-info at the sandbox tip above.)
+      sandboxPush(iccs, resp.notation, resp.side);
+      setStatus(`沙盒：${resp.notation}`, "ok");
+    } else {
+      const outcome = await insertMoveAt(EDITOR.activePath, {
+        iccs,
+        notation: resp.notation,
+        side: resp.side,
+        ply: EDITOR.activePath.length + 1,
+        annote: "",
+        children: [],
+      });
+      if (outcome === "added") setStatus(`已新增 ${resp.notation}`, "ok");
+      else if (outcome === "existing") setStatus(`已切換至 ${resp.notation}`, "ok");
+      else { setStatus(""); return; }  // cancelled → don't hand control to the AI
+    }
+    // 人機輪替: the human just moved; if an auto-play session is idling for them
+    // and the next side is AI, resume the loop.
+    maybeResumeAutoPlay();
   } catch (e) {
     setStatus("新增失敗：" + e.message, "err");
   }
@@ -632,6 +661,8 @@ async function applyRoot(path) {
   EDITOR.data = null;
   EDITOR.activePath = [];
   clearSelection();
+  stopAutoPlay(null, false);   // data just dropped — clear session, don't restore old path
+  clearAutoHistory();
   stopAnalysis("尚未開始");
   clearAnalysisHistory();
   clearAiAnalysis();
@@ -687,6 +718,8 @@ async function selectFile(rel, liEl) {
     clearSelection();
     // New file → the old analysis no longer applies. Stop any running stream
     // and wipe both the 引擎分析 history and the AI 分析 trend.
+    stopAutoPlay(null, false);   // new tree loaded — clear session without restoring old path
+    clearAutoHistory();
     stopAnalysis("尚未開始");
     clearAnalysisHistory();
     clearAiAnalysis();
@@ -1392,13 +1425,22 @@ function renderCdbLineView() {
     list.innerHTML = `<div class="cdbEmpty">按「演繹」從本局面沿雲庫最佳著推演一條主線（最多 ${cdbLineDepth()} 步；雲庫無資料即止）。</div>`;
     return;
   }
-  const parts = s.steps.map((st, i) => {
-    const sc = st.mate != null
-      ? st.mate
-      : (st.scoreRed != null ? (st.scoreRed > 0 ? "+" : "") + st.scoreRed : "?");
-    return `<span class="cdbLineMove"><b>${i + 1}.</b> ${st.notation} <span class="cdbLineScore ${deltaSignClass(st.scoreRed)}">${sc}</span></span>`;
-  });
-  list.innerHTML = `<div class="cdbLineSeq">${parts.join(" ")}</div>`;
+  // Per-row layout mirroring the 🤖AI走棋 log: 第N步 · 紅/黑 著法(side-tinted) ·
+  // 紅分. Forward order (1→N) since this is a single forward-derived line.
+  const startSide = fenSideName(s.startFen);
+  list.innerHTML = s.steps.map((st, i) => {
+    const side = (i % 2 === 0) ? startSide : (startSide === "red" ? "black" : "red");
+    const sideTxt = side === "red" ? "紅" : "黑";
+    const cls = side === "red" ? "moveRed" : "moveBlk";
+    const sc = fmtEngineScore({ cp: st.scoreRed, mate: st.mate });
+    return `<div class="engEntry">`
+      + `<div class="engMeta">`
+      + `<span>第 <b class="engBig">${i + 1}</b> 步</span>`
+      + `<span class="${cls}">${sideTxt} <b class="engBig">${st.notation || st.iccs}</b></span>`
+      + `<span>紅分 <b class="engBig">${sc}</b></span>`
+      + `</div>`
+      + `</div>`;
+  }).join("");
 }
 
 // ---------- 棋譜 (move list) — XQStudio style: linearised current path ----------
@@ -2256,6 +2298,8 @@ const ICON = {
   chart: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
   note: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>',
   cloud: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 9.5 4 4 0 0 0 7 17.5"/></svg>',
+  bot: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
+  film: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>',
 };
 function iconLabel(icon, label) {
   return (ICON[icon] || "") + `<span>${label}</span>`;
@@ -2274,6 +2318,7 @@ function switchRpTab(tab) {
   // it now that the tab is shown (batched; no-op if already cached).
   if (tab === "cdb") fillCdbNotations();
   if (tab === "cdbline") renderCdbLineView();
+  if (tab === "auto") renderAutoHistory();
 }
 function switchAnnoteTab(tab) {
   switchTabsIn($("#rpAnnote"), tab);
@@ -2327,6 +2372,13 @@ function recordEngineEvent(ev) {
   updateBoardArrows();   // refresh the blue best-move arrow as depth climbs
 }
 
+// "red"|"black" of the side to move at a two/six-field FEN. Used by the 雲庫演繹
+// per-row side tint. (The 引擎分析 PV is intentionally left uncoloured — tinting
+// its moves, even just the lead one, read as too busy.)
+function fenSideName(fen) {
+  return ((fen || "").trim().split(/\s+/)[1] || "w") === "w" ? "red" : "black";
+}
+
 function renderEngineHistory() {
   const box = $("#engineHistory");
   if (!box) return;
@@ -2334,7 +2386,7 @@ function renderEngineHistory() {
   if (!h.length) { box.innerHTML = `<div class="varEmpty">尚無分析結果</div>`; return; }
   box.innerHTML = h.map((e) => {
     const t = e.time_ms ? (e.time_ms / 1000).toFixed(1) + "s" : "—";
-    const pv = (e.pv || []).join("　");
+    const pv = (e.pv || []).join("　");   // single colour — tinting plies was too busy
     const canPlay = (e.pvUci || []).length > 0;
     return `<div class="engEntry" data-depth="${e.depth}">`
       + `<div class="engMeta">`
@@ -2444,6 +2496,261 @@ function toggleAnalysis() {
 
 function analyzeCurrentStep() {
   startAnalysis(currentFen(), "cur");
+}
+
+// ---------- AI 自動走棋 (auto-play) ----------
+// pikafish drives one or both sides. Each side gets a think-time budget (步時,
+// seconds); the engine searches `go movetime` and plays its bestmove the moment
+// time runs out (= the highest-scored move so far). Backend is unchanged — the
+// /api/engine/analyze SSE endpoint already honours `movetime` and reports
+// `{done, bestmove}`. Two modes (snapshotted at start into autoPlay.recording):
+//   record  — every move is inserted into the tree (insertMoveAt); persists.
+//   sandbox — moves live on an ephemeral line (autoPlay.sandboxLine); the tree
+//             is untouched and the board is restored to startPath on stop.
+
+// Preference accessors (mirror aiDepth()/cdbLineDepth() house style).
+function autoAiRed() { return PREFS.autoAiRed === true || PREFS.autoAiRed === "true"; }
+function autoAiBlack() { return PREFS.autoAiBlack === true || PREFS.autoAiBlack === "true"; }
+function autoRedSecs() { const s = parseInt(PREFS.autoRedSecs, 10); return Number.isFinite(s) && s >= 1 && s <= 120 ? s : 3; }
+function autoBlackSecs() { const s = parseInt(PREFS.autoBlackSecs, 10); return Number.isFinite(s) && s >= 1 && s <= 120 ? s : 3; }
+function autoMaxPlies() { const n = parseInt(PREFS.autoMaxPlies, 10); return Number.isFinite(n) && n >= 2 && n <= 600 ? n : 200; }
+
+// Redraw the board for the *input* path: during a sandbox session the board
+// shows the ephemeral line, otherwise the normal tree-driven full refresh.
+function redrawBoardView() {
+  const ap = EDITOR.autoPlay;
+  if (ap.running && !ap.recording) renderSandbox();
+  else refreshActive();
+}
+
+// Draw the sandbox line's current tip on the main board (no tree side-effects).
+// Mirrors the board portion of refreshActive() but keyed off boardFen(); leaves
+// the move list / eval line alone (those describe the tree, which is unchanged).
+function renderSandbox() {
+  const ap = EDITOR.autoPlay;
+  const last = ap.sandboxLine.length ? ap.sandboxLine[ap.sandboxLine.length - 1] : null;
+  const fen = last ? last.fen : ap.sandboxBaseFen;
+  const lastIccs = last ? last.iccs : null;
+  drawBoard($("#board"), fen, lastIccs, null);
+  installBoardOverlay($("#board"));   // halo + legal dots read selection + boardFen()
+}
+
+// Append one move to the sandbox line and redraw. Selection is consumed.
+function sandboxPush(iccs, notation, side) {
+  const ap = EDITOR.autoPlay;
+  const tip = ap.sandboxLine.length ? ap.sandboxLine[ap.sandboxLine.length - 1].fen : ap.sandboxBaseFen;
+  clearSelection();
+  ap.sandboxLine.push({ iccs, notation, side, fen: applyIccs(tip, iccs) });   // applyIccs from board.js
+  renderSandbox();
+}
+
+// Ask the engine for the best move at `fen`, thinking for `movetimeMs`. Resolves
+// {bestUci, notation} — bestUci null means terminal (bestmove "(none)") or error.
+// Headless: its own EventSource (stored on autoPlay.es so stopAutoPlay can abort)
+// — deliberately NOT startAnalysis(), which is bound to the 引擎分析 tab UI.
+function requestBestMove(fen, movetimeMs) {
+  return new Promise((resolve) => {
+    let lastEv = null;   // most recent info event (carries pv/pvUci for notation)
+    const url = "/api/engine/analyze?fen=" + encodeURIComponent(fen) + "&movetime=" + movetimeMs + "&depth=0";
+    const es = new EventSource(url);
+    EDITOR.autoPlay.es = es;
+    const close = () => { try { es.close(); } catch (_) { } if (EDITOR.autoPlay.es === es) EDITOR.autoPlay.es = null; };
+    es.onmessage = async (e) => {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch (_) { return; }
+      if (ev.error) { close(); resolve({ bestUci: null, error: ev.error }); return; }
+      if (ev.done) {
+        close();
+        const bm = ev.bestmove;
+        const cp = lastEv ? (lastEv.cp ?? null) : null;   // red-POV, for the history score
+        const mate = lastEv ? (lastEv.mate ?? null) : null;
+        if (!bm || bm === "(none)" || bm.length < 4) { resolve({ bestUci: null }); return; }
+        // Notation: free if the last PV started with this move; else one move-info.
+        let notation = null;
+        if (lastEv && lastEv.pvUci && lastEv.pvUci[0] === bm && lastEv.pv) notation = lastEv.pv[0];
+        if (!notation) {
+          try {
+            const r = await fetch("/api/xqf/move-info", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fen, iccs: bm }),
+            });
+            const resp = await r.json();
+            notation = resp.error ? bm : resp.notation;
+          } catch (_) { notation = bm; }
+        }
+        resolve({ bestUci: bm, notation, cp, mate });
+        return;
+      }
+      if (ev.pvUci || ev.pv) lastEv = ev;
+    };
+    es.onerror = () => { close(); resolve({ bestUci: null, error: "連線中斷" }); };
+  });
+}
+
+// Apply one AI move. Returns true if the board advanced (loop should continue).
+async function autoApplyMove(iccs, notation, sideName) {
+  if (EDITOR.autoPlay.recording) {
+    const outcome = await insertMoveAt(EDITOR.activePath, {
+      iccs, notation: notation || iccs, side: sideName || "",
+      ply: EDITOR.activePath.length + 1, annote: "", children: [],
+    });
+    return outcome === "added" || outcome === "existing";   // "cancelled" → halt
+  }
+  sandboxPush(iccs, notation || iccs, sideName || "");
+  return true;
+}
+
+function autoPlayActiveSides() { return autoAiRed() || autoAiBlack(); }
+
+function startAutoPlay() {
+  if (!EDITOR.data) { setStatus("尚未載入棋譜", "err"); return; }
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) { setStatus("引擎未設定（請在檔案窗格選 🐟）", "err"); return; }
+  if (!autoPlayActiveSides()) { setStatus("請先在 ⚙ 設定勾選 AI 紅方或 AI 黑方", "err"); openSettingsModal(); return; }
+  const ap = EDITOR.autoPlay;
+  ap.running = true;
+  // Auto-play always runs in the ephemeral sandbox (never auto-writes the tree);
+  // to keep a line, use 加入 on the latest history step. The recording field is
+  // kept (the sandbox/tree split keys off it) but pinned false now the UI toggle
+  // is gone.
+  ap.recording = false;
+  ap.waitingHuman = false;
+  ap.startPath = [...EDITOR.activePath];
+  ap.sandboxBaseFen = currentFen();
+  ap.sandboxLine = [];
+  ap.history = [];                     // fresh session log
+  renderAutoHistory();
+  switchRpTab("auto");                 // surface the live move log
+  updateAutoPlayBtn();
+  autoPlayStep();
+}
+
+async function autoPlayStep() {
+  const ap = EDITOR.autoPlay;
+  if (!ap.running) return;
+  const fen = boardFen();
+  if (!fen) { stopAutoPlay("無局面"); return; }
+  const side = parseFen(fen).side;   // "w" red / "b" black (board.js)
+  const aiThis = side === "w" ? autoAiRed() : autoAiBlack();
+  if (!aiThis) {                     // 人機輪替: idle until the human moves
+    ap.waitingHuman = true;
+    setAutoState(`等待${side === "w" ? "紅" : "黑"}方（對手）落子…`);
+    return;
+  }
+  if (!ap.recording && ap.sandboxLine.length >= autoMaxPlies()) { stopAutoPlay("達沙盒步數上限"); return; }
+  const secs = side === "w" ? autoRedSecs() : autoBlackSecs();
+  setAutoState(`AI 思考中（${side === "w" ? "紅" : "黑"}方 ${secs}s）…`);
+  const res = await requestBestMove(fen, secs * 1000);
+  if (!ap.running) return;           // stopped during the search
+  if (res.error) { stopAutoPlay("引擎錯誤：" + res.error); return; }
+  if (!res.bestUci) { stopAutoPlay("終局（無合法著）"); return; }
+  const sideName = side === "w" ? "red" : "black";
+  const advanced = await autoApplyMove(res.bestUci, res.notation, sideName);
+  if (!ap.running) return;
+  if (!advanced) { stopAutoPlay("已取消新增分支"); return; }
+  // Log the played move (chronological; rendered newest-on-top). cp/mate are
+  // red-POV from requestBestMove.
+  ap.history.push({ side: sideName, iccs: res.bestUci, notation: res.notation, cp: res.cp, mate: res.mate });
+  renderAutoHistory();
+  setAutoState(`已走 ${ap.history.length} 步…`);
+  autoPlayStep();                    // next ply
+}
+
+// Called after a human move lands: resume the loop if it was idling and the
+// next side is AI.
+function maybeResumeAutoPlay() {
+  const ap = EDITOR.autoPlay;
+  if (!ap.running || !ap.waitingHuman) return;
+  const fen = boardFen();
+  if (!fen) return;
+  const side = parseFen(fen).side;
+  const aiNext = side === "w" ? autoAiRed() : autoAiBlack();
+  if (aiNext) { ap.waitingHuman = false; autoPlayStep(); }
+}
+
+// `restore` = false when the caller is about to swap EDITOR.data (file/dir
+// switch): don't navigate the old startPath into the new tree, just drop state.
+function stopAutoPlay(msg, restore = true) {
+  const ap = EDITOR.autoPlay;
+  const wasSandbox = ap.running && !ap.recording && ap.sandboxLine.length;
+  ap.running = false;
+  ap.waitingHuman = false;
+  if (ap.es) { try { ap.es.close(); } catch (_) { } ap.es = null; }
+  ap.sandboxLine = [];
+  // history + startPath/sandboxBaseFen persist so 演示/加入 still work after stop.
+  updateAutoPlayBtn();
+  if (msg != null) setAutoState(msg);
+  if (wasSandbox && restore && ap.startPath && EDITOR.data) navigateTo(ap.startPath);   // discard sandbox, show the real board
+}
+
+function toggleAutoPlay() {
+  if (EDITOR.autoPlay.running) stopAutoPlay("已停止自動走棋");
+  else startAutoPlay();
+}
+
+function updateAutoPlayBtn() {
+  const btn = $("#autoStartBtn");
+  if (!btn) return;
+  // Start/stop lives inside the 🤖AI走棋 tab control bar (not the tab strip).
+  btn.innerHTML = EDITOR.autoPlay.running ? iconLabel("stop", "停止") : iconLabel("play", "開始");
+  btn.title = EDITOR.autoPlay.running ? "停止 AI 自動走棋" : "開始 AI 自動走棋（步時/紅黑由 ⚙ 設定）";
+}
+
+function setAutoState(text) {
+  const el = $("#autoState");
+  if (el) el.textContent = text;
+}
+
+// Build a {fen, path, pvUci, pv} entry for the line from the session start up to
+// (and including) history step `idx` — fed to openDemo / addPvLine. The start
+// position + tree path persist on autoPlay across stop, so this works mid-run
+// and after. Same shape as cdbLineEntry().
+function autoEntryUpTo(idx) {
+  const ap = EDITOR.autoPlay;
+  const slice = ap.history.slice(0, idx + 1);
+  return {
+    fen: ap.sandboxBaseFen,
+    path: Array.isArray(ap.startPath) ? [...ap.startPath] : [],
+    pvUci: slice.map((s) => s.iccs),
+    pv: slice.map((s) => s.notation),
+  };
+}
+
+// Move log for the auto-play session. Newest on top (matches 引擎分析). Each row
+// = 第N步 著法 紅分 + 演示/加入 (replay / merge the line up to that step). Records
+// regardless of mode; 加入 is most useful in sandbox (record mode is already in
+// the tree). Reuses fmtEngineScore for the red-POV cp/mate.
+function renderAutoHistory() {
+  const box = $("#autoHistory");
+  if (!box) return;
+  const h = EDITOR.autoPlay.history;
+  if (!h.length) { box.innerHTML = `<div class="varEmpty">尚未自動走棋</div>`; return; }
+  const last = h.length - 1;
+  box.innerHTML = h.map((e, i) => {
+    const sideTxt = e.side === "red" ? "紅" : "黑";
+    const cls = e.side === "red" ? "moveRed" : "moveBlk";
+    // Only the latest step carries 演示/加入 — the line up to "now" is the only
+    // one worth replaying or merging; older rows would just be prefixes of it.
+    const actions = (i === last)
+      ? `<span class="engActions">`
+        + `<button class="autoDemo" title="在彈出棋盤上演示自起點到這一步的走子">${iconLabel("demo", "演示")}</button>`
+        + `<button class="autoAdd" title="把自起點到這一步的走子加入棋譜分支">${iconLabel("branch", "加入")}</button>`
+        + `</span>`
+      : "";
+    return `<div class="engEntry" data-seq="${i}">`
+      + `<div class="engMeta">`
+      + `<span>第 <b class="engBig">${i + 1}</b> 步</span>`
+      + `<span class="${cls}">${sideTxt} <b class="engBig">${e.notation || e.iccs}</b></span>`
+      + `<span>紅分 <b class="engBig">${fmtEngineScore(e)}</b></span>`
+      + actions
+      + `</div>`
+      + `</div>`;
+  }).reverse().join("");   // newest on top
+}
+
+function clearAutoHistory() {
+  EDITOR.autoPlay.history = [];
+  renderAutoHistory();
+  setAutoState("尚未開始");
 }
 
 // ---------- AI 分析: depth-limited sweep of the whole current line ----------
@@ -2934,6 +3241,7 @@ $("#navBranch").onclick = navToNearestBranch;
 $("#navNext").onclick = navNext;
 $("#navLast").onclick = navLast;
 $("#navDelete").onclick = deleteCurrentMove;
+$("#autoStartBtn").onclick = toggleAutoPlay;
 
 // Annote textarea: commit on every keystroke so EDITOR.data stays in sync.
 $("#annoteBox").addEventListener("input", commitAnnoteEdit);
@@ -2961,6 +3269,15 @@ $("#engineToggleBtn").onclick = toggleAnalysis;
 $("#engineCurBtn").onclick = analyzeCurrentStep;
 $("#engineClearBtn").onclick = clearAnalysisHistory;
 $("#engineExportBtn").onclick = exportAnalysisHistory;
+// 🤖 AI走棋 tab: clear log + per-step 演示/加入 (reuse openDemo/addPvLine).
+if ($("#autoClearBtn")) $("#autoClearBtn").onclick = clearAutoHistory;
+$("#autoHistory").addEventListener("click", (e) => {
+  const entryEl = e.target.closest(".engEntry");
+  if (!entryEl) return;
+  const entry = autoEntryUpTo(Number(entryEl.dataset.seq));
+  if (e.target.closest(".autoDemo")) openDemo(entry);
+  else if (e.target.closest(".autoAdd")) addPvLine(entry);
+});
 // ☁ 雲庫演繹: derive (on-demand) + reuse the engine line's demo / add-to-tree.
 if ($("#cdbLineRunBtn")) $("#cdbLineRunBtn").onclick = deriveCdbLine;
 if ($("#cdbLineDemoBtn")) $("#cdbLineDemoBtn").onclick = () => openDemo(cdbLineEntry());
@@ -3062,6 +3379,41 @@ const aiDualChk = $("#aiDualChk");
 if (aiDualChk) {
   aiDualChk.addEventListener("change", () => savePreference("aiDualDepth", aiDualChk.checked));
 }
+// AI 自動走棋 settings — persisted to prefs; read live by the auto-play loop.
+const autoAiRedChk = $("#autoAiRedChk");
+if (autoAiRedChk) autoAiRedChk.addEventListener("change", () => savePreference("autoAiRed", autoAiRedChk.checked));
+const autoAiBlackChk = $("#autoAiBlackChk");
+if (autoAiBlackChk) autoAiBlackChk.addEventListener("change", () => savePreference("autoAiBlack", autoAiBlackChk.checked));
+const autoRedSecsInput = $("#autoRedSecsInput");
+if (autoRedSecsInput) {
+  autoRedSecsInput.addEventListener("change", () => {
+    let v = parseInt(autoRedSecsInput.value, 10);
+    if (!Number.isFinite(v)) v = 3;
+    v = Math.max(1, Math.min(120, v));
+    autoRedSecsInput.value = v;
+    savePreference("autoRedSecs", v);
+  });
+}
+const autoBlackSecsInput = $("#autoBlackSecsInput");
+if (autoBlackSecsInput) {
+  autoBlackSecsInput.addEventListener("change", () => {
+    let v = parseInt(autoBlackSecsInput.value, 10);
+    if (!Number.isFinite(v)) v = 3;
+    v = Math.max(1, Math.min(120, v));
+    autoBlackSecsInput.value = v;
+    savePreference("autoBlackSecs", v);
+  });
+}
+const autoMaxPliesInput = $("#autoMaxPliesInput");
+if (autoMaxPliesInput) {
+  autoMaxPliesInput.addEventListener("change", () => {
+    let v = parseInt(autoMaxPliesInput.value, 10);
+    if (!Number.isFinite(v)) v = 200;
+    v = Math.max(2, Math.min(600, v));
+    autoMaxPliesInput.value = v;
+    savePreference("autoMaxPlies", v);
+  });
+}
 // Icon + concise label for the analysis button bar.
 $("#engineToggleBtn").innerHTML = iconLabel("search", "前一步");
 $("#engineCurBtn").innerHTML = iconLabel("search", "本步");
@@ -3070,6 +3422,8 @@ $("#engineExportBtn").innerHTML = iconLabel("clipboard", "導出");
 $("#rpTabVars").innerHTML = iconLabel("branch", "走法");
 $("#rpTabCdb").innerHTML = iconLabel("cloud", "雲庫");
 $("#rpTabEngine").innerHTML = iconLabel("cpu", "引擎分析");
+$("#rpTabAuto").innerHTML = iconLabel("bot", "AI走棋");
+if ($("#exportGifBtn")) $("#exportGifBtn").innerHTML = ICON.film;   // 🎬 emoji → Lucide film
 // 雲庫 tab: 重查 forces a fresh chessdb.cn query (skips both caches) of the
 // branch point (前一步), matching what the tab shows.
 $("#cdbRefreshBtn").onclick = () => { const f = cdbFen(); if (f) fetchCdbLive(f, true); };
@@ -3086,6 +3440,7 @@ $("#navPrev").innerHTML = ICON.chevL;
 $("#navBranch").innerHTML = iconLabel("branch", "分支");
 $("#navNext").innerHTML = ICON.chevR;
 $("#navLast").innerHTML = ICON.skipFwd;
+updateAutoPlayBtn();   // sets #autoStartBtn icon+label (play/開始 ↔ stop/停止)
 $("#rootPickBtn").innerHTML = ICON.folder;
 $("#evalDbPickBtn").innerHTML = ICON.folder;
 $("#enginePickBtn").innerHTML = ICON.folder;
@@ -3274,6 +3629,12 @@ async function recoverSettingsFromLocalStorage() {
   if (cdbLineThrottleEl) cdbLineThrottleEl.value = cdbLineThrottle();
   const gifDelayEl = $("#gifDelayInput");
   if (gifDelayEl) gifDelayEl.value = gifFrameDelaySec();
+  // AI 自動走棋 settings reflect persisted prefs on open.
+  if ($("#autoAiRedChk")) $("#autoAiRedChk").checked = autoAiRed();
+  if ($("#autoAiBlackChk")) $("#autoAiBlackChk").checked = autoAiBlack();
+  if ($("#autoRedSecsInput")) $("#autoRedSecsInput").value = autoRedSecs();
+  if ($("#autoBlackSecsInput")) $("#autoBlackSecsInput").value = autoBlackSecs();
+  if ($("#autoMaxPliesInput")) $("#autoMaxPliesInput").value = autoMaxPlies();
   renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
   // Pulsing badge on the empty board while the tree + last file load, so the
