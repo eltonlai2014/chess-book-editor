@@ -40,7 +40,11 @@ const EDITOR = {
   autoPlay: { running: false, recording: true, waitingHuman: false, es: null, startPath: null, sandboxBaseFen: null, sandboxLine: [], history: [] },
   rootOk: true,       // false when the configured library root is missing (drives LS recovery)
   rootPath: "",       // last root reported by the server (valid or not)
+  dirty: false,       // 目前棋譜有未存檔的編輯 → 切檔前提示存/棄（見 maybeSaveBeforeLeaving）
 };
+
+// 任何會改動 EDITOR.data 的編輯都呼叫這個；切換棋譜前用 EDITOR.dirty 判斷是否提示。
+function markDirty() { EDITOR.dirty = true; }
 
 // Per-theme editor colours for selection halo + legal-destination markers.
 // Each theme has its own palette in board.js; we pick contrasting accents:
@@ -138,7 +142,7 @@ function setStatus(text, cls) {
   s.className = cls || "";
 }
 
-function showConfirmDialog(message, title = "請確認") {
+function showConfirmDialog(message, title = "請確認", okLabel = "確定", cancelLabel = "取消") {
   return new Promise((resolve) => {
     const modal = $("#confirmModal");
     const titleEl = $("#confirmTitle");
@@ -152,6 +156,8 @@ function showConfirmDialog(message, title = "請確認") {
 
     titleEl.textContent = title;
     msgEl.textContent = message;
+    okBtn.textContent = okLabel;        // 預設「確定」；未存檔提示等可自訂
+    cancelBtn.textContent = cancelLabel; // 預設「取消」
     modal.hidden = false;
 
     const cleanup = () => {
@@ -177,6 +183,26 @@ function showConfirmDialog(message, title = "請確認") {
     document.addEventListener("keydown", onKeydown);
     cancelBtn.focus();
   });
+}
+
+// 切換棋譜（換檔／換盤／換目錄）前的未存檔守門。
+//   - 沒有未存檔 → 直接放行。
+//   - 有未存檔 → 提示「先存檔／放棄變更」。選存檔且成功才放行；存檔失敗則留在
+//     原棋譜（不丟編輯）。選放棄則清掉未存檔狀態後放行。
+// 一次只編輯一盤、切走前強迫做決定，所以不會累積「多盤待存」的狀態。
+async function maybeSaveBeforeLeaving() {
+  if (!EDITOR.dirty) return true;
+  const doSave = await showConfirmDialog(
+    "目前棋譜尚未存檔。要先存檔，還是放棄變更？",
+    "尚未存檔", "先存檔", "放棄變更",
+  );
+  if (doSave) {
+    const ok = await save();
+    if (!ok) { setStatus("存檔失敗，已留在原棋譜", "err"); return false; }
+  } else {
+    EDITOR.dirty = false;   // 放棄
+  }
+  return true;
 }
 
 // ---------- path / tree helpers ----------
@@ -487,6 +513,7 @@ async function deleteCurrentMove() {
     ? EDITOR.data.roots
     : (nodeAt(parentPath).children || []);
   siblings.splice(idx, 1);
+  markDirty();
 
   clearSelection();
   EDITOR.activePath = parentPath;
@@ -515,6 +542,7 @@ function moveVariation(parentPath, idx, delta) {
   if (to < 0 || to >= siblings.length) return;
   const [moved] = siblings.splice(idx, 1);
   siblings.splice(to, 0, moved);
+  markDirty();
   // Keep the active path on the same physical line if it runs through these
   // siblings at the ply right after parentPath.
   if (EDITOR.activePath.length > parentPath.length) {
@@ -580,6 +608,7 @@ async function insertMoveAt(parentPath, newNode) {
   }
   clearSelection();
   siblings.push(newNode);
+  markDirty();
   navigateTo(parentPath.concat([siblings.length - 1]));
   return "added";
 }
@@ -647,6 +676,8 @@ async function pickRoot() {
 }
 
 async function applyRoot(path) {
+  // 換目錄會丟掉目前棋譜 → 先過未存檔守門。
+  if (!(await maybeSaveBeforeLeaving())) return;
   setStatus("套用中…");
   const r = await fetch("/api/xqf/root", {
     method: "POST",
@@ -678,11 +709,33 @@ async function applyRoot(path) {
   setStatus("已切換目錄", "ok");
 }
 
+function makeFileLi(child) {
+  const li = document.createElement("li");
+  li.className = "file";
+  li.textContent = child.name;
+  li.dataset.rel = child.rel;
+  li.dataset.title = child.name;   // 顯示用（CBL 盤 name 是「1. 標題」，比 rel 漂亮）
+  li.onclick = () => selectFile(child.rel, li);
+  return li;
+}
+
 function renderDir(node) {
   const ul = document.createElement("ul");
   for (const child of node.children || []) {
     const li = document.createElement("li");
-    if (child.type === "dir") {
+    if (child.cbl) {
+      // .cbl 多盤庫：可展開資料夾，盤目懶載入（首次展開才打 cbl-children）。
+      li.className = "dir cbl";
+      li.dataset.rel = child.rel;    // 供開機自動重開時定位此庫
+      const span = document.createElement("span");
+      span.className = "dirname";
+      span.textContent = "📚 " + child.name;
+      li.appendChild(span);
+      const sub = document.createElement("ul");
+      sub.style.display = "none";
+      li.appendChild(sub);
+      span.onclick = () => toggleCblDir(span, sub, child.rel);
+    } else if (child.type === "dir") {
       li.className = "dir";
       const span = document.createElement("span");
       span.className = "dirname";
@@ -693,17 +746,60 @@ function renderDir(node) {
       span.onclick = () => { sub.style.display = sub.style.display === "none" ? "" : "none"; };
       li.appendChild(sub);
     } else {
-      li.className = "file";
-      li.textContent = child.name;
-      li.dataset.rel = child.rel;
-      li.onclick = () => selectFile(child.rel, li);
+      ul.appendChild(makeFileLi(child));
+      continue;
     }
     ul.appendChild(li);
   }
   return ul;
 }
 
+async function toggleCblDir(span, sub, rel) {
+  // 已載過：純展開/收合。
+  if (sub.dataset.loaded === "1") {
+    sub.style.display = sub.style.display === "none" ? "" : "none";
+    return;
+  }
+  sub.style.display = "";
+  sub.dataset.loaded = "1";          // 先卡住，避免快速重複點擊重抓
+  const hint = document.createElement("li");
+  hint.className = "tree-hint";
+  hint.textContent = "讀取中…";
+  sub.appendChild(hint);
+  // 還沒開任何棋譜時，盤面是閒置膠囊：載大棋庫期間也用膠囊顯示「載入中」。
+  // 已開棋譜則不動其盤面（展開棋庫不該干擾正在看的局）。
+  const showPill = !EDITOR.data;
+  if (showPill) drawBoardLoading("棋庫載入中…");
+  try {
+    const r = await fetch("/api/xqf/cbl-children?path=" + encodeURIComponent(rel));
+    const data = await r.json();
+    sub.innerHTML = "";
+    if (data.error) throw new Error(data.error);
+    const children = data.children || [];
+    if (!children.length) {
+      const empty = document.createElement("li");
+      empty.className = "tree-hint";
+      empty.textContent = "（空棋庫）";
+      sub.appendChild(empty);
+      return;
+    }
+    for (const child of children) sub.appendChild(makeFileLi(child));
+  } catch (e) {
+    sub.innerHTML = "";
+    sub.dataset.loaded = "";        // 失敗：允許重試
+    const err = document.createElement("li");
+    err.className = "tree-hint";
+    err.textContent = "讀取失敗：" + e.message;
+    sub.appendChild(err);
+  } finally {
+    // 還原閒置盤面（仍未開棋譜時）。已開棋譜的盤面全程未動。
+    if (showPill && !EDITOR.data) drawBoardLoading("尚未載入棋譜 · 從左側選擇", false);
+  }
+}
+
 async function selectFile(rel, liEl) {
+  // 未存檔守門：切到別盤前先問存/棄（存檔失敗則留在原棋譜，不丟編輯）。
+  if (!(await maybeSaveBeforeLeaving())) return;
   document.querySelectorAll("#fileTree li.file.active").forEach(el => el.classList.remove("active"));
   if (liEl) liEl.classList.add("active");
   setStatus("載入中…");
@@ -715,6 +811,7 @@ async function selectFile(rel, liEl) {
     EDITOR.currentPath = rel;
     EDITOR.data = data;
     EDITOR.activePath = [];
+    EDITOR.dirty = false;   // 剛載入＝乾淨狀態
     clearSelection();
     // New file → the old analysis no longer applies. Stop any running stream
     // and wipe both the 引擎分析 history and the AI 分析 trend.
@@ -723,7 +820,8 @@ async function selectFile(rel, liEl) {
     stopAnalysis("尚未開始");
     clearAnalysisHistory();
     clearAiAnalysis();
-    const fileName = rel.split("/").pop();
+    // CBL 盤的 rel 尾段是「lib.cbl#3」不好看，優先用樹節點的顯示名（1. 標題）。
+    const fileName = (liEl && liEl.dataset.title) || rel.split("/").pop();
     $("#fileTitle").textContent = fileName;
     $("#fileTitle").title = rel;  // full path on hover
     $("#saveBtn").disabled = false;
@@ -1907,12 +2005,13 @@ function commitAnnoteEdit() {
   const newVal = $("#annoteBox").value;
   const node = nodeAt(EDITOR.activePath);
   if (node) {
-    if (node.annote !== newVal) node.annote = newVal;
+    if (node.annote !== newVal) { node.annote = newVal; markDirty(); }
     return;
   }
   // Initial position — edits go to the book-level intro.
   if (EDITOR.data && (EDITOR.data.init_annote || "") !== newVal) {
     EDITOR.data.init_annote = newVal;
+    markDirty();
   }
 }
 
@@ -2026,7 +2125,7 @@ function applyMetaEdits() {
     }
   }
   closeMetaModal();
-  if (changed) setStatus("資訊已更新（記得存檔）", "ok");
+  if (changed) { markDirty(); setStatus("資訊已更新（記得存檔）", "ok"); }
 }
 
 // ---------- new-XQF dialog ----------
@@ -2036,7 +2135,10 @@ function applyMetaEdits() {
 function openNewModal() {
   // Pre-fill subdir with the parent folder of the currently-open file, so
   // master typically just types a title and presses 建立.
-  const cur = EDITOR.currentPath || "";
+  // 若目前開的是 CBL 盤（lib.cbl#3），父層應是 .cbl 所在目錄，不是 .cbl 本身。
+  let cur = EDITOR.currentPath || "";
+  const hash = cur.lastIndexOf("#");
+  if (hash !== -1 && cur.slice(0, hash).toLowerCase().endsWith(".cbl")) cur = cur.slice(0, hash);
   const lastSlash = cur.lastIndexOf("/");
   const defaultSubdir = lastSlash > 0 ? cur.slice(0, lastSlash) : "";
   $("#newField-title").value = "";
@@ -2173,7 +2275,7 @@ function navVarDown() {
 // ---------- save ----------
 
 async function save() {
-  if (!EDITOR.data || !EDITOR.currentPath) return;
+  if (!EDITOR.data || !EDITOR.currentPath) return false;
   commitAnnoteEdit();
   setStatus("儲存中…");
   try {
@@ -2185,9 +2287,12 @@ async function save() {
     });
     const resp = await r.json();
     if (resp.error) throw new Error(resp.error);
+    EDITOR.dirty = false;   // 存檔成功 → 清未存檔狀態
     setStatus("已儲存", "ok");
+    return true;
   } catch (e) {
     setStatus("儲存失敗：" + e.message, "err");
+    return false;
   }
 }
 
@@ -3549,6 +3654,19 @@ function setupSplitters() {
 async function tryAutoLoadLastFile() {
   const rel = PREFS.lastFile;
   if (!rel) return;
+  // CBL 盤（rel 形如 lib.cbl#3）的盤目是懶載入的，開機時尚未渲染——先展開該庫。
+  const hash = rel.lastIndexOf("#");
+  if (hash !== -1 && rel.slice(0, hash).toLowerCase().endsWith(".cbl")) {
+    const baseRel = rel.slice(0, hash);
+    const cblLi = Array.from(document.querySelectorAll("#fileTree li.dir.cbl"))
+      .find((li) => li.dataset.rel === baseRel);
+    if (cblLi) {
+      let p = cblLi.parentElement;
+      const tRoot = document.getElementById("fileTree");
+      while (p && p !== tRoot) { if (p.tagName === "UL") p.style.display = ""; p = p.parentElement; }
+      await toggleCblDir(cblLi.querySelector(".dirname"), cblLi.querySelector("ul"), baseRel);
+    }
+  }
   // data-rel uniquely identifies each file li. Linear scan is fine for any
   // realistic library size.
   const fileLi = Array.from(document.querySelectorAll("#fileTree li.file"))

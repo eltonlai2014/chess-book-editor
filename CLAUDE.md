@@ -28,14 +28,18 @@ Shared read-only data: `D:\Elton\TestArea\chess-book\` (41 originals + AI/ subse
 Editor is end-to-end working — see [ARCHITECTURE.md](ARCHITECTURE.md) for the
 full feature → `file:line` map. In brief, all of this is built and live:
 
-- **Editor UI + Flask backend** — browse library, open/edit/save XQF, tree
-  ops (add/delete move, promote variation, edit metadata, new file).
+- **Editor UI + Flask backend** — browse library, open/edit/save XQF **and
+  CBL/CBR** (象棋橋), tree ops (add/delete move, promote variation, edit
+  metadata, new file). CBL multi-game libraries expand as folders (lazy);
+  edits rewrite the whole library in place, preserving every game's GUID +
+  library metadata. See "CBL/CBR in the editor UI" below.
 - **Live engine analysis (SSE)** — execs Pikafish, streams depth/score/PV;
   ephemeral, nothing persisted. Plus the AI whole-line score-trend chart.
 - **Eval + cloud integration** — read-only evals from chess-book-ai's
   `positions.db`, and live chessdb.cn cloud-library lookup (cache-first).
 - **Format-conversion CLIs** — XQF ⇄ CBL/CBR (CCBridge3) ⇄ CWP, with the
-  vendored reader/writer stack.
+  vendored reader/writer stack. (The editor UI now also reads/writes CBL/CBR
+  directly — the CLIs remain for batch/whole-library conversion.)
 
 Persistence layer (the original foundation, still the correctness anchor):
 
@@ -147,6 +151,104 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
 - **Known traps** (NUL byte, FEN trim to `<position> <side>`, http-not-https,
   single-string error states) are handled in `query_chessdb` — see
   `docs/CHESSDB_CLOUD_QUERY.md` for the why.
+
+## CBL/CBR in the editor UI (2026-06-08)
+
+The editor lists, opens, edits, and writes back 象棋橋 `.cbl`/`.cbr` directly,
+not just XQF. The core insight that made this cheap: **CBL/CBR games are the
+same `cchess.Book` as XQF**, so `book_to_json`/`json_to_book` (`xqf_service`)
+are reused verbatim — the only new code is the format boundary in
+`backend/cb_service.py` plus dispatch in `app.py`.
+
+- **CBR ≈ XQF, CBL is the hard part.** `.cbr` (single game) is a leaf in the
+  tree like `.xqf`. `.cbl` (multi-game library) is shown as an **expandable
+  folder** (📚), and games are loaded **lazily** — `_tree` emits the `.cbl` as
+  `{type:dir, cbl:true, children:[]}`; the frontend (`toggleCblDir`) fetches
+  `GET /api/xqf/cbl-children` only on first expand. **Don't** make `_tree` read
+  every CBL eagerly — the CCBridge corpus is ~1570 files and that tanks
+  `/api/xqf/list`.
+- **NEVER `read_cbl()` just to list titles or open one game.** `read_cbl`
+  (`Book.read_from_lib`) parses EVERY game's move tree — ~26s for the 824-game
+  中貴棋譜.cbl. That made both "expand library" and "open one game" crawl. The
+  fix exploits CBL being **fixed 4096-byte records** at `66624 + book_count*276`
+  (`cbl_index_fix`'s linear offset): `_cbl_record_starts` finds each record by
+  the `CCBridge Record` magic + 4096 stride (no move parse). `list_cbl_games`
+  reads only each record's title (CBR header +180); `load_cb` seeks to one
+  record and `read_from_cbr_buffer`s just that game. ~5000×/680× faster, output
+  byte-identical to the full parse. Keep new CBL code on this path.
+- **Saving a CBL game is a byte-level splice, not a full rewrite.** Because
+  records are 4096-byte slots, `save_cbl_game` overwrites only the edited game's
+  slot(s) in place (when its slot count is unchanged — true for ~all opening-
+  book games), updates that one index entry (data_size/title) + `modified_at`,
+  and leaves every other byte untouched. ~700× faster than re-serialising the
+  whole library AND more faithful (untouched games stay byte-identical). Only a
+  game that grows past its 4096 slot allocation falls back to `_save_cbl_full`
+  (the read-all + `write_cbl_bytes` path). Note: this whole stack assumes
+  single-slot records (cchess's reader also walks fixed 4096 strides) — true for
+  the opening-book corpus; don't assume it for arbitrary huge games.
+- **rel of a CBL game = `path/lib.cbl#3`** (`#`+0-based index). `parse_cb_rel`
+  splits off `#N` **before** `_safe_resolve` (which must validate a real file
+  path — never feed it `#N`). `load`/`save`/`cbl-children` all go through it.
+- **Saving edits one game in place; other games keep their identity.** UI only
+  edits existing games' moves/annotes — **no add/delete/reorder games** (out of
+  scope). `save_cbl_game` backs up to `.cbl.bak` first. The fast path (splice,
+  above) keeps untouched games byte-identical for free. Fidelity is still
+  load-bearing for the **fallback** `_save_cbl_full` (and the lesson explains why
+  the splice path exists at all), because `read_cbl` only returns `{name, games}`
+  and a naive read→write loses identity:
+  1. **Per-game GUIDs** — `read_cbl` drops them; `read_cbl_guids` reads them from
+     the index area (`66624 + i*276 + 0x14`) and threads them into the
+     `guids=` param of `write_cbl_bytes`. Without this, EVERY game's GUID changes
+     on each save (CCBridge cross-references by GUID). The splice path sidesteps
+     this entirely by not touching other entries.
+  2. **Library metadata** (creator/email/created_at/capacity) — also dropped by
+     `read_cbl`; `read_cbl_lib_meta` reads the raw offsets (832/896/960/1024,
+     capacity@60) and re-passes them. Only `modified_at` is restamped.
+  3. **`.cbr` GUID** — `save_cbr` reads the original header GUID (`_read_cbr_guid`,
+     offset 20, binary) so single-game saves keep identity too.
+  Regression for all of this: `tests/test_cb_roundtrip.py` (run it after any
+  `cb_service` or `io_cb_writer` change). It asserts unedited games' paths +
+  GUIDs + lib metadata survive an edit-one-game save.
+- **No Big5 recovery for CB formats.** `load_cb` skips the XQF Big5 heuristic —
+  CBL/CBR strings are UTF-16-LE, so that heuristic would only corrupt them.
+- **One game's edits at a time — no multi-game pending state.** Editing is
+  per-game; `save` writes exactly one game (splice). The frontend tracks an
+  `EDITOR.dirty` flag (`markDirty` at every tree/annote/metadata mutation,
+  cleared on load + successful save). Switching game/file/root goes through
+  `maybeSaveBeforeLeaving`, which forces a 先存檔／放棄變更 decision when dirty
+  (save-failure keeps you on the current game). This is deliberate so you can
+  never accumulate unsaved edits across several games of one library and then be
+  unsure what a save will write. Don't add a path that swaps `EDITOR.data`
+  without going through this guard.
+- **Atomic writes.** `_atomic_write` does `.tmp`→`os.replace` so a crash mid-save
+  can't leave a half-written library.
+- **Titles read aligned, not via cchess's `cut_bytes_to_str`.** cchess truncates a
+  CBR/CBL title at the first `\x00\x00` WITHOUT 2-byte alignment, so a title ending
+  in an ASCII char (`)`, a digit) loses its last character (e.g. `…(棄傌局)` →
+  `…(棄傌局`). `list_cbl_games` (display) and `load_cb` (which overrides
+  `book.info['title']` with `_decode_cbr_title`) both decode the fixed title field
+  aligned, so the editor shows AND saves the full title. Don't revert to the raw
+  `read_from_cbr_buffer` title.
+
+## CWP 造字區「車」亂碼 (2026-06-08)
+
+The `以民金儒` CWP corpus (1267 files) was authored in CCBridge, which stuffed 車
+into a Big5 user-defined (造字/EUDC) slot `FB 7A` that only its bundled font could
+render. Standard Big5/cp950/HKSCS can't map it, so the old `cwp→xqf→cbl` pipeline
+turned 車 into `�z` (U+FFFD + the stray ASCII `z`). CCBridge itself now shows it
+broken too (font gone). It's the **only** EUDC code in the whole corpus (17 hits,
+11 files), always meaning 車.
+
+- **Root cause fixed in `vendor/io_cwp.py`** — a `cwp_eudc` codec error handler maps
+  `FB7A`→車 (table `_CWP_EUDC`), boundary-safe (only fires when `0xFB` is a real
+  lead byte). Future conversions are correct. To add more recovered EUDC codes,
+  extend `_CWP_EUDC` — but verify against the corpus first; there were no others.
+- **Already-converted files have the `�z` baked in.** `tools/fix_che_title.py`
+  repairs them in place (`�z`→車 in `.cbl` index+CBR title slots and `.xqf`
+  titles; backs up `.bak`; `--dry-run` to preview). It does NOT re-parse move
+  trees — verified GUIDs + all 824 games byte-stable on 中貴棋譜.cbl. Re-running
+  the conversion pipeline would also work but clobbers any manual marks/edits, so
+  prefer the in-place tool for files already in use.
 
 ## Distribution (zip + setup.ps1, user-configured) (2026-06-04)
 

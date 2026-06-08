@@ -69,11 +69,12 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | `GET /` | `index`:100 | 出 index.html（`_no_store` 包，前端不快取） |
 | `GET /assets/<f>` | `assets`:105 | 靜態檔（`_no_store`：`Cache-Control: no-store`，改 CSS/JS 一般重整就生效；VSCode 內建 Simple Browser 仍會吃舊快取，UI 驗證用外部 Edge） |
 | `GET/POST /api/preferences` | `get_preferences`:131 / `set_preferences`:136 | preferences.json 讀寫 |
-| `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf` 的目錄（如 png/）剪掉不顯示 |
+| `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf`/`.cbr`/`.cbl` 的目錄（如 png/）剪掉不顯示。`.cbr` 當葉、`.cbl` 當可展開 dir（`cbl:true`、children 空＝懶載入） |
+| `GET /api/xqf/cbl-children?path=` | `cbl_children` | 懶載入：列某 `.cbl` 內每盤（`list_cbl_games`），回 `[{rel:"lib.cbl#i", name, type:file}]`。左樹首次展開才打 |
 | `GET /api/xqf/root` | `get_root`:204 | 目前根目錄（`get_xqf_root`:82） |
 | `POST /api/xqf/pick-root` | `pick_root_dialog`:209 | tkinter 資料夾對話框 |
 | `POST /api/xqf/root` | `set_root`:254 | 設根目錄 |
-| `GET /api/xqf/load` | `load`:278 | 載入 XQF→JSON（`load_xqf`/`book_to_json`） |
+| `GET /api/xqf/load` | `load`:278 | 載入→JSON。依 `parse_cb_rel` 分派：`.cbl#N`/`.cbr` 走 `cb_service.load_cb`，否則 `load_xqf`；皆經 `book_to_json` |
 | `POST /api/xqf/legal-targets` | `legal_targets`:295 | 某子合法著點（`compute_legal_targets`） |
 | `POST /api/xqf/move-info` | `move_info`:312 | 單步中文著法（`compute_move_info`） |
 | `POST /api/xqf/move-info-batch` | `move_info_batch` | 同一 fen 多著法一次翻中文（`compute_move_infos_batch`）；雲庫清單用，把 N 發併 1 發 |
@@ -86,7 +87,28 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | `POST /api/engine/pick` `/path` | `pick_engine_dialog`:523 / `set_engine_path`:567 | 選/設引擎執行檔 |
 | `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:733 | 單局面即時分析串流；逐行解析 `_parse_info_line` |
 | `POST /api/engine/analyze-line` | `analyze_line`:661 | 整條線逐局面掃描，NDJSON 串流（走勢圖）；`_parse_score`:648。**共用 TT 不清空** |
-| `POST /api/xqf/save` | `save`:~850 | 存 XQF（`save_xqf`→PatchedXQFWriter） |
+| `POST /api/xqf/save` | `save`:~850 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
+
+### CBL/CBR 編輯整合（backend/cb_service.py）
+
+XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json_to_book`）格式
+無關直接複用；本模組只做格式邊界 + CBL 多盤的兩個額外負擔。
+
+| 功能 | 函式 |
+|---|---|
+| rel `lib.cbl#3` 拆 (base, index) / 判 CB 檔 | `parse_cb_rel` / `is_cb_path` |
+| CBL 資料區定位（固定 4096-byte 記錄；不解析走子樹） | `_cbl_record_starts` |
+| 列舉 CBL 盤目（**只讀每筆 CBR header 標題**，不解析走子樹；name=「1. 標題」） | `list_cbl_games` |
+| 載入 CBR/CBL 指定盤→JSON（CBL **只解析該盤** `read_from_cbr_buffer`；不跑 Big5 recovery） | `load_cb` |
+| 存 CBR（保留原 record GUID） | `save_cbr` |
+| **位元組級 splice 覆寫第 N 盤**：slot 數不變時只覆寫該盤 slot＋更新其索引＋modified_at，其餘 byte 不動；**先備份 `.bak`**。slot 數變才退 `_save_cbl_full` | `save_cbl_game` / `_save_cbl_full` |
+| 讀 `read_cbl` 不回傳的欄位（raw offset） | `read_cbl_lib_meta`（creator/email/created_at/capacity）/ `read_cbl_guids` / `_read_cbr_guid` |
+| 原子寫入（.tmp→os.replace） | `_atomic_write` |
+
+> 讀寫器在 `vendor/cchess_cbl.py`（`read_cbl`/`read_cbr`）與 `vendor/io_cb_writer.py`
+> （`write_cbr_bytes`/`write_cbl_bytes`）。保真關鍵：`write_cbl_bytes` 的 `guids` 參數
+> 讓覆寫沿用原 GUID（未給則每次重新產生→未編輯盤身分會漂移）。
+> 往返測：`tests/test_cb_roundtrip.py`（CBR 路徑全等＋CBL 改一盤後其餘盤/GUID/metadata 不變）。
 
 ### XQF 譜處理（backend/xqf_service.py）
 
@@ -281,7 +303,10 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | icon 字典 / 帶標籤 | `ICON`:1723 / `iconLabel`:1747 |
 | 棋盤主題 / 視角 / UI 主題（換主題→refreshActive→重畫箭頭+走勢圖） | `applyBoardTheme`:1642 / `applyBoardPerspective`:1648 / `applyUiTheme`:1656 |
 | splitter 拖曳（flex-basis） | `setupSplitters`:2438 |
-| 開機自動載入上次檔案 | `tryAutoLoadLastFile`:2491 |
+| 檔案樹渲染 / 檔案 li 工廠 | `renderDir`（`.cbl` 節點＝📚 可展開、懶載入）/ `makeFileLi` |
+| CBL 資料夾懶展開（首次展開打 `cbl-children`，塞盤目；失敗可重試；尚未開棋譜時盤面顯示「棋庫載入中」膠囊） | `toggleCblDir` |
+| **未存檔守門**（換盤/換檔/換目錄前提示存/棄；存檔失敗則留原棋譜） | `maybeSaveBeforeLeaving`（`EDITOR.dirty` 旗標、`markDirty`；`save` 成功清旗標） |
+| 開機自動載入上次檔案（CBL 盤先展開該庫再載盤） | `tryAutoLoadLastFile`:2491 |
 | **事件綁定 / icon 注入（boot）** | editor.js **2284–2437**（`.onclick`、`innerHTML=iconLabel…`、tab/demo/AI圖 hover、ResizeObserver 都在這） |
 
 ### HTML 結構（frontend/index.html）
@@ -302,6 +327,9 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | XQF 寫檔（修上游 3 bug） | `vendor/io_xqf_patched.py` `PatchedXQFWriter` |
 | round-trip 測試（SRC 路徑硬編） | `tests/test_roundtrip.py`（`SRC_ROOT`） |
 | XQStudio 驗證樣本 | `samples/`、`tools/emit_sample.py` |
+| 格式轉檔 CLI | `tools/cwp_to_xqf.py` / `cbl_to_xqf.py` / `xqf_to_cbl.py`（讀寫器：`vendor/io_cwp.py`、`vendor/cchess_cbl.py`、`vendor/io_cb_writer.py`）|
+| CWP 造字區還原（`FB7A`=車）/ CB 往返測 | `vendor/io_cwp.py` `cwp_eudc` error handler、`_CWP_EUDC`；`tests/test_cb_roundtrip.py` |
+| 一次性修已轉檔的「車」亂碼（`�z`→車，原地改 .cbl/.xqf 標題、先備份） | `tools/fix_che_title.py`（`--dry-run` 可預覽）|
 | 門檻同步檢查 | `backend/test_trap_spotcheck.py` / `test_eval_integration.py` |
 | cchess 內附 wheel（離線安裝來源） | `vendor/wheels/`、`requirements.txt`、`setup.ps1` |
 | 桌面打包（免裝 Python，pywebview 殼＋PyInstaller） | 入口 `desktop.py`（daemon thread 起 Flask＋開原生視窗；`--check`＝headless 煙霧測）、`desktop.spec`（onedir）、`requirements-desktop.txt`/`requirements-build.txt`；凍結路徑分流 `backend/app.py` `_resource_base`（唯讀→`_MEIPASS`）/`_data_base`（可寫→exe 旁） |

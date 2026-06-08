@@ -24,10 +24,38 @@ Verified on 1267 files under D:/以民金儒/ (classical books + tournament
 records + online games, 1992-2019).
 """
 
+import codecs
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
 MAGIC = "CCWP"
+
+
+# CCBridge stored a handful of glyphs in the Big5 user-defined (造字/EUDC,
+# 0xFA40–0xFEFE) area that only render with its bundled font — standard Big5
+# (and cp950/HKSCS) can't decode them, so they came through as '�'+stray
+# ASCII (e.g. 車 → '�'+'z'). Even CCBridge itself now shows them broken
+# once that font is gone. Reverse-engineered across the whole 以民金儒 corpus
+# (1267 files): the ONLY such code is FB 7A = 車 (17 hits in 11 files, always
+# in titles like "中炮直橫車…"). Map it back on decode.
+_CWP_EUDC = {b"\xfb\x7a": "車"}
+
+
+def _cwp_eudc_error_handler(err: UnicodeDecodeError):
+    """Big5 decode error handler: recover known CCBridge EUDC codes.
+
+    Boundary-safe: the codec only calls this when the bad lead byte sits at a
+    real character boundary, so a legit Big5 char ending in 0xFB followed by
+    ASCII 'z' (0x7A) never triggers it (that char is consumed whole first).
+    Unknown bad bytes fall back to the standard 'replace' behaviour.
+    """
+    two = err.object[err.start:err.start + 2]
+    if two in _CWP_EUDC:
+        return _CWP_EUDC[two], err.start + 2
+    return "�", err.end
+
+
+codecs.register_error("cwp_eudc", _cwp_eudc_error_handler)
 
 
 @dataclass
@@ -105,7 +133,9 @@ class CWPGame:
 
 
 def parse_cwp_bytes(raw: bytes, encoding: str = "big5") -> CWPGame:
-    text = raw.decode(encoding, errors="replace")
+    # errors="cwp_eudc": recover CCBridge 造字區 codes (e.g. FB7A=車) instead of
+    # dropping them to '�'; unknown bad bytes still degrade to '�' like "replace".
+    text = raw.decode(encoding, errors="cwp_eudc")
     lines = text.split("\r\n")
 
     if not lines or lines[0] != MAGIC:

@@ -52,6 +52,14 @@ from backend.xqf_service import (  # noqa: E402
     sanitise_filename,
     save_xqf,
 )
+from backend.cb_service import (  # noqa: E402
+    is_cb_path,
+    list_cbl_games,
+    load_cb,
+    parse_cb_rel,
+    save_cbl_game,
+    save_cbr,
+)
 from backend.eval_service import db_info as eval_db_info, lookup_batch as eval_lookup_batch  # noqa: E402
 from backend.chessdb_service import lookup as chessdb_lookup  # noqa: E402
 from backend.xqf_service import pv_to_chinese  # noqa: E402
@@ -215,15 +223,27 @@ def _tree(node: Path, root: Path) -> dict | None:
                 sub = _tree(child, root)
                 if sub is not None:   # drop subdirs with no .XQF anywhere inside
                     children.append(sub)
-            elif child.suffix.lower() == ".xqf":
+            elif child.suffix.lower() in (".xqf", ".cbr"):
+                # .cbr (象棋橋單盤) 與 .xqf 同構：直接當可開啟的葉節點。
                 children.append({
                     "name": child.name,
                     "rel": str(child.relative_to(root)).replace("\\", "/"),
                     "type": "file",
                     "size": child.stat().st_size,
                 })
+            elif child.suffix.lower() == ".cbl":
+                # .cbl (象棋橋多盤庫) 當可展開資料夾，但 children 留空：盤目
+                # 懶載入——前端首次展開才打 /api/xqf/cbl-children 讀。避免大語料
+                # 庫每次列樹全讀變慢。`cbl:true` 供前端辨識要走懶載入。
+                children.append({
+                    "name": child.name,
+                    "rel": str(child.relative_to(root)).replace("\\", "/"),
+                    "type": "dir",
+                    "cbl": True,
+                    "children": [],
+                })
         if not children:
-            return None   # no .XQF in this whole subtree -> hide the directory
+            return None   # no .XQF/.CBR/.CBL in this whole subtree -> hide the directory
         entry["type"] = "dir"
         entry["children"] = children
     else:
@@ -330,17 +350,46 @@ def set_root():
     return jsonify({"ok": True, "root": str(p)})
 
 
-@app.get("/api/xqf/load")
-def load():
+@app.get("/api/xqf/cbl-children")
+def cbl_children():
+    """懶載入：列出某 .cbl 內的每盤棋（左樹展開時呼叫）。
+
+    回 [{rel:"<cbl-rel>#i", name, type:"file"}]，rel 直接餵 selectFile。
+    """
     rel = request.args.get("path", "")
     try:
         target = _safe_resolve(rel)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    if not target.is_file():
-        return jsonify({"error": f"not a file: {rel}"}), 404
+    if not target.is_file() or target.suffix.lower() != ".cbl":
+        return jsonify({"error": f"not a .cbl file: {rel}"}), 404
     try:
-        data = load_xqf(target)
+        games = list_cbl_games(target)
+    except Exception as e:
+        return jsonify({"error": f"list failed: {e}"}), 500
+    children = [
+        {"rel": f"{rel}#{g['index']}", "name": g["name"], "type": "file"}
+        for g in games
+    ]
+    return jsonify({"children": children})
+
+
+@app.get("/api/xqf/load")
+def load():
+    rel = request.args.get("path", "")
+    # CBL 盤 rel 形如 `lib.cbl#3`：先拆掉 #N，只用真實檔案路徑做跳脫驗證。
+    base_rel, game_index = parse_cb_rel(rel)
+    try:
+        target = _safe_resolve(base_rel)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not target.is_file():
+        return jsonify({"error": f"not a file: {base_rel}"}), 404
+    try:
+        if game_index is not None or is_cb_path(base_rel):
+            data = load_cb(target, game_index)
+        else:
+            data = load_xqf(target)
     except Exception as e:
         return jsonify({"error": f"load failed: {e}"}), 500
     data["path"] = rel
@@ -993,14 +1042,24 @@ def chessdb_query():
 def save():
     body = request.get_json(silent=True) or {}
     rel = body.get("path", "")
+    # 依副檔名分派：.cbl#N -> 覆寫整庫指定盤、.cbr -> 單盤、.xqf -> XQF。
+    base_rel, game_index = parse_cb_rel(rel)
     try:
-        target = _safe_resolve(rel)
+        target = _safe_resolve(base_rel)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    if target.suffix.lower() != ".xqf":
-        return jsonify({"error": "path must end in .XQF"}), 400
+    suffix = target.suffix.lower()
     try:
-        save_xqf(target, body)
+        if suffix == ".cbl":
+            if game_index is None:
+                return jsonify({"error": "CBL 存檔需指定盤序（lib.cbl#N）"}), 400
+            save_cbl_game(target, game_index, body)
+        elif suffix == ".cbr":
+            save_cbr(target, body)
+        elif suffix == ".xqf":
+            save_xqf(target, body)
+        else:
+            return jsonify({"error": "path must end in .XQF / .CBR / .CBL"}), 400
     except Exception as e:
         return jsonify({"error": f"save failed: {e}"}), 500
     return jsonify({"ok": True, "path": rel})

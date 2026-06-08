@@ -269,6 +269,7 @@ def write_cbl_bytes(
     email: str = "",
     created_at: str = "",
     modified_at: str = "",
+    guids: list[str] | None = None,
 ) -> bytes:
     """Bundle a list of Books into a CBL container.
 
@@ -280,11 +281,24 @@ def write_cbl_bytes(
     `created_at` and `modified_at` are free-form strings; CCBridge shows
     them as written, e.g. '2026-05-28 14:30:00'. Default empty string fills
     the corresponding slot with zeros (CCBridge displays an empty field).
+
+    `guids` (one '{XXXX-...}' string per book) lets the caller PRESERVE each
+    record's original GUID across a read→edit→rewrite — critical when only
+    one game of an existing library changed and the untouched games must keep
+    their identity (CCBridge cross-references records by GUID). Must be the
+    same length as `books`. When omitted, a fresh GUID is generated per book
+    (the only sensible default when building a library from scratch).
     """
-    # Generate one GUID per book upfront; reuse for both the CBR header
-    # (binary form at +20) and the index entry (UTF-16-LE string at +0x14).
-    # CCBridge cross-validates the two — mismatches mark the record invalid.
-    guids = [_generate_guid_str() for _ in books]
+    # One GUID per book, reused for both the CBR header (binary form at +20)
+    # and the index entry (UTF-16-LE string at +0x14). CCBridge cross-validates
+    # the two — mismatches mark the record invalid. Caller-supplied `guids`
+    # round-trips originals; otherwise generate fresh ones.
+    if guids is None:
+        guids = [_generate_guid_str() for _ in books]
+    elif len(guids) != len(books):
+        raise ValueError(
+            f"guids length {len(guids)} != books length {len(books)}"
+        )
     cbr_records = [write_cbr_bytes(b, guid_str=g) for b, g in zip(books, guids)]
 
     if capacity is None:
