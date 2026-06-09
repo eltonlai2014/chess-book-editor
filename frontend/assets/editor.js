@@ -25,7 +25,7 @@ const EDITOR = {
   // Live chessdb.cn cloud-library lookup state. positions.db only covers the
   // AI library; the editor queries chessdb.cn on navigation for whatever the
   // user has on the board, merging results into evalsByFen[fen].cdb.
-  cdbLive: { fen: null, timer: null, loading: false, error: null },
+  cdbLive: { fen: null, timer: null, loading: false, error: null, endgame: false },
   evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
   engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
   engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
@@ -284,6 +284,21 @@ function boardFen() {
 function cdbFen() {
   if (!EDITOR.data) return null;
   return analysisFen();
+}
+// chessdb.cn 的雲庫只涵蓋開局＋中局，殘局子力一稀疏就查無資料。當盤面進入
+// 殘局時不再向雲庫發查詢（也不演繹）。判定（雙方合計，大子＝車R/馬N/炮C）：
+//   1. 無車（剩馬包）              → rooks === 0
+//   2. 僅剩兩個大子（如車馬、車包）→ bigPieces <= 2
+// 任一成立即視為殘局。FEN 字母見 board.js PIECE_CHAR（R/N/C 紅、r/n/c 黑）。
+function isEndgameFen(fen) {
+  if (!fen) return false;
+  const board = fen.trim().split(/\s+/)[0] || "";
+  let rooks = 0, bigPieces = 0;
+  for (const ch of board) {
+    if (ch === "R" || ch === "r") { rooks++; bigPieces++; }
+    else if (ch === "N" || ch === "n" || ch === "C" || ch === "c") bigPieces++;
+  }
+  return rooks === 0 || bigPieces <= 2;
 }
 function pieceAt(sq) {
   // Returns piece char (e.g. "R" / "k") or null if empty / no game loaded.
@@ -1205,6 +1220,8 @@ async function renderEvalLine() {
     const cMate = mateFromCdbScore(b.score != null ? b.score * cFlip : null);
     const tag = cMate != null ? cMate : (b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—");
     cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${tag})</span>`);
+  } else if (cl.endgame && cl.fen === cFen) {
+    cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalNote">殘局略</span></span>`);
   } else if (cl.loading && cl.fen === cFen) {
     cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalNote">查詢中…</span></span>`);
   } else if (cEntry.cdb && cEntry.cdb.status && cEntry.cdb.status !== "ok") {
@@ -1254,9 +1271,21 @@ function ensureCdbLive(fen) {
   if (entry && entry.cdb) {            // already have it (batch or prior fetch)
     EDITOR.cdbLive.loading = false;
     EDITOR.cdbLive.error = null;
+    EDITOR.cdbLive.endgame = false;
     renderCdbTab();
     return;
   }
+  // 殘局：雲庫無有效資料，不發查詢（標記讓 UI 說明，而非卡在「查詢中…」）。
+  if (isEndgameFen(fen)) {
+    EDITOR.cdbLive.fen = fen;
+    EDITOR.cdbLive.loading = false;
+    EDITOR.cdbLive.error = null;
+    EDITOR.cdbLive.endgame = true;
+    renderCdbTab();
+    renderEvalLine();
+    return;
+  }
+  EDITOR.cdbLive.endgame = false;
   EDITOR.cdbLive.fen = fen;
   EDITOR.cdbLive.loading = true;
   EDITOR.cdbLive.error = null;
@@ -1320,7 +1349,10 @@ function renderCdbTab() {
   const activeIccs = activeNode ? activeNode.iccs : null;
 
   if (!cdb) {
-    if (cl.loading && cl.fen === fen) {
+    if (cl.endgame && cl.fen === fen) {
+      setState("殘局・不查雲庫");
+      list.innerHTML = `<div class="cdbEmpty">已進入殘局，雲庫僅涵蓋開局／中局，停止查詢。</div>`;
+    } else if (cl.loading && cl.fen === fen) {
       setState("查詢中…");
       list.innerHTML = `<div class="cdbEmpty">向 chessdb.cn 查詢中…</div>`;
     } else if (cl.error && cl.fen === fen) {
@@ -1471,6 +1503,11 @@ async function deriveCdbLine() {
   let fen = s.startFen;
   try {
     for (let i = 0; i < maxDepth; i++) {
+      // 殘局：雲庫無有效資料，停止演繹（起點殘局即不查；走到殘局也收手）。
+      if (isEndgameFen(fen)) {
+        s.endReason = i === 0 ? "殘局・雲庫不適用" : "已演繹至殘局";
+        break;
+      }
       let cdb;
       try {
         const r = await fetch(`/api/chessdb?fen=${encodeURIComponent(fen)}`);

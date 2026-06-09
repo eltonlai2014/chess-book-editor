@@ -133,6 +133,14 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   sleeping 250ms **only on live misses**. It also self-terminates the moment
   chessdb has no row (out of book), so it rarely runs the full depth. Keep those
   three guards if you touch it.
+- **No cloud query once the position is an endgame.** chessdb only covers
+  opening+midgame, so a sparse endgame just returns 查無. `isEndgameFen(fen)`
+  (editor.js, near `cdbFen`) gates BOTH the live lookup (`ensureCdbLive` →
+  `EDITOR.cdbLive.endgame`, shown as 「殘局・不查雲庫」/「殘局略」) and the
+  derivation loop (`deriveCdbLine` breaks). Rule (whole board, 大子＝車R/馬N/炮C):
+  **no rook (`rooks===0`) OR ≤2 大子 (`bigPieces<=2`)** → endgame. FEN letters per
+  cchess `FULL_INIT_FEN` (R/N/C). This is a heuristic to skip dead queries, not a
+  correctness gate — widen the rule rather than adding a second code path.
 - **The whole `#evalLine` judges the DECISION POINT (前一步), not the post-move
   position.** 深N scores, 建議, and 雲 all key to `cdbFen()` (= `analysisFen`, one
   ply back), answering "was this move good, and what else was playable here" —

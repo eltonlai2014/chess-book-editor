@@ -202,7 +202,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 功能 | 函式 |
 |---|---|
 | **查哪個局面**：分支點＝前一步（非走完本步之後）。同引擎「前一步」用的 `analysisFen` | `cdbFen` |
-| 導航時 lazy 查 `cdbFen()`（debounce 220ms；已有 cdb 即跳過） | `ensureCdbLive` |
+| 導航時 lazy 查 `cdbFen()`（debounce 220ms；已有 cdb 即跳過；**殘局不查**→`cdbLive.endgame`） | `ensureCdbLive`／`isEndgameFen` |
+| 殘局判定（雲庫只涵蓋開局＋中局）：雙方合計**無車** or **大子(車R/馬N/炮C)≤2** | `isEndgameFen`（near `cdbFen`） |
 | 實際抓取（merge 進 `evalsByFen[cdbFen].cdb`；`fresh` 跳快取；失敗不快取以利重試） | `fetchCdbLive` |
 | 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳；標出目前所在變化 `.current`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
 | 雲庫著法翻中文：**僅在 tab 可見時翻 + 一次 batch**（避免落點時對隱藏 tab 狂打 move-info） | `fillCdbNotations`（gate on `#rpCdbBody.hidden`）/ `notationsForBatch`；`switchRpTab('cdb')` 切過去時補翻 |
@@ -210,7 +211,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 **☁ 雲庫演繹（cdbline tab）—— 從本局面沿雲庫最佳著往前推一條主線**
 | 功能 | 函式 |
 |---|---|
-| 推演迴圈：自 `currentFen()` 起，逐步查 `/api/chessdb` best→`applyIccs` 進到下一盤→再查，最多 `cdbLineDepth()` 步。**按鈕觸發、非自動**；cache 命中免費，**只有 `source==='live'` 才 sleep `cdbLineThrottle()`**（pref `cdbLineThrottleMs`，預設250，守 chessdb 禮貌）。終止＝到步數／雲庫無資料（出書）／殺棋 | `deriveCdbLine`（state `EDITOR.cdbLine`）|
+| 推演迴圈：自 `currentFen()` 起，逐步查 `/api/chessdb` best→`applyIccs` 進到下一盤→再查，最多 `cdbLineDepth()` 步。**按鈕觸發、非自動**；cache 命中免費，**只有 `source==='live'` 才 sleep `cdbLineThrottle()`**（pref `cdbLineThrottleMs`，預設250，守 chessdb 禮貌）。終止＝到步數／雲庫無資料（出書）／殺棋／**演繹至殘局**（`isEndgameFen`） | `deriveCdbLine`（state `EDITOR.cdbLine`）|
 | 進度/結果渲染（步序＋紅POV分/`#±N`；演示·加入按鈕 enable/disable） | `renderCdbLineView` |
 | 演示／加入：組 `{fen,path,pvUci,pv}` entry **複用** `openDemo`／`addPvLine`（無新 demo/加入邏輯） | `cdbLineEntry` |
 | 過期清除：導航離開起始局面（`refreshActive`）或換檔換目錄即 `clearCdbLine` | `clearCdbLine` |
