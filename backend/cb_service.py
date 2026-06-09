@@ -139,6 +139,10 @@ def _compose_cbl_label(contents: bytes, start: int, title: str) -> str:
     black = _decode_slot(contents, start + _CBR_BLACK_OFFSET, _CBR_BLACK_SIZE).strip()
     if not (_is_real_player(red) and _is_real_player(black)):
         return base
+    # 有些盤的 title 本身已寫成「A111 張鴻鈞 先和 黃朝貴」——再 append 會重複。
+    # title 已同時含紅黑兩名時，視為自帶棋手資訊，不再加。
+    if red in base and black in base:
+        return base
     result = contents[start + _CBR_RESULT_OFFSET] if start + _CBR_RESULT_OFFSET < len(contents) else 0
     word = _RESULT_WORD.get(result, "對")
     return f"{base} — {red} {word} {black}"

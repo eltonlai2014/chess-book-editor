@@ -177,7 +177,9 @@ are reused verbatim — the only new code is the format boundary in
   offsets +1076/+1300/+2076) to build the tree label** — `布局名 — 紅 先勝 黑`
   when both players are real, else just the title (`_compose_cbl_label`;
   theoretical-opening games store placeholder 紅方/黑方 → skipped via
-  `_PLACEHOLDER_PLAYERS`). Still NO move parse — those bytes are already in
+  `_PLACEHOLDER_PLAYERS`; and some titles ALREADY embed the players
+  (`A111 張鴻鈞 先和 黃朝貴`) → skip the append when both names are already in
+  the title, else it doubles up). Still NO move parse — those bytes are already in
   memory, so it stays the fast path. (XQF gets player names from its *filename*;
   the CBL has no filename per game, so the label has to read the in-record
   fields. Both formats store title=布局 + red + black + result.) `load_cb` seeks
