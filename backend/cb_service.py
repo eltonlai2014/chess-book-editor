@@ -65,6 +65,22 @@ _RESULT_WORD = {1: "先勝", 2: "先負", 3: "先和"}
 # CCBridge 對沒有真棋手的理論譜填的佔位名，視同無棋手。
 _PLACEHOLDER_PLAYERS = {"紅方", "黑方", "红方", "无"}
 
+# 同一人但 title 與 red/black 欄位寫法不一的特例別名群（去重比對時視為同名）。
+# 中貴棋譜：title 寫「詹品三」、棋手欄寫「詹品川」實為同一人。
+_PLAYER_ALIAS_GROUPS = [{"詹品三", "詹品川"}]
+
+
+def _aliases(name: str) -> set[str]:
+    for group in _PLAYER_ALIAS_GROUPS:
+        if name in group:
+            return group
+    return {name}
+
+
+def _name_in_title(name: str, title: str) -> bool:
+    """name（或其別名）是否已出現在 title 內。"""
+    return any(alt in title for alt in _aliases(name))
+
 
 # ---------- rel 解析 --------------------------------------------------------
 
@@ -140,8 +156,8 @@ def _compose_cbl_label(contents: bytes, start: int, title: str) -> str:
     if not (_is_real_player(red) and _is_real_player(black)):
         return base
     # 有些盤的 title 本身已寫成「A111 張鴻鈞 先和 黃朝貴」——再 append 會重複。
-    # title 已同時含紅黑兩名時，視為自帶棋手資訊，不再加。
-    if red in base and black in base:
+    # title 已同時含紅黑兩名（含別名，如 詹品三＝詹品川）時，視為自帶棋手資訊，不再加。
+    if _name_in_title(red, base) and _name_in_title(black, base):
         return base
     result = contents[start + _CBR_RESULT_OFFSET] if start + _CBR_RESULT_OFFSET < len(contents) else 0
     word = _RESULT_WORD.get(result, "對")

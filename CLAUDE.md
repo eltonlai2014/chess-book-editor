@@ -179,7 +179,9 @@ are reused verbatim — the only new code is the format boundary in
   theoretical-opening games store placeholder 紅方/黑方 → skipped via
   `_PLACEHOLDER_PLAYERS`; and some titles ALREADY embed the players
   (`A111 張鴻鈞 先和 黃朝貴`) → skip the append when both names are already in
-  the title, else it doubles up). Still NO move parse — those bytes are already in
+  the title via `_name_in_title`, else it doubles up; `_PLAYER_ALIAS_GROUPS`
+  special-cases one person written two ways across title vs player field
+  — 中貴棋譜's 詹品三＝詹品川). Still NO move parse — those bytes are already in
   memory, so it stays the fast path. (XQF gets player names from its *filename*;
   the CBL has no filename per game, so the label has to read the in-record
   fields. Both formats store title=布局 + red + black + result.) `load_cb` seeks
