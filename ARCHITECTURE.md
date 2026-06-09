@@ -316,7 +316,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 |---|---|---|
 | header（logo「棋鑑」/主題/視角/賽事/儲存） | h1 含 inline `.appLogo` SVG | metaBtn/saveBtn 在此 |
 | 檔案樹 pane | settingsBtn / newXqfBtn | |
-| 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis |
+| 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis；走法無前綴符號，窄時 `@container navbar` 隱藏 `.miPly`（「第N步：」前綴）只留著法（如 傌二進三） |
 | 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析+🤖AI走棋(`#rpAutoBody`：控制列 `#autoStartBtn`(start/stop)/`#autoClearBtn`/`#autoState`+歷程 `#autoHistory`) |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
 | settings 分區（兩欄瀑布流 `.settingsForm{column-count:2}`，`break-inside:avoid`） | 資料來源 / 引擎分析 / 雲庫演繹 / **AI 自動走棋**（`#autoAiRedChk`/`#autoAiBlackChk`/`#autoRedSecsInput`/`#autoBlackSecsInput`/`#autoMaxPliesInput`；**加入棋譜 `#autoRecordChk` 已移到 🤖AI走棋 分頁**）/ 匯出動畫 |

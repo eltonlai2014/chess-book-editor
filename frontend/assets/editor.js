@@ -1741,7 +1741,17 @@ function refreshActive() {
   renderVarPicker();
 
   if (node) {
-    $("#moveInfo").textContent = `第 ${node.ply} 步：${node.notation}`;
+    // Two spans so CSS can drop the 「第 N 步：」prefix when the board column is
+    // too narrow, keeping just the move (e.g. 傌二進三). See #moveInfo .miPly.
+    const mi = $("#moveInfo");
+    mi.textContent = "";
+    const ply = document.createElement("span");
+    ply.className = "miPly";
+    ply.textContent = `第 ${node.ply} 步：`;
+    const mv = document.createElement("span");
+    mv.className = "miMv";
+    mv.textContent = node.notation;
+    mi.append(ply, mv);
   } else {
     $("#moveInfo").textContent = "初始局面";
   }

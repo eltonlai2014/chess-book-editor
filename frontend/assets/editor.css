@@ -982,6 +982,8 @@ h2 {
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  /* Size container so #moveInfo can shed its 「第 N 步：」prefix when narrow. */
+  container: navbar / inline-size;
 }
 
 /* #navBar buttons inherit base + hover from the ghost variant. Slight
@@ -1102,10 +1104,11 @@ h2.panelHead>span {
   letter-spacing: 0.02em;
 }
 
-#moveInfo:not(:empty)::before {
-  content: "▸";
-  color: var(--accent);
-  margin-right: 6px;
+/* Drop the 「第 N 步：」prefix when the navBar is too narrow to fit the full
+   move text — only the move (傌二進三) shows. Threshold ≈ navBar content width;
+   tune if the cutover feels early/late. */
+@container navbar (max-width: 470px) {
+  #moveInfo .miPly { display: none; }
 }
 
 /* ---------- right: 棋譜 | (注解 / 本步可選) — flex with splitters ---------- */
