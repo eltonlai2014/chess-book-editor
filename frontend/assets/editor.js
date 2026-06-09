@@ -3542,7 +3542,7 @@ $("#settingsBtn").innerHTML = ICON.settings;
 $("#navDelete").innerHTML = ICON.trash;
 $("#navFirst").innerHTML = ICON.skipBack;
 $("#navPrev").innerHTML = ICON.chevL;
-$("#navBranch").innerHTML = iconLabel("branch", "分支");
+$("#navBranch").innerHTML = ICON.branch;  // icon-only; hint lives in the title attr
 $("#navNext").innerHTML = ICON.chevR;
 $("#navLast").innerHTML = ICON.skipFwd;
 updateAutoPlayBtn();   // sets #autoStartBtn icon+label (play/開始 ↔ stop/停止)

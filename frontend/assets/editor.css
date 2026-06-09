@@ -536,7 +536,12 @@ main {
 }
 
 #boardPane {
+  /* Start basis; the boardPane splitter overwrites flex-basis on drag and
+     restores it from PREFS.splitBoardW. min/max keep the board legible and
+     stop a wide board from crushing the variations/analysis pane. */
   flex: 0 0 568px;
+  min-width: 380px;
+  max-width: 820px;
 }
 
 #rightPane {
@@ -919,7 +924,8 @@ h2 {
   align-items: center;
   padding: var(--rp-pad-y) var(--board-pad-x) 14px;
   overflow: hidden;
-  width: 568px;
+  /* Width is driven by flex-basis (see the #boardPane rule above) so the
+     splitter can resize it — no fixed width here. */
   background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
 
@@ -949,6 +955,14 @@ h2 {
   margin: 4px 0 12px;
   flex: 0 0 auto;
   display: block;
+  /* SVG fills the board column (viewBox 540×600 keeps everything to scale, so
+     resizing the column resizes the whole board incl. the click-overlay).
+     boardPane's --board-pad-x supplies the side gutters; aspect-ratio backs up
+     the viewBox's intrinsic ratio. */
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  aspect-ratio: 540 / 600;
   border-radius: 10px;
   box-shadow:
     0 2px 6px rgba(0, 0, 0, 0.5),
@@ -975,10 +989,16 @@ h2 {
    for square symbols, lighter color override (text not text-muted). */
 #navBar button {
   color: var(--text);
-  padding: 6px 12px;
+  padding: 6px 8px;
   font-family: monospace;
   font-size: 15px;
-  min-width: 44px;
+  /* Buttons share the navBar width so they track the board column: grow to
+     fill (capped at max-width so a wide board doesn't bloat them), shrink to an
+     always-tappable floor when the board is narrow. Surplus past the cap goes
+     to #moveInfo (higher flex weight below). */
+  flex: 1 1 0;
+  min-width: 40px;
+  max-width: 60px;
 }
 
 #navBar button:disabled {
@@ -1074,7 +1094,10 @@ h2.panelHead>span {
   text-overflow: ellipsis;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", serif;
   min-width: 0;
-  flex: 1 1 auto;
+  /* Higher weight than the buttons (flex:1) so once they hit max-width the
+     leftover navBar width flows here — full move text on a wide board, ellipsis
+     when narrow. */
+  flex: 3 1 0;
   /* take remaining width — ellipsis truncates if too long */
   letter-spacing: 0.02em;
 }

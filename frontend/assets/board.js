@@ -677,9 +677,13 @@ function drawBoard(svg, fen, bookMove, engineMove) {
     el("line", { x1, y1, x2, y2, stroke: S.grid.stroke, "stroke-width": gw }, svg);
   }
 
-  // River text
+  // River text. text-anchor:middle centres on the text's advance width, but
+  // Chromium adds letter-spacing AFTER the last glyph too, so the measured
+  // advance is one letter-spacing wider than the visible glyphs — pulling the
+  // string left by letter-spacing/2. Nudge x right by half the letter-spacing
+  // (38/2 = 19) so the visible characters sit centred on the board midline 270.
   const river = el("text", {
-    x: 270, y: 308, "text-anchor": "middle", "font-size": 24,
+    x: 289, y: 308, "text-anchor": "middle", "font-size": 24,
     fill: S.river.color, "font-family": "serif", "letter-spacing": 38,
     "font-style": S.river.style,
   }, svg);

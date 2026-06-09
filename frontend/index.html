@@ -52,7 +52,7 @@
     <div class="splitter splitter-v" data-resize="filePane" data-pref="splitFileW"></div>
     <section id="boardPane">
       <h2 id="fileTitle">尚未載入</h2>
-      <svg id="board" viewBox="0 0 540 600" width="540" height="600"></svg>
+      <svg id="board" viewBox="0 0 540 600"></svg>
       <div id="navBar">
         <button id="navFirst" title="回開局 (Home)">|◀</button>
         <button id="navPrev" title="上一步 (←)">◀</button>
@@ -63,6 +63,7 @@
       </div>
       <div id="evalLine" title="評估的是「走這步之前」的決策點（前一步）：深N＝該局面引擎分、建議＝該局面最佳著、雲＝雲庫最佳著。用來評斷目前這步走得好不好。"></div>
     </section>
+    <div class="splitter splitter-v" data-resize="boardPane" data-pref="splitBoardW"></div>
     <aside id="rightPane">
       <div id="rpMoves" class="rpSection rpMoves">
         <h2 class="panelHead">
