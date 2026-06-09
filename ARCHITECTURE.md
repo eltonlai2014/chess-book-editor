@@ -332,7 +332,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 一次性修已轉檔的「車」亂碼（`�z`→車，原地改 .cbl/.xqf 標題、先備份） | `tools/fix_che_title.py`（`--dry-run` 可預覽）|
 | 門檻同步檢查 | `backend/test_trap_spotcheck.py` / `test_eval_integration.py` |
 | cchess 內附 wheel（離線安裝來源） | `vendor/wheels/`、`requirements.txt`、`setup.ps1` |
-| 桌面打包（免裝 Python，pywebview 殼＋PyInstaller） | 入口 `desktop.py`（daemon thread 起 Flask＋開原生視窗；`--check`＝headless 煙霧測）、`desktop.spec`（onedir）、`requirements-desktop.txt`/`requirements-build.txt`；凍結路徑分流 `backend/app.py` `_resource_base`（唯讀→`_MEIPASS`）/`_data_base`（可寫→exe 旁） |
+| 免裝 Python 打包（server exe：起 Flask＋印 URL，使用者自開瀏覽器） | 入口 `server.py`（`--pick`＝picker 自我重入分支）、`server.spec`（onedir）、`package.ps1`（建置＋staging `engine\Windows\`＋`samples\`＋`positions.db` 到 exe 旁）、`requirements-build.txt`；凍結路徑分流 `backend/app.py` `_resource_base`（唯讀→`_MEIPASS`）/`_data_base`（可寫→exe 旁）＋frozen-aware `DEFAULT_*`；picker `_subprocess_pick`（frozen→`--pick`／dev→`python -c`→`backend/tk_picker.py`） |
 
 ---
 

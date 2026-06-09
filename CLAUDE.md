@@ -285,23 +285,60 @@ source, let each user run it on their own machine with their own engine + data.*
   (`xqfRoot`/`evalDbPath`/`lastFile`) and is `.gitignore`d. Ship
   `preferences.example.json` (no machine paths). Use `git archive` for the zip,
   NOT a raw folder copy (which would sweep in the gitignored prefs + venv).
-- **Engine + positions.db are NOT bundled.** Pikafish is GPL and microarch-
-  specific (avx2 vs plain); the eval DB is the AI repo's data. Users set both
-  via the UI pickers; the app runs without either.
-- **Optional desktop build (`desktop.py` + `desktop.spec`, POC — not yet
-  shipped).** A second, heavier path that needs NO Python on the user's box:
-  PyInstaller freezes a pywebview shell into `dist\ChessBookEditor\` (~27MB
-  onedir). pywebview not Electron — backend is Python, so we drive the OS
-  WebView2 (Win11 built-in, no Chromium shipped) and stay one-language. The
-  source zip+`setup.ps1` path above is still the primary; the exe is for users
-  who can't run PowerShell. **Frozen path-split is load-bearing**: `_MEIPASS`
-  (read-only `frontend/`) vs exe-adjacent dir (writable `preferences.json` /
-  `output/`) — see `_resource_base`/`_data_base` in `backend/app.py`; never let
-  prefs land in the temp `_MEIPASS`. Same NOT-bundled rules apply (engine, DB,
-  library, `preferences.json`). Before shipping it: `console=False`+icon in the
-  spec, code-sign (else SmartScreen blocks), ship `preferences.example.json`
-  next to the exe. Deps split out to `requirements-desktop.txt` (pywebview) /
-  `requirements-build.txt` (pyinstaller) so the server flow stays GUI-free.
+- **Engine / positions.db / library not bundled in the SOURCE/zip flow**
+  (Pikafish is GPLv3 + microarch-specific; eval DB is the AI repo's data) — set
+  via the UI pickers, app runs fine without any. **But the frozen exe build
+  (`package.ps1`) DOES stage them next to the exe** so a fresh machine runs
+  zero-config: `engine\Windows\` (Pikafish Windows builds + `pikafish.nnue`),
+  `samples\` (library), and `positions.db` (eval cache, opened read-only). The
+  frozen `DEFAULT_*` block points at these exe-adjacent copies; any still-absent
+  one degrades gracefully (`eval/info`/`engine/info` `exists:false`).
+- **PRIMARY frozen build = the SERVER exe (`server.py` + `server.spec`, built by
+  `package.ps1`).** Needs NO Python on the user's box: PyInstaller freezes Flask
+  into `dist\ChessBookEditor\ChessBookEditor.exe`; it prints `http://127.0.0.1:
+  5174/` to the console and the user opens it in **their own browser**. No
+  pywebview/pythonnet — that deliberately dodges the `Python.Runtime.dll`
+  assembly-load failure + most MOTW breakage an embedded-webview shell hits, and
+  keeps the bundle plain-Flask. `package.ps1` stages engine + samples +
+  positions.db next to the exe (~93MB total). `_pick_port` walks 5174+ for a free
+  port. The
+  exe doubles as its own picker via the `--pick` arg (see picker bullet).
+  **Frozen path-split is load-bearing**: `_MEIPASS` (read-only `frontend/`) vs
+  exe-adjacent dir (writable `preferences.json`/`output/`, AND the staged
+  `samples\`/`engine\`) — see `_resource_base`/`_data_base` + the frozen-aware
+  `DEFAULT_XQF_ROOT`/`DEFAULT_PIKAFISH` block in `backend/app.py`; never let
+  prefs land in temp `_MEIPASS`. `package.ps1` drops `$ErrorActionPreference` to
+  Continue around the PyInstaller call (it logs INFO to stderr → PS would treat
+  each line as a terminating NativeCommandError under Stop) and gates on the real
+  exit code. Before shipping: code-sign (else SmartScreen/AV may flag the
+  unsigned bootloader exe), ship `preferences.example.json` next to the exe.
+  (History: a pywebview single-window shell — `desktop.py`/`desktop.spec` — was
+  tried first but REMOVED 2026-06-09; pythonnet's `Python.Runtime.dll` failed to
+  load from an MOTW'd zone on other machines, so the plain-Flask server replaced
+  it. Don't reintroduce an embedded webview without solving that.)
+- **Folder/file pickers split by frozen-ness (`backend/app.py` `_pick_folder`/
+  `_pick_file` → `_subprocess_pick`).** tkinter's mainloop needs the main thread,
+  so a picker always runs in a SHORT-LIVED subprocess, never inline. The catch:
+  `[sys.executable, "-c", …]` only runs python in a SOURCE run. In the frozen exe
+  `sys.executable` is the bootloader — `-c …` would re-launch the whole app. So
+  frozen re-enters its OWN `--pick` branch (`server.py`), which runs the SAME
+  tkinter body (`backend/tk_picker.run_from_env`, driven by env vars). tkinter is
+  bundled via `server.spec` hiddenimports. Any NEW picker must go through
+  `_pick_folder`/`_pick_file`, never call `sys.executable -c` directly. File
+  filters use a `"Label (*.a;*.b)"` spec; `_web_types_to_tk` converts it for
+  tkinter.
+- **MOTW (Mark-of-the-Web) on OTHER machines.** Copied via zip/network, every
+  file gets a Zone.Identifier. **The server exe has no .NET assembly, so it just
+  RUNS** — but MOTW / AV can still quarantine the bootloader exe, or SmartScreen
+  may warn once on an unsigned exe from an untrusted zone. (The since-removed
+  pywebview POC failed HARD here instead: .NET refused to load pythonnet's
+  managed assembly from an untrusted zone — `Failed to resolve
+  Python.Runtime.Loader.Initialize` — and the window never opened. That class of
+  failure is gone with the embedded webview.) Mitigate on the target box:
+  `Get-ChildItem -Recurse | Unblock-File`; or ship via an installer (Inno Setup —
+  installed files carry no MOTW); or code-sign. A SELF-signed cert does NOT help
+  other machines (their trust store doesn't have it) unless you also import its
+  public key into their Trusted Root — about as much friction as Unblock-File.
 
 ## Gotchas
 

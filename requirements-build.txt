@@ -1,6 +1,6 @@
-# Build-only tooling for producing the standalone desktop .exe (PyInstaller).
+# Build-only tooling for producing the standalone server .exe (PyInstaller).
 # Not needed to RUN from source — install only when packaging:
 #   .\.venv\Scripts\pip.exe install -r requirements-build.txt
-#   .\.venv\Scripts\pyinstaller.exe desktop.spec
+#   .\package.ps1        (or: .\.venv\Scripts\pyinstaller.exe server.spec)
 pyinstaller>=6.10
 pyinstaller-hooks-contrib>=2024.9

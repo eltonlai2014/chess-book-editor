@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -65,25 +66,6 @@ from backend.chessdb_service import lookup as chessdb_lookup  # noqa: E402
 from backend.xqf_service import pv_to_chinese  # noqa: E402
 
 
-# Fallback when preferences.json has no xqfRoot — matches master's primary
-# machine. On other machines, user sets the actual root via UI (POST /api/xqf/root)
-# and it persists to preferences.json.
-DEFAULT_XQF_ROOT = Path(r"D:\Elton\TestArea\chess-book")
-# Default eval database path: sibling chess-book-ai repo's migrated SQLite.
-# Overridden via preferences key ``evalDbPath`` (set from UI later if needed).
-DEFAULT_EVAL_DB = (
-    Path(__file__).resolve().parent.parent.parent
-    / "chess-book-ai" / "output" / "positions.db"
-)
-# Default Pikafish engine: sibling chess-book-ai repo ships several microarch
-# builds — avx2 is the broadest-compatible modern default. Overridden via
-# preferences key ``pikafishPath`` (user picks the build matching their CPU).
-# We only ever *run* this binary live; the engine source/build stays in the AI
-# repo (see CLAUDE.md), and analysis is ephemeral (never persisted).
-DEFAULT_PIKAFISH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "chess-book-ai" / "engine" / "Windows" / "pikafish-avx2.exe"
-)
 def _resource_base() -> Path:
     """Root of read-only bundled resources (the ``frontend/`` SPA). Under a
     PyInstaller build these are unpacked to ``sys._MEIPASS``; in a source run
@@ -100,6 +82,28 @@ def _data_base() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
+
+
+# Default library / engine / eval-DB roots, overridable via preferences.json.
+# Frozen build: point at resources shipped NEXT TO the exe (samples\, engine\
+# Windows\) so a fresh machine works with zero config — package.ps1 copies them
+# in. Source run: master's sibling repos. The eval DB is never bundled (AI
+# repo's data); an absent path degrades gracefully (eval/info exists:false).
+if getattr(sys, "frozen", False):
+    _APP_DIR = _data_base()
+    DEFAULT_XQF_ROOT = _APP_DIR / "samples"
+    DEFAULT_PIKAFISH = _APP_DIR / "engine" / "Windows" / "pikafish-avx2.exe"
+    DEFAULT_EVAL_DB = _APP_DIR / "positions.db"
+else:
+    DEFAULT_XQF_ROOT = Path(r"D:\Elton\TestArea\chess-book")
+    DEFAULT_EVAL_DB = (
+        Path(__file__).resolve().parent.parent.parent
+        / "chess-book-ai" / "output" / "positions.db"
+    )
+    DEFAULT_PIKAFISH = (
+        Path(__file__).resolve().parent.parent.parent
+        / "chess-book-ai" / "engine" / "Windows" / "pikafish-avx2.exe"
+    )
 
 
 FRONTEND_ROOT = _resource_base() / "frontend"
@@ -281,46 +285,78 @@ def get_root():
     return jsonify({"root": str(get_xqf_root())})
 
 
+# ---------- Native file/folder pickers ---------------------------------------
+# Two routes, one API (_pick_folder/_pick_file):
+#   * Browser / dev (run-dev.ps1): sys.executable is a REAL python -> a one-shot
+#     subprocess runs the tkinter body (its mainloop wants the main thread;
+#     calling it inside a Flask worker thread hangs/crashes).
+#   * Frozen server exe (server.py -> ChessBookEditor.exe): sys.executable is the
+#     bootloader, so `[sys.executable, "-c", …]` would re-launch the app, not run
+#     python. Instead it re-enters its OWN `--pick` branch, which runs the SAME
+#     tkinter body (backend/tk_picker.run_from_env). tkinter IS bundled (server.spec).
+
+
+def _web_types_to_tk(file_types):
+    """Convert a `'Label (*.a;*.b)'` filter spec to tkinter filetypes
+    [('Label', '*.a *.b')]."""
+    out = []
+    for s in file_types:
+        m = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", s)
+        if m:
+            label = m.group(1).strip() or "Files"
+            pats = m.group(2).replace(";", " ").strip() or "*.*"
+        else:
+            label, pats = s, "*.*"
+        out.append([label, pats])
+    return out or [["All files", "*.*"]]
+
+
+# Dev route runs the picker via `python -c`; the import works because the dev
+# subprocess inherits cwd=repo-root (run-dev.ps1), so `backend.tk_picker` resolves.
+_PICK_DEV_CMD = "from backend.tk_picker import run_from_env; run_from_env()"
+
+
+def _subprocess_pick(mode: str, title: str, initialdir: str, file_types) -> str:
+    """One-shot native dialog via a short-lived subprocess. dev -> `python -c`;
+    frozen -> the exe's `--pick` branch. Both run backend/tk_picker.run_from_env,
+    driven entirely by the env vars set here."""
+    env = {
+        **os.environ,
+        "PICK_MODE": mode,
+        "DIALOG_TITLE": title,
+        "INITIAL_DIR": initialdir or "",
+        "PYTHONIOENCODING": "utf-8",
+    }
+    if file_types:
+        env["FILE_TYPES_TK"] = json.dumps(_web_types_to_tk(file_types))
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--pick"]
+    else:
+        cmd = [sys.executable, "-c", _PICK_DEV_CMD]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=300, env=env)
+    except Exception as e:  # noqa: BLE001 — timeout / spawn failure == "no pick"
+        print(f"[pick] subprocess dialog failed: {e}", file=sys.stderr)
+        return ""
+    return proc.stdout.decode("utf-8", errors="replace").strip()
+
+
+def _pick_folder(title: str, initialdir: str) -> str:
+    return _subprocess_pick("folder", title, initialdir, None)
+
+
+def _pick_file(title: str, initialdir: str, file_types) -> str:
+    return _subprocess_pick("file", title, initialdir, file_types)
+
+
 @app.post("/api/xqf/pick-root")
 def pick_root_dialog():
-    """Pop a native folder-picker via a one-shot subprocess.
-
-    tkinter's mainloop needs to run on the main thread; in a Flask dev server
-    (worker threads, debug-mode reloader) calling it inline either hangs or
-    crashes. A short-lived subprocess sidesteps that — and tkinter is in
-    stdlib so no new dependency.
+    """Pop a native folder-picker (frozen -> exe `--pick`; dev -> `python -c`;
+    see _subprocess_pick).
 
     Returns {ok: true, path} on selection, {ok: false} if user cancelled.
     """
-    code = (
-        "import os, sys, tkinter as tk\n"
-        "from tkinter import filedialog\n"
-        "sys.stdout.reconfigure(encoding='utf-8')\n"
-        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-        "p = filedialog.askdirectory("
-        "title=os.environ.get('DIALOG_TITLE',''),"
-        "initialdir=os.environ.get('INITIAL_DIR','') or None,"
-        "mustexist=True)\n"
-        "print(p or '')\n"
-    )
-    env = {
-        **os.environ,
-        "DIALOG_TITLE": "選擇棋譜根目錄",
-        "INITIAL_DIR": str(get_xqf_root()),
-        "PYTHONIOENCODING": "utf-8",
-    }
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            timeout=300,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "選擇對話框逾時"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    chosen = proc.stdout.decode("utf-8", errors="replace").strip()
+    chosen = _pick_folder("選擇棋譜根目錄", str(get_xqf_root()))
     if not chosen:
         return jsonify({"ok": False})
     return jsonify({"ok": True, "path": chosen})
@@ -521,42 +557,17 @@ def eval_info():
 def pick_eval_db_dialog():
     """Native open-file dialog for selecting a SQLite eval database.
 
-    Same subprocess + tkinter pattern as `/api/xqf/pick-root`, but uses
-    askopenfilename and filters to .db / .sqlite. Returns
-    {ok: true, path} on selection; {ok: false} on cancel.
+    Native open-file dialog filtered to .db / .sqlite (frozen -> exe `--pick`;
+    dev -> `python -c`; see _subprocess_pick). Returns {ok: true, path} on
+    selection; {ok: false} on cancel.
     """
-    code = (
-        "import os, sys, tkinter as tk\n"
-        "from tkinter import filedialog\n"
-        "sys.stdout.reconfigure(encoding='utf-8')\n"
-        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-        "p = filedialog.askopenfilename("
-        "title=os.environ.get('DIALOG_TITLE',''),"
-        "initialdir=os.environ.get('INITIAL_DIR','') or None,"
-        "filetypes=(("
-        "'SQLite databases','*.db *.sqlite *.sqlite3'"
-        "),('All files','*.*')))\n"
-        "print(p or '')\n"
-    )
     cur = _get_eval_db()
-    env = {
-        **os.environ,
-        "DIALOG_TITLE": "選擇引擎評估資料庫 (positions.db)",
-        "INITIAL_DIR": str(cur.parent if cur.exists() else cur.parent.parent),
-        "PYTHONIOENCODING": "utf-8",
-    }
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            timeout=300,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "選擇對話框逾時"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    chosen = proc.stdout.decode("utf-8", errors="replace").strip()
+    initdir = str(cur.parent if cur.exists() else cur.parent.parent)
+    chosen = _pick_file(
+        "選擇引擎評估資料庫 (positions.db)",
+        initdir,
+        ("SQLite databases (*.db;*.sqlite;*.sqlite3)", "All files (*.*)"),
+    )
     if not chosen:
         return jsonify({"ok": False})
     return jsonify({"ok": True, "path": chosen})
@@ -649,41 +660,17 @@ def engine_info():
 def pick_engine_dialog():
     """Native open-file dialog for selecting the Pikafish executable.
 
-    Same subprocess + tkinter pattern as `/api/eval/pick-db`, filtered to .exe.
-    Returns {ok: true, path} on selection; {ok: false} on cancel.
+    Native open-file dialog filtered to .exe (frozen -> exe `--pick`; dev ->
+    `python -c`; see _subprocess_pick). Returns {ok: true, path} on
+    selection; {ok: false} on cancel.
     """
-    code = (
-        "import os, sys, tkinter as tk\n"
-        "from tkinter import filedialog\n"
-        "sys.stdout.reconfigure(encoding='utf-8')\n"
-        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-        "p = filedialog.askopenfilename("
-        "title=os.environ.get('DIALOG_TITLE',''),"
-        "initialdir=os.environ.get('INITIAL_DIR','') or None,"
-        "filetypes=(("
-        "'Pikafish 執行檔','pikafish*.exe'"
-        "),('執行檔','*.exe'),('All files','*.*')))\n"
-        "print(p or '')\n"
-    )
     cur = _get_pikafish()
-    env = {
-        **os.environ,
-        "DIALOG_TITLE": "選擇皮卡魚引擎執行檔 (pikafish*.exe)",
-        "INITIAL_DIR": str(cur.parent if cur.parent.exists() else cur.parent.parent),
-        "PYTHONIOENCODING": "utf-8",
-    }
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            timeout=300,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "選擇對話框逾時"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    chosen = proc.stdout.decode("utf-8", errors="replace").strip()
+    initdir = str(cur.parent if cur.parent.exists() else cur.parent.parent)
+    chosen = _pick_file(
+        "選擇皮卡魚引擎執行檔 (pikafish*.exe)",
+        initdir,
+        ("Pikafish 執行檔 (pikafish*.exe)", "執行檔 (*.exe)", "All files (*.*)"),
+    )
     if not chosen:
         return jsonify({"ok": False})
     return jsonify({"ok": True, "path": chosen})
