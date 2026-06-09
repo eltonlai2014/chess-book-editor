@@ -173,9 +173,16 @@ are reused verbatim — the only new code is the format boundary in
   fix exploits CBL being **fixed 4096-byte records** at `66624 + book_count*276`
   (`cbl_index_fix`'s linear offset): `_cbl_record_starts` finds each record by
   the `CCBridge Record` magic + 4096 stride (no move parse). `list_cbl_games`
-  reads only each record's title (CBR header +180); `load_cb` seeks to one
-  record and `read_from_cbr_buffer`s just that game. ~5000×/680× faster, output
-  byte-identical to the full parse. Keep new CBL code on this path.
+  reads each record's title (CBR header +180) **plus red/black/result (fixed
+  offsets +1076/+1300/+2076) to build the tree label** — `布局名 — 紅 先勝 黑`
+  when both players are real, else just the title (`_compose_cbl_label`;
+  theoretical-opening games store placeholder 紅方/黑方 → skipped via
+  `_PLACEHOLDER_PLAYERS`). Still NO move parse — those bytes are already in
+  memory, so it stays the fast path. (XQF gets player names from its *filename*;
+  the CBL has no filename per game, so the label has to read the in-record
+  fields. Both formats store title=布局 + red + black + result.) `load_cb` seeks
+  to one record and `read_from_cbr_buffer`s just that game. ~5000×/680× faster,
+  output byte-identical to the full parse. Keep new CBL code on this path.
 - **Saving a CBL game is a byte-level splice, not a full rewrite.** Because
   records are 4096-byte slots, `save_cbl_game` overwrites only the edited game's
   slot(s) in place (when its slot count is unchanged — true for ~all opening-

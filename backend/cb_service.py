@@ -50,6 +50,21 @@ from vendor.io_cb_writer import (
 _CBR_TITLE_OFFSET = 180
 _CBR_TITLE_SIZE = 128
 
+# CBR header 內其餘顯示欄位（同 io_cb_writer 的寫入 offset）：紅/黑棋手、賽事、
+# 賽果。列舉時一併讀出，讓有真棋手的盤能顯示「布局名 — 紅 先勝 黑」。
+_CBR_EVENT_OFFSET = 692
+_CBR_EVENT_SIZE = 64
+_CBR_RED_OFFSET = 1076
+_CBR_RED_SIZE = 64
+_CBR_BLACK_OFFSET = 1300
+_CBR_BLACK_SIZE = 64
+_CBR_RESULT_OFFSET = 2076  # 1 byte：0=未知/*, 1=紅勝, 2=黑勝, 3=和
+
+# result byte -> 紅方視角的結果詞（同 XQF 檔名慣例：先勝/先負/先和）。
+_RESULT_WORD = {1: "先勝", 2: "先負", 3: "先和"}
+# CCBridge 對沒有真棋手的理論譜填的佔位名，視同無棋手。
+_PLACEHOLDER_PLAYERS = {"紅方", "黑方", "红方", "无"}
+
 
 # ---------- rel 解析 --------------------------------------------------------
 
@@ -109,6 +124,26 @@ def _decode_cbr_title(contents: bytes, start: int) -> str:
     return _decode_slot(contents, start + _CBR_TITLE_OFFSET, _CBR_TITLE_SIZE)
 
 
+def _is_real_player(name: str) -> bool:
+    """非空、且非 CCBridge 理論譜的佔位名（紅方/黑方）才算真棋手。"""
+    return bool(name) and name not in _PLACEHOLDER_PLAYERS
+
+
+def _compose_cbl_label(contents: bytes, start: int, title: str) -> str:
+    """組左樹顯示文字：有真棋手→「布局名 — 紅 先勝 黑」，否則只回布局名。
+
+    紅/黑/賽果都是 CBR header 固定 offset，bytes 已在記憶體裡，零額外 I/O。
+    """
+    base = title or "(無標題)"
+    red = _decode_slot(contents, start + _CBR_RED_OFFSET, _CBR_RED_SIZE).strip()
+    black = _decode_slot(contents, start + _CBR_BLACK_OFFSET, _CBR_BLACK_SIZE).strip()
+    if not (_is_real_player(red) and _is_real_player(black)):
+        return base
+    result = contents[start + _CBR_RESULT_OFFSET] if start + _CBR_RESULT_OFFSET < len(contents) else 0
+    word = _RESULT_WORD.get(result, "對")
+    return f"{base} — {red} {word} {black}"
+
+
 # ---------- 列舉 CBL 盤目（懶載入用） ----------------------------------------
 
 def list_cbl_games(path: Path) -> list[dict]:
@@ -125,7 +160,7 @@ def list_cbl_games(path: Path) -> list[dict]:
         out.append({
             "index": i,
             "title": title,
-            "name": f"{i + 1}. {title or '(無標題)'}",
+            "name": f"{i + 1}. {_compose_cbl_label(contents, start, title)}",
         })
     return out
 
