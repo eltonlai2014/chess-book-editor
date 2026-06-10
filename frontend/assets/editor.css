@@ -428,8 +428,8 @@ header {
 header h1 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
+  gap: 10px;
+  font-size: 24px;
   font-weight: 700;
   margin: 0;
   color: var(--text);
@@ -437,8 +437,8 @@ header h1 {
 }
 
 .appLogo {
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   color: var(--accent);
   flex: 0 0 auto;
 }
