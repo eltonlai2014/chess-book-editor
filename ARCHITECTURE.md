@@ -120,7 +120,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 單步中文著法 | `compute_move_info`:392 |
 | PV(UCI)→中文著法列（limit 64） | `pv_to_chinese`:419 |
 | 合法著點 | `compute_legal_targets`:455 |
-| 載入/存檔 wrapper | `load_xqf`:475 / `save_xqf`:492 / `create_xqf`:506 |
+| 載入/存檔 wrapper | `load_xqf`（包 `fast_parse_book`）/ `save_xqf` / `create_xqf` |
+| **解析加速**：載入期間短路 `ChessBoard.is_checking`→False，省 cchess 每步重算攻擊矩陣＋將死（純 overhead、輸出不讀）。輸出逐字節相同、~3x（巨檔 9s→3s）；lock 序列化、`try/finally` 還原，編輯/走子/引擎的真將軍判斷不受影響。XQF＋CBL 載入共用 | `fast_parse_book`（cm；`load_xqf`/`cb_service.load_cb` 都包） |
 | 編碼/檔名修復（GB18030/Big5/PUA） | `recover_book_strings`:235、`_maybe_recover_big5`:162、`sanitise_filename`:45 |
 
 ### 評估 DB（backend/eval_service.py，唯讀）

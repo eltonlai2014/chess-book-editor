@@ -369,6 +369,17 @@ source, let each user run it on their own machine with their own engine + data.*
 - **`Move.variation_next` is unreliable for deep variations.** Walk
   `move.next_move.variations_all` instead. See `vendor/io_xqf_patched.py`
   docstring bug #2.
+- **Loading a big variation tree is dominated by cchess's per-move 將軍/將死.**
+  `board.move()` calls `is_checking()` (recomputes the 10×9 attack matrix) +
+  `is_checkmate()` on EVERY move just to set `move.is_check`/`.is_checkmate` —
+  flags `book_to_json`/中文著法 never read. On a 22589-move file that's ~9s of
+  pure overhead. `fast_parse_book()` (xqf_service) short-circuits
+  `is_checking`→False for the parse window only: **byte-identical output**
+  (verified against the full parse) and ~3x faster (9s→3s). `load_xqf` AND
+  `cb_service.load_cb` both wrap their cchess read in it. It's a module-locked
+  monkeypatch restored in `finally`, so the editor's REAL check detection (move
+  validation, auto-play, engine) is untouched — **never widen its scope to the
+  editing path**, and don't make the patch permanent.
 - **Test source path is hard-coded** to `D:\Elton\TestArea\chess-book\` in
   `tests/test_roundtrip.py`. If the source library moves, update `SRC_ROOT`.
 - **AI 自動走棋靠 `go movetime`，不是新後端。** `/api/engine/analyze` 早就吃

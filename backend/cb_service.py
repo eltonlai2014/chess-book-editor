@@ -29,7 +29,7 @@ from pathlib import Path
 from cchess import Book
 from cchess.read_cbr import _CBL_RECORD_SIZE, _parse_cbl_header, read_from_cbr_buffer
 
-from backend.xqf_service import book_to_json, json_to_book
+from backend.xqf_service import book_to_json, fast_parse_book, json_to_book
 from vendor.cbl_index_fix import get_cbl_data_offset  # 線性 data-offset 公式（已修正 cchess bug）
 from vendor.cchess_cbl import read_cbl, read_cbr  # import 觸發 apply_cbl_offset_fix
 from vendor.io_cb_writer import (
@@ -194,19 +194,22 @@ def load_cb(path: Path, index: int | None) -> dict:
     不跑 XQF 的 Big5 recovery——CB 格式字串一律 UTF-16-LE，沒有 XQF 的 Big5 舊帳。
     """
     contents = path.read_bytes()
-    if index is None:
-        book = read_cbr(str(path))
-        if book is None:
-            raise ValueError(f"failed to read CBR: {path}")
-        hdr_start = 0
-    else:
-        starts = _cbl_record_starts(contents)
-        if index < 0 or index >= len(starts):
-            raise ValueError(f"game index {index} out of range (0..{len(starts) - 1})")
-        hdr_start = starts[index]
-        book = read_from_cbr_buffer(contents[hdr_start:], Book)
-        if book is None:
-            raise ValueError(f"failed to parse CBL game {index} in {path}")
+    # 同 XQF：cchess 解析每步會算將軍/將死（純 overhead，本模組輸出不讀）。大盤
+    # 同樣受惠——載入期間短路 is_checking（輸出不變，見 fast_parse_book 註解）。
+    with fast_parse_book():
+        if index is None:
+            book = read_cbr(str(path))
+            if book is None:
+                raise ValueError(f"failed to read CBR: {path}")
+            hdr_start = 0
+        else:
+            starts = _cbl_record_starts(contents)
+            if index < 0 or index >= len(starts):
+                raise ValueError(f"game index {index} out of range (0..{len(starts) - 1})")
+            hdr_start = starts[index]
+            book = read_from_cbr_buffer(contents[hdr_start:], Book)
+            if book is None:
+                raise ValueError(f"failed to parse CBL game {index} in {path}")
     # cchess 的 cut_bytes_to_str 對位不嚴，標題若以 ASCII 結尾（')'、數字…）會漏掉
     # 最後一字。用對齊解碼（同 list_cbl_games）覆蓋標題，確保顯示與「編輯後存檔」都完整。
     aligned = _decode_cbr_title(contents, hdr_start).strip()

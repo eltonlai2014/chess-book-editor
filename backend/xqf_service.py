@@ -16,7 +16,9 @@ Each `node`:
 `children[1:]` are siblings (variations at that ply). This mirrors how
 `_read_steps` walks XQF: recurse into has_next, then into has_var.
 """
+import contextlib
 import re
+import threading
 from pathlib import Path
 
 from cchess import Book, FULL_INIT_FEN
@@ -494,8 +496,34 @@ def compute_legal_targets(fen: str, from_sq: str) -> list:
 
 # ---------- File I/O --------------------------------------------------------
 
+# cchess's board.move() calls is_checking() (which recomputes the 10×9 attack
+# matrix) + is_checkmate() on EVERY move, purely to set move.is_check /
+# .is_checkmate — flags the editor's move tree and Chinese notation never read.
+# On a big variation tree (e.g. 12萬-node 合併測試, 22589 moves) that's ~9s of
+# pure overhead. Short-circuiting is_checking()→False during a parse is
+# byte-identical in output (verified: book_to_json identical) and ~3x faster.
+# Scoped + locked: only the load window is affected, so the editor's REAL check
+# detection (move validation, auto-play, engine) keeps its accurate is_checking.
+# The lock serialises the global monkeypatch across Flask's threads; parses are
+# GIL-bound and already serial, so it adds no real latency.
+_parse_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def fast_parse_book():
+    """Suppress cchess's per-move 將軍/將死 computation for the duration of a parse."""
+    with _parse_lock:
+        orig = ChessBoard.is_checking
+        ChessBoard.is_checking = lambda self: False
+        try:
+            yield
+        finally:
+            ChessBoard.is_checking = orig
+
+
 def load_xqf(path: Path):
-    book = read_from_xqf(str(path), Book)
+    with fast_parse_book():
+        book = read_from_xqf(str(path), Book)
     if book is None:
         raise ValueError(f"failed to read XQF: {path}")
     # Author marker is peeked from the raw header — cchess's reader doesn't
