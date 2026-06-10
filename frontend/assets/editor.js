@@ -656,9 +656,11 @@ async function loadFileTree() {
   EDITOR.rootOk = true;
   $("#fileTree").innerHTML = "";
   $("#fileTree").appendChild(renderDir(tree));
-  // Tree loaded → user can create a new file under it.
+  // Tree loaded → user can create a new file under it, and rescan for new ones.
   const newBtn = $("#newXqfBtn");
   if (newBtn) newBtn.disabled = false;
+  const rescanBtn = $("#rescanBtn");
+  if (rescanBtn) rescanBtn.disabled = false;
 }
 
 function updateRootDisplay(root) {
@@ -2439,6 +2441,7 @@ const ICON = {
   info: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   save: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>',
   plus: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>',
+  refresh: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
   settings: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>',
   folder: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
   skipBack: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/></svg>',
@@ -3369,6 +3372,7 @@ $("#metaModal").addEventListener("click", (e) => {
   if (e.target.id === "metaModal") closeMetaModal();  // click backdrop to close
 });
 $("#newXqfBtn").onclick = openNewModal;
+$("#rescanBtn").onclick = rescanTree;
 $("#newCancel").onclick = closeNewModal;
 $("#newOk").onclick = submitNewXqf;
 $("#newModal").addEventListener("click", (e) => {
@@ -3585,6 +3589,7 @@ $("#anTabAi").innerHTML = iconLabel("chart", "AI分析");
 $("#metaBtn").innerHTML = iconLabel("info", "賽事資訊");
 $("#saveBtn").innerHTML = iconLabel("save", "儲存");
 $("#newXqfBtn").innerHTML = iconLabel("plus", "新增");
+$("#rescanBtn").innerHTML = iconLabel("refresh", "重掃");
 $("#settingsBtn").innerHTML = ICON.settings;
 $("#navDelete").innerHTML = ICON.trash;
 $("#navFirst").innerHTML = ICON.skipBack;
@@ -3696,12 +3701,13 @@ function setupSplitters() {
   });
 }
 
-// Restore the last opened file: expand the path of folders down to it,
-// highlight it, and trigger the same load flow as a click would.
-async function tryAutoLoadLastFile() {
-  const rel = PREFS.lastFile;
-  if (!rel) return;
-  // CBL 盤（rel 形如 lib.cbl#3）的盤目是懶載入的，開機時尚未渲染——先展開該庫。
+// Expand every ancestor folder down to `rel`, scroll it into view, and either
+// LOAD it (doLoad=true — boot's auto-reopen) or just HIGHLIGHT it without
+// loading (doLoad=false — used after a rescan, so the open game isn't disturbed).
+// Returns whether the file's <li> was found in the (possibly just-rebuilt) tree.
+async function revealFileInTree(rel, doLoad) {
+  if (!rel) return false;
+  // CBL 盤（rel 形如 lib.cbl#3）的盤目是懶載入的，DOM 中尚未渲染——先展開該庫。
   const hash = rel.lastIndexOf("#");
   if (hash !== -1 && rel.slice(0, hash).toLowerCase().endsWith(".cbl")) {
     const baseRel = rel.slice(0, hash);
@@ -3711,14 +3717,18 @@ async function tryAutoLoadLastFile() {
       let p = cblLi.parentElement;
       const tRoot = document.getElementById("fileTree");
       while (p && p !== tRoot) { if (p.tagName === "UL") p.style.display = ""; p = p.parentElement; }
-      await toggleCblDir(cblLi.querySelector(".dirname"), cblLi.querySelector("ul"), baseRel);
+      // 未載過才展開（toggleCblDir 對已展開的庫是 toggle，會收合）。
+      const sub = cblLi.querySelector("ul");
+      if (sub && sub.dataset.loaded !== "1") {
+        await toggleCblDir(cblLi.querySelector(".dirname"), sub, baseRel);
+      }
     }
   }
   // data-rel uniquely identifies each file li. Linear scan is fine for any
   // realistic library size.
   const fileLi = Array.from(document.querySelectorAll("#fileTree li.file"))
     .find((li) => li.dataset.rel === rel);
-  if (!fileLi) return;
+  if (!fileLi) return false;
   // Expand every ancestor <ul> (collapsed by default).
   let el = fileLi.parentElement;
   const treeRoot = document.getElementById("fileTree");
@@ -3726,8 +3736,41 @@ async function tryAutoLoadLastFile() {
     if (el.tagName === "UL") el.style.display = "";
     el = el.parentElement;
   }
-  await selectFile(rel, fileLi);
+  if (doLoad) {
+    await selectFile(rel, fileLi);
+  } else {
+    document.querySelectorAll("#fileTree li.file.active").forEach((e) => e.classList.remove("active"));
+    fileLi.classList.add("active");
+  }
   fileLi.scrollIntoView({ block: "nearest" });
+  return true;
+}
+
+// Restore the last opened file: expand down to it, highlight, and load it
+// (same flow as a click).
+async function tryAutoLoadLastFile() {
+  if (PREFS.lastFile) await revealFileInTree(PREFS.lastFile, true);
+}
+
+// Re-scan the library root: re-fetch /api/xqf/list and repaint the tree so
+// files added/removed on disk (outside the editor) show up. Does NOT touch the
+// currently-open game — no reload, no unsaved-edit guard — it only repaints the
+// tree, then re-expands+highlights the open file so the user keeps their place.
+async function rescanTree() {
+  if (!EDITOR.rootOk) return;
+  const btn = $("#rescanBtn");
+  if (btn) btn.disabled = true;
+  const keepRel = EDITOR.currentPath || null;
+  setStatus("重新掃描中…");
+  try {
+    await loadFileTree();
+    if (keepRel) await revealFileInTree(keepRel, false);   // 還原定位，不重新載入
+    setStatus("已重新掃描目錄", "ok");
+  } catch (e) {
+    setStatus("重新掃描失敗：" + (e.message || e), "err");
+  } finally {
+    if (btn) btn.disabled = !EDITOR.rootOk;
+  }
 }
 
 // When a configured path is missing/invalid but localStorage remembers a

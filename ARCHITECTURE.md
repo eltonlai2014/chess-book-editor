@@ -308,7 +308,9 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 檔案樹渲染 / 檔案 li 工廠 | `renderDir`（`.cbl` 節點＝📚 可展開、懶載入）/ `makeFileLi` |
 | CBL 資料夾懶展開（首次展開打 `cbl-children`，塞盤目；失敗可重試；尚未開棋譜時盤面顯示「棋庫載入中」膠囊） | `toggleCblDir` |
 | **未存檔守門**（換盤/換檔/換目錄前提示存/棄；存檔失敗則留原棋譜） | `maybeSaveBeforeLeaving`（`EDITOR.dirty` 旗標、`markDirty`；`save` 成功清旗標） |
-| 開機自動載入上次檔案（CBL 盤先展開該庫再載盤） | `tryAutoLoadLastFile`:2491 |
+| 展開祖先→定位某檔（`doLoad`：true=載入／false=只高亮不載入） | `revealFileInTree` |
+| 開機自動載入上次檔案（`revealFileInTree(…,true)`；CBL 盤先展開該庫再載盤） | `tryAutoLoadLastFile` |
+| **重新掃描目錄**（`🔄 重掃`：重拉 `/api/xqf/list` 重繪樹→偵測磁碟上新增/刪除的檔；**不動目前棋譜**，重繪後 `revealFileInTree(currentPath,false)` 還原定位） | `rescanTree`（`#rescanBtn`） |
 | **事件綁定 / icon 注入（boot）** | editor.js **2284–2437**（`.onclick`、`innerHTML=iconLabel…`、tab/demo/AI圖 hover、ResizeObserver 都在這） |
 
 ### HTML 結構（frontend/index.html）
@@ -316,7 +318,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 區塊 | 位置 | 備註 |
 |---|---|---|
 | header（logo「棋鑑」/主題/視角/賽事/儲存） | h1 含 inline `.appLogo` SVG | metaBtn/saveBtn 在此 |
-| 檔案樹 pane | settingsBtn / newXqfBtn | |
+| 檔案樹 pane | settingsBtn / rescanBtn / newXqfBtn | 🔄 重掃＝重新掃描目錄 |
 | 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis；走法無前綴符號，窄時 `@container navbar` 隱藏 `.miPly`（「第N步：」前綴）只留著法（如 傌二進三） |
 | 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析+🤖AI走棋(`#rpAutoBody`：控制列 `#autoStartBtn`(start/stop)/`#autoClearBtn`/`#autoState`+歷程 `#autoHistory`) |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
