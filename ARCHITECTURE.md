@@ -311,6 +311,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 展開祖先→定位某檔（`doLoad`：true=載入／false=只高亮不載入） | `revealFileInTree` |
 | 開機自動載入上次檔案（`revealFileInTree(…,true)`；CBL 盤先展開該庫再載盤） | `tryAutoLoadLastFile` |
 | **重新掃描目錄**（`🔄 重掃`：重拉 `/api/xqf/list` 重繪樹→偵測磁碟上新增/刪除的檔；**不動目前棋譜**，重繪後 `revealFileInTree(currentPath,false)` 還原定位） | `rescanTree`（`#rescanBtn`） |
+| **切回分頁自動偵測**（`visibilitychange`/`focus`→探測 list，**僅結構簽章 `EDITOR.treeSig` 改變才重繪**：沒變則不收合展開、不閃 status；節流 `AUTO_RESCAN_MIN_GAP_MS`=4s；`loadFileTree(prefetched)` 復用已抓 tree 免二次 fetch） | `autoRescanIfChanged` |
 | **事件綁定 / icon 注入（boot）** | editor.js **2284–2437**（`.onclick`、`innerHTML=iconLabel…`、tab/demo/AI圖 hover、ResizeObserver 都在這） |
 
 ### HTML 結構（frontend/index.html）

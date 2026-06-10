@@ -39,6 +39,7 @@ const EDITOR = {
   // the 人機輪替 pause: only one side is AI, so we idle until the human moves.
   autoPlay: { running: false, recording: true, waitingHuman: false, es: null, startPath: null, sandboxBaseFen: null, sandboxLine: [], history: [] },
   rootOk: true,       // false when the configured library root is missing (drives LS recovery)
+  treeSig: "",        // JSON sig of the last-rendered /api/xqf/list — focus auto-rescan only repaints on change
   rootPath: "",       // last root reported by the server (valid or not)
   dirty: false,       // 目前棋譜有未存檔的編輯 → 切檔前提示存/棄（見 maybeSaveBeforeLeaving）
 };
@@ -630,9 +631,14 @@ async function insertMoveAt(parentPath, newNode) {
 
 // ---------- file tree ----------
 
-async function loadFileTree() {
-  const r = await fetch("/api/xqf/list");
-  const tree = await r.json();
+async function loadFileTree(prefetched) {
+  // `prefetched` lets the focus auto-rescan reuse the list it already fetched
+  // (for the change-detection compare) instead of hitting the endpoint twice.
+  let tree = prefetched;
+  if (!tree) {
+    const r = await fetch("/api/xqf/list");
+    tree = await r.json();
+  }
   EDITOR.rootPath = tree.root || "";
   if (tree.root) updateRootDisplay(tree.root);
   if (tree.needsRoot) {
@@ -654,6 +660,7 @@ async function loadFileTree() {
   }
   if (tree.error) { EDITOR.rootOk = false; $("#fileTree").textContent = "錯誤：" + tree.error; return; }
   EDITOR.rootOk = true;
+  EDITOR.treeSig = JSON.stringify(tree);   // structure signature for focus auto-rescan
   $("#fileTree").innerHTML = "";
   $("#fileTree").appendChild(renderDir(tree));
   // Tree loaded → user can create a new file under it, and rescan for new ones.
@@ -3373,6 +3380,9 @@ $("#metaModal").addEventListener("click", (e) => {
 });
 $("#newXqfBtn").onclick = openNewModal;
 $("#rescanBtn").onclick = rescanTree;
+// C：切回分頁/視窗重新獲得焦點時自動偵測檔案增刪（節流＋僅變動才重繪）。
+document.addEventListener("visibilitychange", autoRescanIfChanged);
+window.addEventListener("focus", autoRescanIfChanged);
 $("#newCancel").onclick = closeNewModal;
 $("#newOk").onclick = submitNewXqf;
 $("#newModal").addEventListener("click", (e) => {
@@ -3771,6 +3781,31 @@ async function rescanTree() {
   } finally {
     if (btn) btn.disabled = !EDITOR.rootOk;
   }
+}
+
+// Auto-detect files added/removed on disk when the tab regains focus (the
+// natural moment after dropping a file in Explorer and switching back). Probes
+// /api/xqf/list and ONLY repaints when the structure signature changed — so an
+// unchanged tree keeps the user's expand state and doesn't flash status. Does
+// not touch the open game; throttled so rapid focus flips fire one probe.
+let lastAutoRescanAt = 0;
+const AUTO_RESCAN_MIN_GAP_MS = 4000;
+async function autoRescanIfChanged() {
+  if (document.visibilityState !== "visible" || !EDITOR.rootOk) return;
+  const now = Date.now();
+  if (now - lastAutoRescanAt < AUTO_RESCAN_MIN_GAP_MS) return;
+  lastAutoRescanAt = now;
+  let tree;
+  try {
+    const r = await fetch("/api/xqf/list");
+    tree = await r.json();
+  } catch { return; }                            // 網路抖動：靜默略過，下次切回再試
+  if (!tree || tree.needsRoot || tree.error) return;
+  if (JSON.stringify(tree) === EDITOR.treeSig) return;   // 結構沒變→不重繪、不收合、不閃 status
+  const keepRel = EDITOR.currentPath || null;
+  await loadFileTree(tree);                       // 用已抓到的 tree 重繪（更新 treeSig）
+  if (keepRel) await revealFileInTree(keepRel, false);
+  setStatus("已偵測到檔案變更，更新清單", "ok");
 }
 
 // When a configured path is missing/invalid but localStorage remembers a
