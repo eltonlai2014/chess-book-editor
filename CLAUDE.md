@@ -5,6 +5,8 @@ Guidance for Claude Code when working in this repo.
 > **先讀 [ARCHITECTURE.md](ARCHITECTURE.md)** — 系統功能、設計原則速查、以及
 > 「功能 → 程式碼 `file:line`」對照表。改任何功能前先在那裡定位。本檔聚焦
 > 「為什麼」與陷阱；ARCHITECTURE.md 聚焦「在哪裡、做什麼」。
+> **視覺／配色／字型／icon／品牌規範另立 [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)**
+> （單一配色來源：主題 token、Sarasa 等寬、ICON SVG、朱文方印；別在元件寫死顏色）。
 
 ## Project
 

@@ -45,6 +45,29 @@
   --err: #d97070;
   --err-rgb: 217, 112, 112;
 
+  /* === Semantic side colours (紅方/黑方) — SINGLE SOURCE OF TRUTH ===
+     Used by annote pills AND the analysis chart so 紅/黑 read identically
+     everywhere (no more "黑 is blue in a pill but parchment in the chart").
+     red = 硃砂/胭脂 (warm), black = 黛/群青 (ALWAYS a cool slate-blue so it
+     contrasts red). Each theme may retune these; defaults below match ember. */
+  --side-red: #c0392b;
+  --side-red-strong: #e0594f;
+  --side-black: #3f6da0;
+  --side-black-strong: #4f8cd2;
+
+  /* === Analysis-chart palette === derives from the side colours + accent so
+     the AI 分析圖 follows the theme instead of fixed hex. */
+  --eval-line: rgba(238, 232, 220, 0.72);
+  --eval-red: var(--side-red-strong);
+  --eval-black: var(--side-black-strong);
+  --eval-query: var(--accent-strong);
+  --eval-flag: #f4a521;
+
+  /* Monospace token — Sarasa Fixed TC (更紗等寬) makes Latin digits exactly
+     half a CJK width, so 棋譜編號/分數/PV align with 中文 glyphs per-column.
+     Falls back to SF Mono/Consolas until the bundled woff2 loads. */
+  --mono: "Sarasa Fixed TC", "Sarasa Fixed SC", "SF Mono", "Consolas", ui-monospace, monospace;
+
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
@@ -95,61 +118,74 @@ html[data-ui-theme="ember"] {
   --info: #5fa8d6;
 }
 
+/* 青玉霧 — palette anchored to media.io "Patina Frame" (#1d2a24 #2f5b4a
+   #6f8f7c #c7d5cc #f3f6f4); accent toward 松石綠. */
 html[data-ui-theme="jade"] {
-  --bg-0: #101715;
-  --bg-1: #16201d;
-  --bg-2: #1c2925;
-  --bg-3: #24342f;
-  --bg-4: #30453f;
-  --line: #2d433d;
-  --line-strong: #3c5850;
-  --text: #e3eee9;
-  --text-muted: #a2b7af;
-  --text-faint: #6f857c;
-  --accent: #6bb89c;
-  --accent-rgb: 107, 184, 156;
-  --accent-strong: #8ad4b7;
-  --accent-strong-rgb: 138, 212, 183;
+  --bg-0: #111d18;
+  --bg-1: #1a2620;
+  --bg-2: #21322b;
+  --bg-3: #2b4036;
+  --bg-4: #375044;
+  --line: #2c4338;
+  --line-strong: #3d5749;
+  --text: #e9f0eb;
+  --text-muted: #a8bdb2;
+  --text-faint: #6f8577;
+  --accent: #3aa386;
+  --accent-rgb: 58, 163, 134;
+  --accent-strong: #54bf9f;
+  --accent-strong-rgb: 84, 191, 159;
   --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #7fc4d6;
+  --side-black: #3d7e8e;
+  --side-black-strong: #56a3b3;
 }
 
+/* 墨夜藍 — deep-navy chrome with a refined 群青/azure accent (the name says
+   藍, so the accent IS blue — just a more couture cornflower than the old neon
+   periwinkle). Base navies from 黛/群青. side-black is a deeper slate so 黑方
+   stays distinct from the brighter chrome accent. */
 html[data-ui-theme="ink"] {
-  --bg-0: #0f1218;
-  --bg-1: #151b23;
-  --bg-2: #1c2430;
-  --bg-3: #253041;
-  --bg-4: #304058;
-  --line: #2b374a;
-  --line-strong: #3c4d68;
-  --text: #e4eaf2;
-  --text-muted: #a5b0c0;
-  --text-faint: #738196;
-  --accent: #7aa2f7;
-  --accent-rgb: 122, 162, 247;
-  --accent-strong: #9ab8ff;
-  --accent-strong-rgb: 154, 184, 255;
+  --bg-0: #0e131c;
+  --bg-1: #141b27;
+  --bg-2: #1b2433;
+  --bg-3: #243044;
+  --bg-4: #2f3e57;
+  --line: #283449;
+  --line-strong: #394d68;
+  --text: #e6ebf3;
+  --text-muted: #a6b2c4;
+  --text-faint: #71809a;
+  --accent: #5b8ad6;
+  --accent-rgb: 91, 138, 214;
+  --accent-strong: #7aa6ee;
+  --accent-strong-rgb: 122, 166, 238;
   --accent-soft: rgba(var(--accent-rgb), 0.16);
-  --info: #8bd5ca;
+  --info: #6fc0d4;
+  --side-black: #38618f;
+  --side-black-strong: #5a8fcf;
 }
 
+/* 梅影紫 — palette anchored to media.io "Velvet Rope" (#2a0f1c #5a1d3a
+   #8b2f5c #d0b0c0 #f6edf2): a wine/plum accent on aubergine instead of the old
+   neon lavender, for a more couture, less digital feel. */
 html[data-ui-theme="plum"] {
-  --bg-0: #171118;
-  --bg-1: #211826;
-  --bg-2: #2a2031;
-  --bg-3: #362942;
-  --bg-4: #463356;
-  --line: #43304f;
-  --line-strong: #59406a;
-  --text: #eee4f2;
-  --text-muted: #b8a6c0;
-  --text-faint: #83728c;
-  --accent: #c38cff;
-  --accent-rgb: 195, 140, 255;
-  --accent-strong: #d7aefe;
-  --accent-strong-rgb: 215, 174, 254;
+  --bg-0: #1b0c14;
+  --bg-1: #25101b;
+  --bg-2: #301625;
+  --bg-3: #3e1d31;
+  --bg-4: #4e2840;
+  --line: #3d1d30;
+  --line-strong: #56304a;
+  --text: #f1e4ec;
+  --text-muted: #c5a7b7;
+  --text-faint: #8c7080;
+  --accent: #bf5b87;
+  --accent-rgb: 191, 91, 135;
+  --accent-strong: #d6749f;
+  --accent-strong-rgb: 214, 116, 159;
   --accent-soft: rgba(var(--accent-rgb), 0.16);
-  --info: #8ecae6;
+  --info: #8ab0c4;
 }
 
 html[data-ui-theme="copper"] {
@@ -188,6 +224,22 @@ html[data-ui-theme="pineash"] {
   --accent-strong-rgb: 199, 204, 184;
   --accent-soft: rgba(var(--accent-rgb), 0.14);
   --info: #8fb2bf;
+}
+
+/* Sarasa Fixed TC (更紗等寬, SIL OFL) — bundled locally for offline use, like
+   the vendored cchess wheel. Subset to the xiangqi-notation charset keeps the
+   woff2 tiny. If the file is absent the --mono stack falls back to SF Mono. */
+@font-face {
+  font-family: "Sarasa Fixed TC";
+  src: url("fonts/sarasa-fixed-tc-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sarasa Fixed TC";
+  src: url("fonts/sarasa-fixed-tc-semibold.woff2") format("woff2");
+  font-weight: 600 700;
+  font-display: swap;
 }
 
 * {
@@ -809,7 +861,7 @@ h2 {
   padding: 8px 8px 8px 10px;
   border-radius: 8px;
   margin: 0 12px 12px;
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -846,7 +898,7 @@ h2 {
 
 .evalDbRowSide #evalDbPath,
 .evalDbRowSide #enginePath {
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   /* flex:1 makes the path text fill the capsule so the pick button is pushed
      to the right edge. #evalDbPath got this via .evalDbRow #evalDbPath, but
      #enginePath was missing it → its 📁 button floated mid-capsule. */
@@ -992,7 +1044,7 @@ h2 {
 #navBar button {
   color: var(--text);
   padding: 6px 8px;
-  font-family: monospace;
+  font-family: var(--mono);
   font-size: 15px;
   /* Buttons share the navBar width so they track the board column: grow to
      fill (capped at max-width so a wide board doesn't bloat them), shrink to an
@@ -1469,7 +1521,7 @@ h2.panelHead>span {
 .srcPath {
   font-size: 11px;
   color: var(--text-muted);
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1522,7 +1574,7 @@ h2.panelHead>span {
   font-variant-numeric: tabular-nums;
   text-align: right;
   padding-right: 10px;
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   font-size: 13px;
   flex: 0 0 auto;
 }
@@ -1700,16 +1752,16 @@ h2.panelHead>span {
    shouts over the other on the warm dark UI; 均勢 etc. keep the neutral chip. */
 .annoteChip.tone-red {
   color: #fff;
-  --chip-top: #e06556;
-  --chip-bot: #c4402f;
-  --chip-border: #a5302466;
+  --chip-top: var(--side-red-strong);
+  --chip-bot: var(--side-red);
+  --chip-border: rgba(0, 0, 0, 0.28);
 }
 
 .annoteChip.tone-black {
   color: #fff;
-  --chip-top: #4f8cd2;
-  --chip-bot: #2f69ad;
-  --chip-border: #2563a866;
+  --chip-top: var(--side-black-strong);
+  --chip-bot: var(--side-black);
+  --chip-border: rgba(0, 0, 0, 0.28);
 }
 
 #anBodyAnnote #annoteBox {
@@ -1814,7 +1866,7 @@ h2.panelHead>span {
 }
 
 .aiChart .aiLine {
-  stroke: rgba(238, 232, 220, 0.72);
+  stroke: var(--eval-line);
   stroke-width: 1.6;
   stroke-linejoin: round;
   stroke-linecap: round;
@@ -1828,24 +1880,24 @@ h2.panelHead>span {
 }
 
 .aiChart .aiDotRed {
-  fill: #e2594f;
+  fill: var(--eval-red);
   stroke: rgba(20, 16, 12, 0.45);
   stroke-width: 0.6;
 }
 
 .aiChart .aiDotBlk {
-  fill: #eae4d8;
+  fill: var(--eval-black);
   stroke: rgba(20, 16, 12, 0.45);
   stroke-width: 0.6;
 }
 
 .aiChart .aiRing {
-  stroke: #f3a73a;
+  stroke: var(--eval-query);
   stroke-width: 2.2;
 }
 
 .aiChart .aiFlag {
-  fill: #f4a521;
+  fill: var(--eval-flag);
   stroke: rgba(20, 16, 10, 0.45);
   stroke-width: 0.8;
 }
@@ -1982,7 +2034,7 @@ h2.panelHead>span {
   margin-top: 8px;
   padding: 7px 8px 7px 11px;
   font-size: 11px;
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   color: var(--accent-strong);
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.10));
   border: 1px solid rgba(var(--accent-rgb), 0.30);
@@ -2097,7 +2149,7 @@ h2.panelHead>span {
   font-weight: 600;
   min-width: 22px;
   flex: 0 0 auto;
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   font-size: 13px;
 }
 
@@ -2125,7 +2177,7 @@ h2.panelHead>span {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.5;
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   text-align: center;
 }
 
@@ -2275,7 +2327,7 @@ h2.panelHead>span {
   color: var(--text-faint);
   font-weight: 600;
   font-size: 13px;
-  font-family: "SF Mono", "Consolas", monospace;
+  font-family: var(--mono);
   text-align: center;
 }
 

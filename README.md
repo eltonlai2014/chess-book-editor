@@ -1,4 +1,4 @@
-# chess-book-editor（棋鑑）
+# chess-book-editor（梅友弈鑑）
 
 瀏覽器內運作的 XQF（中國象棋對局檔）編輯器：開啟 `.XQF` → 看盤／走法／變例／註解
 → 編輯 → 存回 `.XQF`，並可叫本機 Pikafish 引擎做即時深算、查 chessdb.cn 雲庫。
@@ -128,12 +128,12 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 
 ## 選擇棋譜庫
 
-棋譜庫根目錄**從 UI 設定**，不寫死。在檔案窗格標題列點路徑旁的 **📂** 按鈕，
+棋譜庫根目錄**從 UI 設定**，不寫死。在檔案窗格標題列點路徑旁的**資料夾**按鈕，
 會跳出原生資料夾對話框；選含 `.XQF` 的目錄，檔案樹立即刷新。
 
 選定的路徑存到 repo 根的 `preferences.json`（連同 splitter 尺寸、棋盤主題、上次開的檔）。
 若尚未設根目錄，後端 fallback 到 `D:\Elton\TestArea\chess-book\`；新機器上該路徑不存在時，
-檔案窗格會顯示 **📂 選擇棋譜根目錄** 提示（不會報錯），讓你當場挑一個。要改起始預設，
+檔案窗格會顯示 **選擇棋譜根目錄** 提示（不會報錯），讓你當場挑一個。要改起始預設，
 改 [backend/app.py](backend/app.py) 的 `DEFAULT_XQF_ROOT`。
 
 ## 格式轉換

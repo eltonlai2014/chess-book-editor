@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="梅友弈鑑">
+  <!-- 朱文篆刻方印: cinnabar seal stone (red strokes on the natural ground).
+       Character 梅 (lead glyph of 梅友弈鑑) for legibility at favicon size. -->
+  <defs>
+    <linearGradient id="seal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c64636"/>
+      <stop offset="1" stop-color="#a8281c"/>
+    </linearGradient>
+  </defs>
+  <!-- seal border: slightly inset rounded square, weighty like a carved frame -->
+  <rect x="8" y="8" width="84" height="84" rx="12" ry="12"
+        fill="none" stroke="url(#seal)" stroke-width="7"/>
+  <!-- the character, cinnabar, brush/kai fallback chain -->
+  <text x="50" y="51" text-anchor="middle" dominant-baseline="central"
+        font-family="'LXGW WenKai TC','DFKai-SB','KaiTi','Microsoft JhengHei',serif"
+        font-weight="700" font-size="62" fill="url(#seal)">梅</text>
+</svg>

@@ -74,6 +74,28 @@ function editorColors() {
   return EDITOR_THEME_COLORS[t] || EDITOR_THEME_COLORS.traditional;
 }
 
+// Read a CSS custom property off :root (resolves the active UI-theme value).
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+// #rrggbb (or already-rgb/var-resolved hex) → "rgba(r,g,b,a)". Used to tint the
+// analysis-chart advantage area from the theme's --side-* tokens at runtime.
+function hexToRgba(hex, a) {
+  const h = hex.replace("#", "");
+  const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+// Set an element's content to an SVG icon (from the ICON registry) followed by
+// plain text. The text is appended as a text node, so it's never HTML-parsed —
+// safe for file paths / engine names that might contain < or &. ICON keys are
+// defined later in the file; this is only ever called at runtime, never at load.
+function setIconText(el, iconKey, text) {
+  if (!el) return;
+  el.innerHTML = (typeof ICON !== "undefined" && ICON[iconKey]) || "";
+  el.append(" " + text);
+}
+
 // Server-persisted preferences (splitter sizes, board theme, ...).
 // Loaded once on boot; mutations posted back to /api/preferences immediately.
 const PREFS = {};
@@ -660,7 +682,7 @@ async function loadFileTree(prefetched) {
     msg.className = "tree-hint";
     msg.textContent = tree.error || "尚未設定棋譜根目錄。";
     const btn = document.createElement("button");
-    btn.textContent = "📂 選擇棋譜根目錄";
+    btn.innerHTML = iconLabel("folder", "選擇棋譜根目錄");
     btn.onclick = pickRoot;
     box.appendChild(msg);
     box.appendChild(btn);
@@ -681,7 +703,7 @@ async function loadFileTree(prefetched) {
 function updateRootDisplay(root) {
   const el = $("#rootPathDisplay");
   if (!el) return;
-  el.textContent = "📂 " + root;
+  setIconText(el, "folder", root);
   el.title = root;
   lsSet(LS_KEYS.root, root);   // remember last-good root for boot recovery
 }
@@ -761,6 +783,9 @@ function renderDir(node) {
       li.dataset.rel = child.rel;    // 供開機自動重開時定位此庫
       const span = document.createElement("span");
       span.className = "dirname";
+      // File tree keeps the COLOURED emoji (📚/📁): at-a-glance colour coding
+      // reads better here than monochrome SVG (master preference). Toolbar/tabs
+      // stay on the SVG ICON set.
       span.textContent = "📚 " + child.name;
       li.appendChild(span);
       const sub = document.createElement("ul");
@@ -771,7 +796,7 @@ function renderDir(node) {
       li.className = "dir";
       const span = document.createElement("span");
       span.className = "dirname";
-      span.textContent = "📁 " + child.name;
+      span.textContent = "📁 " + child.name;   // coloured emoji — see .cbl branch above
       li.appendChild(span);
       const sub = renderDir(child);
       sub.style.display = "none";
@@ -921,7 +946,7 @@ function renderEvalDbRow() {
   const p = info.path || "";
   if (!info.exists) {
     row.classList.add("warn");
-    pathEl.textContent = "📊 評估資料庫未連線（點 📁 選擇）";
+    setIconText(pathEl, "database", "評估資料庫未連線（點此選擇）");
     pathEl.title = p || "尚未設定資料庫位置";
     return;
   }
@@ -933,7 +958,7 @@ function renderEvalDbRow() {
   // Visible line — filename, total positions, cdb count. Compact.
   const fname = p.split(/[\\/]/).pop() || p;
   const cdbCell = cdb ? `  ·  雲庫 ${cdb.toLocaleString()}` : "";
-  pathEl.textContent = `📊 ${fname}  ·  ${totalEvals.toLocaleString()} 局面${cdbCell}`;
+  setIconText(pathEl, "database", `${fname}  ·  ${totalEvals.toLocaleString()} 局面${cdbCell}`);
   // Tooltip — full path + per-depth breakdown so power users still see it.
   const depthDetail = Object.keys(byDepth)
     .sort((a, b) => Number(a) - Number(b))
@@ -1003,20 +1028,20 @@ function renderEngineRow() {
   const p = info.path || "";
   if (!info.exists) {
     row.classList.add("warn");
-    pathEl.textContent = "🐟 皮卡魚引擎未設定（點 📁 選擇）";
+    setIconText(pathEl, "fish", "皮卡魚引擎未設定（點此選擇）");
     pathEl.title = p || "尚未設定引擎位置";
     return;
   }
   const fname = p.split(/[\\/]/).pop() || p;
   if (!info.ok) {
     row.classList.add("warn");
-    pathEl.textContent = `🐟 ${fname}（無法握手）`;
+    setIconText(pathEl, "fish", `${fname}（無法握手）`);
     pathEl.title = `${p}\n${info.error || "未回應 uciok"}`;
     return;
   }
   row.classList.remove("warn");
   lsSet(LS_KEYS.engine, p);   // remember last-good engine path for boot recovery
-  pathEl.textContent = `🐟 ${info.name || fname}`;
+  setIconText(pathEl, "fish", info.name || fname);
   pathEl.title = `${p}\n${info.name || ""}`.trim();
 }
 
@@ -2479,6 +2504,11 @@ const ICON = {
   cloud: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 9.5 4 4 0 0 0 7 17.5"/></svg>',
   bot: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
   film: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>',
+  // 🐟 引擎 (Pikafish), 📚 棋庫 (CBL library folder), 📋 賽事資訊 (trophy).
+  fish: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/><path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4"/><path d="m16.01 17.93-.23 1.4A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98"/></svg>',
+  library: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>',
+  trophy: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>',
+  database: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>',
 };
 function iconLabel(icon, label) {
   return (ICON[icon] || "") + `<span>${label}</span>`;
@@ -2641,7 +2671,7 @@ function stopAnalysis(stateText) {
 function startAnalysis(fen, mode) {
   switchRpTab("engine");
   if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) {
-    $("#engineState").textContent = "引擎未設定（請在檔案窗格選 🐟）";
+    $("#engineState").textContent = "引擎未設定（請在檔案窗格設定引擎）";
     return;
   }
   if (!fen) { $("#engineState").textContent = "尚未載入棋譜"; return; }
@@ -2783,7 +2813,7 @@ function autoPlayActiveSides() { return autoAiRed() || autoAiBlack(); }
 
 function startAutoPlay() {
   if (!EDITOR.data) { setStatus("尚未載入棋譜", "err"); return; }
-  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) { setStatus("引擎未設定（請在檔案窗格選 🐟）", "err"); return; }
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) { setStatus("引擎未設定（請在檔案窗格設定引擎）", "err"); return; }
   if (!autoPlayActiveSides()) { setStatus("請先在 ⚙ 設定勾選 AI 紅方或 AI 黑方", "err"); openSettingsModal(); return; }
   const ap = EDITOR.autoPlay;
   ap.running = true;
@@ -2994,7 +3024,7 @@ function aiLinePositions() {
 async function analyzeCurrentLine() {
   if (!EDITOR.data) { setStatus("尚未載入棋譜", "err"); return; }
   if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) {
-    $("#aiState").textContent = "引擎未設定（請在設定選 🐟）";
+    $("#aiState").textContent = "引擎未設定（請在設定中選擇引擎）";
     return;
   }
   const ai = EDITOR.aiAnalysis;
@@ -3220,9 +3250,14 @@ function drawAiChart(svg, points, cursorIdx) {
     grad.setAttribute("gradientUnits", "userSpaceOnUse");
     grad.setAttribute("x1", 0); grad.setAttribute("y1", padT);
     grad.setAttribute("x2", 0); grad.setAttribute("y2", H - padB);
+    // Area tint follows the theme's semantic side colours (same source as the
+    // pills + dots), so red-lead/black-lead zones match everywhere.
+    // Read the LEAF hex tokens (getComputedStyle doesn't resolve nested var()).
+    const aRed = cssVar("--side-red-strong") || "#e2594f";
+    const aBlk = cssVar("--side-black-strong") || "#5b9be0";
     for (const [off, col] of [
-      [0, "rgba(226,89,79,0.42)"], [f, "rgba(226,89,79,0.05)"],
-      [f, "rgba(91,155,224,0.05)"], [1, "rgba(91,155,224,0.42)"],
+      [0, hexToRgba(aRed, 0.42)], [f, hexToRgba(aRed, 0.05)],
+      [f, hexToRgba(aBlk, 0.05)], [1, hexToRgba(aBlk, 0.42)],
     ]) {
       const s = document.createElementNS(SVG_NS, "stop");
       s.setAttribute("offset", off); s.setAttribute("stop-color", col);
@@ -3604,8 +3639,15 @@ $("#engineClearBtn").innerHTML = iconLabel("trash", "清除");
 $("#engineExportBtn").innerHTML = iconLabel("clipboard", "導出");
 $("#rpTabVars").innerHTML = iconLabel("branch", "走法");
 $("#rpTabCdb").innerHTML = iconLabel("cloud", "雲庫");
-$("#rpTabEngine").innerHTML = iconLabel("cpu", "引擎分析");
+if ($("#rpTabCdbLine")) $("#rpTabCdbLine").innerHTML = iconLabel("cloud", "雲庫演繹");
+$("#rpTabEngine").innerHTML = iconLabel("fish", "引擎分析");
 $("#rpTabAuto").innerHTML = iconLabel("bot", "AI走棋");
+if ($("#autoClearBtn")) $("#autoClearBtn").innerHTML = iconLabel("trash", "清除");
+// 雲庫 / 雲庫演繹 control bars — unify the stray Unicode glyphs (⟳▶▷⎘) on SVG.
+if ($("#cdbRefreshBtn")) $("#cdbRefreshBtn").innerHTML = iconLabel("refresh", "重查");
+if ($("#cdbLineRunBtn")) $("#cdbLineRunBtn").innerHTML = iconLabel("play", "演繹");
+if ($("#cdbLineDemoBtn")) $("#cdbLineDemoBtn").innerHTML = iconLabel("demo", "演示");
+if ($("#cdbLineAddBtn")) $("#cdbLineAddBtn").innerHTML = iconLabel("plus", "加入");
 if ($("#exportGifBtn")) $("#exportGifBtn").innerHTML = ICON.film;   // 🎬 emoji → Lucide film
 // 雲庫 tab: 重查 forces a fresh chessdb.cn query (skips both caches) of the
 // branch point (前一步), matching what the tab shows.
@@ -3613,7 +3655,7 @@ $("#cdbRefreshBtn").onclick = () => { const f = cdbFen(); if (f) fetchCdbLive(f,
 $("#anTabAnnote").innerHTML = iconLabel("note", "注解");
 $("#anTabAi").innerHTML = iconLabel("chart", "AI分析");
 // Unify the rest of the system's buttons on the same icon set.
-$("#metaBtn").innerHTML = iconLabel("info", "賽事資訊");
+$("#metaBtn").innerHTML = iconLabel("trophy", "賽事資訊");
 $("#saveBtn").innerHTML = iconLabel("save", "儲存");
 $("#newXqfBtn").innerHTML = iconLabel("plus", "新增");
 $("#rescanBtn").innerHTML = iconLabel("refresh", "重掃");

@@ -3,20 +3,23 @@
 
 <head>
   <meta charset="utf-8">
-  <title>棋鑑 — 象棋譜分析</title>
-  <link rel="stylesheet" href="/assets/editor.css?v=11">
+  <title>梅友弈鑑 — 象棋譜分析</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/assets/editor.css?v=13">
 </head>
 
 <body>
   <header>
     <h1>
-      <svg class="appLogo" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="2" />
-        <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="1" opacity="0.45" />
-        <polyline points="9 20 13.5 15 17.5 18 23 10.5" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="23" cy="10.5" r="1.7" fill="currentColor" />
-      </svg>棋鑑
+      <!-- 朱文篆刻方印 brand seal (matches favicon.svg); cinnabar, fixed by
+           intent — a seal reads red regardless of the active UI theme. -->
+      <svg class="appLogo appSeal" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="27" height="27" rx="4" ry="4"
+          fill="none" stroke="#c0392b" stroke-width="2.3" />
+        <text x="16" y="17.2" text-anchor="middle" dominant-baseline="central"
+          font-family="'LXGW WenKai TC','DFKai-SB','KaiTi','Microsoft JhengHei',serif"
+          font-weight="700" font-size="20" fill="#c0392b">梅</text>
+      </svg>梅友弈鑑
     </h1>
     <div class="actions">
       <label class="boardThemePicker">
@@ -35,7 +38,7 @@
           <span class="viewToggleText">黑方</span>
         </span>
       </label>
-      <button id="metaBtn" disabled title="編輯賽事資訊">📋 賽事資訊</button>
+      <button id="metaBtn" disabled title="編輯賽事資訊">賽事資訊</button>
       <button id="saveBtn" disabled>儲存</button>
       <span id="status"></span>
     </div>
@@ -44,8 +47,8 @@
     <aside id="filePane">
       <h2 class="panelHead">
         <span>檔案</span>
-        <button id="settingsBtn" class="iconBtn" title="設定（根目錄／評估庫／引擎）">⚙</button>
-        <button id="rescanBtn" class="iconBtn" title="重新掃描目錄（偵測新增／刪除的棋譜）" disabled>🔄 重掃</button>
+        <button id="settingsBtn" class="iconBtn" title="設定（根目錄／評估庫／引擎）"></button>
+        <button id="rescanBtn" class="iconBtn" title="重新掃描目錄（偵測新增／刪除的棋譜）" disabled>重掃</button>
         <button id="newXqfBtn" class="iconBtn" title="新增棋譜" disabled>➕ 新增</button>
       </h2>
       <div id="fileTree">載入中…</div>
@@ -69,8 +72,8 @@
       <div id="rpMoves" class="rpSection rpMoves">
         <h2 class="panelHead">
           <span>棋譜</span>
-          <button id="exportGifBtn" class="iconBtn" title="把目前主線匯出成動畫 GIF">🎬</button>
-          <button id="navDelete" class="danger iconBtn" title="刪除目前走法及其後續 (Delete)">🗑</button>
+          <button id="exportGifBtn" class="iconBtn" title="把目前主線匯出成動畫 GIF"></button>
+          <button id="navDelete" class="danger iconBtn" title="刪除目前走法及其後續 (Delete)"></button>
         </h2>
         <div id="moveList"></div>
       </div>
@@ -103,10 +106,10 @@
         <div id="rpVars" class="rpSection rpVars">
           <div class="rpTabs" role="tablist">
             <button id="rpTabVars" class="rpTab active" data-tab="vars" role="tab">本步的所有走法</button>
-            <button id="rpTabCdb" class="rpTab" data-tab="cdb" role="tab">☁ 雲庫</button>
-            <button id="rpTabCdbLine" class="rpTab" data-tab="cdbline" role="tab">☁ 雲庫演繹</button>
-            <button id="rpTabEngine" class="rpTab" data-tab="engine" role="tab">🐟 引擎分析</button>
-            <button id="rpTabAuto" class="rpTab" data-tab="auto" role="tab">🤖 AI走棋</button>
+            <button id="rpTabCdb" class="rpTab" data-tab="cdb" role="tab">雲庫</button>
+            <button id="rpTabCdbLine" class="rpTab" data-tab="cdbline" role="tab">雲庫演繹</button>
+            <button id="rpTabEngine" class="rpTab" data-tab="engine" role="tab">引擎分析</button>
+            <button id="rpTabAuto" class="rpTab" data-tab="auto" role="tab">AI走棋</button>
           </div>
           <div id="rpVarsBody" class="rpTabBody" data-tab="vars">
             <div id="varPicker"></div>
@@ -114,34 +117,33 @@
           <div id="rpCdbBody" class="rpTabBody" data-tab="cdb" hidden>
             <div class="cdbBar">
               <span id="cdbState" class="engineState">—</span>
-              <button id="cdbRefreshBtn" class="iconBtn" title="重新向 chessdb.cn 查詢本局面（略過快取）">⟳ 重查</button>
+              <button id="cdbRefreshBtn" class="iconBtn" title="重新向 chessdb.cn 查詢本局面（略過快取）">重查</button>
             </div>
             <div id="cdbList" class="cdbList"></div>
           </div>
           <div id="rpCdbLineBody" class="rpTabBody" data-tab="cdbline" hidden>
             <div class="engineBar">
-              <button id="cdbLineRunBtn" class="iconBtn engineToggle" title="從本局面起，雙方都走雲庫最佳著，逐步推演一條主線（步數見 ⚙ 設定）">▶
-                演繹</button>
-              <button id="cdbLineDemoBtn" class="iconBtn" title="在彈出棋盤上演示這條雲庫主線" disabled>▷ 演示</button>
-              <button id="cdbLineAddBtn" class="iconBtn" title="把這條雲庫主線加入棋譜分支" disabled>⎘ 加入</button>
+              <button id="cdbLineRunBtn" class="iconBtn engineToggle" title="從本局面起，雙方都走雲庫最佳著，逐步推演一條主線（步數見 ⚙ 設定）">演繹</button>
+              <button id="cdbLineDemoBtn" class="iconBtn" title="在彈出棋盤上演示這條雲庫主線" disabled>演示</button>
+              <button id="cdbLineAddBtn" class="iconBtn" title="把這條雲庫主線加入棋譜分支" disabled>加入</button>
               <span id="cdbLineState" class="engineState">尚未演繹</span>
             </div>
             <div id="cdbLineList" class="engineHistory"></div>
           </div>
           <div id="rpEngineBody" class="rpTabBody" data-tab="engine" hidden>
             <div class="engineBar">
-              <button id="engineToggleBtn" class="iconBtn engineToggle" title="分析前一步的局面（評斷本步走法好壞）／停止">▶ 分析前一步</button>
-              <button id="engineCurBtn" class="iconBtn engineToggle" title="分析本步的局面（走完本步之後）">▶ 分析本步</button>
-              <button id="engineClearBtn" class="iconBtn" title="清除分析歷程">🗑 清除</button>
-              <button id="engineExportBtn" class="iconBtn" title="複製分析歷程到剪貼簿">⧉ 導出</button>
+              <button id="engineToggleBtn" class="iconBtn engineToggle" title="分析前一步的局面（評斷本步走法好壞）／停止">分析前一步</button>
+              <button id="engineCurBtn" class="iconBtn engineToggle" title="分析本步的局面（走完本步之後）">分析本步</button>
+              <button id="engineClearBtn" class="iconBtn" title="清除分析歷程">清除</button>
+              <button id="engineExportBtn" class="iconBtn" title="複製分析歷程到剪貼簿">導出</button>
               <span id="engineState" class="engineState">尚未開始</span>
             </div>
             <div id="engineHistory" class="engineHistory"></div>
           </div>
           <div id="rpAutoBody" class="rpTabBody" data-tab="auto" hidden>
             <div class="engineBar">
-              <button id="autoStartBtn" class="iconBtn engineToggle" title="開始/停止 AI 自動走棋（步時/紅黑由 ⚙ 設定）">▶ 開始</button>
-              <button id="autoClearBtn" class="iconBtn" title="清除自動走棋歷程">🗑 清除</button>
+              <button id="autoStartBtn" class="iconBtn engineToggle" title="開始/停止 AI 自動走棋（步時/紅黑由 ⚙ 設定）">開始</button>
+              <button id="autoClearBtn" class="iconBtn" title="清除自動走棋歷程">清除</button>
               <span id="autoState" class="engineState">尚未開始</span>
             </div>
             <div id="autoHistory" class="engineHistory"></div>
@@ -242,22 +244,22 @@
           <div class="settingRow">
             <label>棋譜根目錄</label>
             <div class="rootPath">
-              <span id="rootPathDisplay" title="棋譜來源根目錄">📂 載入中…</span>
-              <button id="rootPickBtn" title="選擇目錄…">📁</button>
+              <span id="rootPathDisplay" title="棋譜來源根目錄">載入中…</span>
+              <button id="rootPickBtn" title="選擇目錄…"></button>
             </div>
           </div>
           <div class="settingRow">
             <label>評估資料庫（唯讀）</label>
             <div class="evalDbRow evalDbRowSide">
-              <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">📊 載入中…</span>
-              <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…">📁</button>
+              <span id="evalDbPath" title="引擎評估資料庫位置（唯讀）">載入中…</span>
+              <button id="evalDbPickBtn" class="iconBtn" title="選擇 SQLite 評估資料庫…"></button>
             </div>
           </div>
           <div class="settingRow">
             <label>皮卡魚引擎（即時分析）</label>
             <div class="evalDbRow evalDbRowSide engineRowSide">
-              <span id="enginePath" title="皮卡魚引擎執行檔位置（即時分析用）">🐟 載入中…</span>
-              <button id="enginePickBtn" class="iconBtn" title="選擇皮卡魚引擎執行檔…">📁</button>
+              <span id="enginePath" title="皮卡魚引擎執行檔位置（即時分析用）">載入中…</span>
+              <button id="enginePickBtn" class="iconBtn" title="選擇皮卡魚引擎執行檔…"></button>
             </div>
           </div>
         </section>

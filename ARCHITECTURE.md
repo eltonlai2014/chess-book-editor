@@ -4,12 +4,15 @@
 擴充／修改前先讀這裡定位，再跳到對應 `file:line`。行號會漂移 —— 以函式名為準，行號只是起點。
 
 設計原則／陷阱的「為什麼」散在 [CLAUDE.md](CLAUDE.md)；本檔聚焦「在哪裡、做什麼」並彙整原則速查。
+**視覺／配色／字型／icon 規範另立** [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)（避免本檔過大）——
+改主題 token、棋盤風格、等寬字型、icon、品牌前先讀那裡。
 
 ---
 
 ## 1. 系統總覽
 
-產品名 **「棋鑑」**（h1 logo＋title）。純本機工具（非公開部署）。三層：
+產品名 **「梅友弈鑑」**（h1 朱文方印 logo＋title；扣《梅花譜》＋「鑑」＝鑑賞）。
+純本機工具（非公開部署）。三層：
 
 ```
 瀏覽器 (vanilla JS, 無框架)
@@ -319,7 +322,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 
 | 區塊 | 位置 | 備註 |
 |---|---|---|
-| header（logo「棋鑑」/主題/視角/賽事/儲存） | h1 含 inline `.appLogo` SVG | metaBtn/saveBtn 在此 |
+| header（logo「梅友弈鑑」朱文方印/主題/視角/賽事/儲存） | h1 含 inline `.appLogo.appSeal` SVG（硃砂「梅」印，固定色不隨主題；同款 favicon.svg） | metaBtn/saveBtn 在此 |
 | 檔案樹 pane | settingsBtn / rescanBtn / newXqfBtn | 🔄 重掃＝重新掃描目錄 |
 | 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis；走法無前綴符號，窄時 `@container navbar` 隱藏 `.miPly`（「第N步：」前綴）只留著法（如 傌二進三） |
 | 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析+🤖AI走棋(`#rpAutoBody`：控制列 `#autoStartBtn`(start/stop)/`#autoClearBtn`/`#autoState`+歷程 `#autoHistory`) |
