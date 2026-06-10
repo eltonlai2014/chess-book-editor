@@ -220,6 +220,14 @@ function nodeAt(path) {
   return node;
 }
 
+// Leaf count under a subtree = how many distinct complete lines (變例) it holds.
+// A node with no children is itself one line (1).
+function countLeaves(node) {
+  const ch = node.children || [];
+  if (ch.length === 0) return 1;
+  return ch.reduce((s, c) => s + countLeaves(c), 0);
+}
+
 function siblingsAt(path) {
   if (!EDITOR.data) return [];
   if (path.length <= 1) return EDITOR.data.roots || [];
@@ -2018,6 +2026,15 @@ function renderVarPicker() {
     const t = document.createElement("span");
     t.textContent = opt.notation;
     row.appendChild(t);
+    // 變例數＝此分支底下走到底的不同變化線數；只在 >1 時標，避免一片 (1) 噪音。
+    const leaves = countLeaves(opt);
+    if (leaves > 1) {
+      const c = document.createElement("span");
+      c.className = "varCount";
+      c.textContent = leaves;
+      c.title = `此分支底下有 ${leaves} 條變例`;
+      row.appendChild(c);
+    }
     // Right-aligned controls: ▲▼ reorder (any slot; disabled at the ends) plus
     // a ← marker on the active row. Reordering is move/splice, so a row can be
     // walked to any position; children[0] is the main line.
