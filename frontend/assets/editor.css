@@ -131,10 +131,11 @@ html[data-ui-theme="jade"] {
   --text: #e9f0eb;
   --text-muted: #a8bdb2;
   --text-faint: #6f8577;
-  --accent: #3aa386;
-  --accent-rgb: 58, 163, 134;
-  --accent-strong: #54bf9f;
-  --accent-strong-rgb: 84, 191, 159;
+  /* accent slightly desaturated (Codex: lower 飽和 → more premium) */
+  --accent: #4a9685;
+  --accent-rgb: 74, 150, 133;
+  --accent-strong: #64b29c;
+  --accent-strong-rgb: 100, 178, 156;
   --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #7fc4d6;
   --side-black: #3d7e8e;
@@ -166,45 +167,48 @@ html[data-ui-theme="ink"] {
   --side-black-strong: #5a8fcf;
 }
 
-/* 梅影紫 — palette anchored to media.io "Velvet Rope" (#2a0f1c #5a1d3a
-   #8b2f5c #d0b0c0 #f6edf2): a wine/plum accent on aubergine instead of the old
-   neon lavender, for a more couture, less digital feel. */
+/* 梅影紫 — DESATURATED to a dusty mauve on grey-aubergine (Codex: vivid purple
+   pulls the UI toward 遊戲/直播 UI). Muted accent reads as a productivity tool,
+   not a stream overlay; base anchored to media.io "Velvet Rope" but greyer. */
 html[data-ui-theme="plum"] {
-  --bg-0: #1b0c14;
-  --bg-1: #25101b;
-  --bg-2: #301625;
-  --bg-3: #3e1d31;
-  --bg-4: #4e2840;
-  --line: #3d1d30;
-  --line-strong: #56304a;
-  --text: #f1e4ec;
-  --text-muted: #c5a7b7;
-  --text-faint: #8c7080;
-  --accent: #bf5b87;
-  --accent-rgb: 191, 91, 135;
-  --accent-strong: #d6749f;
-  --accent-strong-rgb: 214, 116, 159;
+  --bg-0: #160f15;
+  --bg-1: #1e1620;
+  --bg-2: #271e2a;
+  --bg-3: #322839;
+  --bg-4: #403447;
+  --line: #342a3a;
+  --line-strong: #4a3e52;
+  --text: #ece2ea;
+  --text-muted: #bcabb9;
+  --text-faint: #867a86;
+  --accent: #a86d92;
+  --accent-rgb: 168, 109, 146;
+  --accent-strong: #c089ab;
+  --accent-strong-rgb: 192, 137, 171;
   --accent-soft: rgba(var(--accent-rgb), 0.16);
   --info: #8ab0c4;
 }
 
+/* 赤銅棕 — surfaces NEUTRALISED (less orange) so the warm terracotta accent
+   layers against a calmer ground instead of everything reading 發黃發悶
+   (Codex note). Accent stays terracotta, strong brightened for pop. */
 html[data-ui-theme="copper"] {
-  --bg-0: #18120f;
-  --bg-1: #241a16;
-  --bg-2: #2f221d;
-  --bg-3: #3b2c25;
-  --bg-4: #4a372e;
-  --line: #4a342a;
-  --line-strong: #64473a;
-  --text: #f0e2d6;
-  --text-muted: #b9a397;
-  --text-faint: #8a7468;
-  --accent: #c47a4d;
-  --accent-rgb: 196, 122, 77;
-  --accent-strong: #dd9362;
-  --accent-strong-rgb: 221, 147, 98;
+  --bg-0: #141210;
+  --bg-1: #1c1814;
+  --bg-2: #25201b;
+  --bg-3: #2f2922;
+  --bg-4: #3c342b;
+  --line: #37302a;
+  --line-strong: #4b4037;
+  --text: #efe3d7;
+  --text-muted: #b4a294;
+  --text-faint: #847163;
+  --accent: #c97f4f;
+  --accent-rgb: 201, 127, 79;
+  --accent-strong: #e49a64;
+  --accent-strong-rgb: 228, 154, 100;
   --accent-soft: rgba(var(--accent-rgb), 0.16);
-  --info: #9fc0d1;
+  --info: #8fb6c4;
 }
 
 html[data-ui-theme="pineash"] {
@@ -224,6 +228,29 @@ html[data-ui-theme="pineash"] {
   --accent-strong-rgb: 199, 204, 184;
   --accent-soft: rgba(var(--accent-rgb), 0.14);
   --info: #8fb2bf;
+}
+
+/* 摩莎青 — Moxa brand teal on a cool teal-grey dark ground (evokes the MXview
+   ONE look in this dark-theme system: industrial, clean, signature 青綠 accent).
+   Surfaces lean teal-neutral; accent is the Moxa teal. */
+html[data-ui-theme="moxa"] {
+  --bg-0: #0b1315;
+  --bg-1: #0f1a1b;
+  --bg-2: #152325;
+  --bg-3: #1d2e30;
+  --bg-4: #26393b;
+  --line: #213234;
+  --line-strong: #2f4749;
+  --text: #e6efee;
+  --text-muted: #a4b8b7;
+  --text-faint: #6f8585;
+  /* accent slightly desaturated for a more premium, less neon teal (Codex) */
+  --accent: #239892;
+  --accent-rgb: 35, 152, 146;
+  --accent-strong: #3cb6ae;
+  --accent-strong-rgb: 60, 182, 174;
+  --accent-soft: rgba(var(--accent-rgb), 0.15);
+  --info: #5fb2c6;
 }
 
 /* Sarasa Fixed TC (更紗等寬, SIL OFL) — bundled locally for offline use, like
@@ -559,6 +586,10 @@ header h1 {
   color: var(--err);
 }
 
+#status.warn {
+  color: var(--accent-strong);
+}
+
 #status:not(:empty)::before {
   content: "●";
   margin-right: 6px;
@@ -807,6 +838,14 @@ h2 {
   font-size: 12px;
   color: var(--text-muted);
   padding-left: 16px;
+}
+
+/* Checkbox rows (AI 紅方/黑方) read on ONE line — label + box inline — instead
+   of the column layout the number-input rows use. */
+.settingRow:has(> input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 /* margin-left aligns the input capsules' left edge with the indented titles +

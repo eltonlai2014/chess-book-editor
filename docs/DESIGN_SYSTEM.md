@@ -10,8 +10,10 @@
 
 UI **介面主題**與**棋盤風格**是兩個獨立下拉，可自由配對（主人慣用：松煙灰＋傳統手繪）。
 
-- **介面主題**（6 種）定義在 [frontend/assets/editor.css](../frontend/assets/editor.css)
-  `:root` ＋ 每個 `html[data-ui-theme="…"]` 區塊，純 CSS 變數切換。
+- **介面主題**（清單見 [editor.js](../frontend/assets/editor.js) `UI_THEMES`）定義在
+  [frontend/assets/editor.css](../frontend/assets/editor.css) `:root` ＋ 每個
+  `html[data-ui-theme="…"]` 區塊，純 CSS 變數切換。摩莎青(moxa)＝Moxa 品牌青綠
+  accent 的深色主題（深青灰面）。
   - 配色**取自真實參考色票**（非自配）：媒體博物館級 palette（media.io）＋ 中國傳統色
     （zhongguose.com）。對映：松煙灰←Gallery Stone、琥珀夜←Bronze Artifact、
     赤銅棕←Terracotta Exhibit、梅影紫←Velvet Rope、青玉霧←Patina Frame、

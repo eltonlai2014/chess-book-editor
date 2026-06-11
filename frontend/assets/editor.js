@@ -68,6 +68,7 @@ const UI_THEMES = {
   plum: "梅影紫",
   copper: "赤銅棕",
   pineash: "松煙灰",
+  moxa: "摩莎青",
 };
 function editorColors() {
   const t = document.documentElement.dataset.board || "traditional";
@@ -1578,6 +1579,10 @@ async function deriveCdbLine() {
   } finally {
     s.running = false;
     renderCdbLineView();
+    // Surface a clear notice when the derivation yielded nothing (e.g. the start
+    // position is out of book / 殘局 / 查詢失敗) — otherwise the empty panel reads
+    // like the button did nothing.
+    if (!s.steps.length) setStatus(`雲庫演繹：${s.endReason || "查無資料"}`, "warn");
   }
 }
 
@@ -1594,12 +1599,19 @@ function renderCdbLineView() {
   if (demoBtn) demoBtn.disabled = !hasLine;
   if (addBtn) addBtn.disabled = !hasLine;
   if (stateEl) {
+    // A zero-step run still has an endReason (e.g. 雲庫無此局面) — show it instead
+    // of "尚未演繹" so 「按了演繹卻查無」doesn't look like nothing happened.
     stateEl.textContent = s.running
       ? `演繹中… 已 ${s.steps.length} 步`
-      : (s.steps.length ? `${s.steps.length} 步${s.endReason ? "・" + s.endReason : ""}` : "尚未演繹");
+      : (s.steps.length
+          ? `${s.steps.length} 步${s.endReason ? "・" + s.endReason : ""}`
+          : (s.endReason || "尚未演繹"));
   }
   if (!s.steps.length) {
-    list.innerHTML = `<div class="cdbEmpty">按「演繹」從本局面沿雲庫最佳著推演一條主線（最多 ${cdbLineDepth()} 步；雲庫無資料即止）。</div>`;
+    // Distinguish "never run" (generic hint) from "ran, found nothing" (show why).
+    list.innerHTML = (s.endReason && !s.running)
+      ? `<div class="cdbEmpty cdbErr">雲庫演繹查無結果：${s.endReason}。<br>此局面雲庫未收錄，無法沿最佳著推演。</div>`
+      : `<div class="cdbEmpty">按「演繹」從本局面沿雲庫最佳著推演一條主線（最多 ${cdbLineDepth()} 步；雲庫無資料即止）。</div>`;
     return;
   }
   // Per-row layout mirroring the 🤖AI走棋 log: 第N步 · 紅/黑 著法(side-tinted) ·
@@ -2411,7 +2423,7 @@ function applyBoardPerspective(name) {
 }
 
 function applyUiTheme(name) {
-  const theme = UI_THEMES[name] ? name : "ember";
+  const theme = UI_THEMES[name] ? name : "pineash";
   document.documentElement.dataset.uiTheme = theme;
   savePreference("uiTheme", theme);
 }
@@ -3914,7 +3926,7 @@ async function recoverSettingsFromLocalStorage() {
   if (boardViewToggle) boardViewToggle.checked = savedBoardPerspective === "black";
   applyBoardPerspective(savedBoardPerspective);
   const savedUiTheme = PREFS.uiTheme;
-  const initialUiTheme = UI_THEMES[savedUiTheme] ? savedUiTheme : "ember";
+  const initialUiTheme = UI_THEMES[savedUiTheme] ? savedUiTheme : "pineash";
   if (uiThemeSel) uiThemeSel.value = initialUiTheme;
   document.documentElement.dataset.uiTheme = initialUiTheme;
   const aiDepthEl = $("#aiDepthInput");
