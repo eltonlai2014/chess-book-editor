@@ -149,7 +149,9 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 
 | 功能 | 函式:行 |
 |---|---|
-| 渲染整盤（任意 SVG、用全域主題/視角；SVG viewBox 540×600 固定，顯示尺寸由 CSS `#board{width:100%}` 控制→可縮放） | `drawBoard`:484 |
+| 渲染整盤（任意 SVG、用全域主題/視角；SVG viewBox 540×600 固定，顯示尺寸由 CSS `#board{width:100%}` 控制→可縮放）。第 5 參 `liftIccs`＝把某格的子「拿起」不畫（編輯器拖子用） | `drawBoard`:487 |
+| 畫單顆子（disk＋字）於絕對座標（從 drawBoard 迴圈抽出，供浮動子複用） | `drawPieceAt` |
+| 建浮動「拿起的子」`<g class="floatPiece">`（同盤外觀、local 原點、`pointer-events:none`、靠 transform 定位）；漸層/陰影 defs 來自同 svg 的 drawBoard | `makeFloatingPiece` |
 | 河界「楚河漢界」置中（`text-anchor:middle`＋`letter-spacing` 在 Chromium 會多算末字距→x 右補半個 letter-spacing 才視覺置中） | `drawBoard` river text |
 | FEN 解析 / 走一步並翻邊 | `parseFen`:44 / `applyIccs`:70 |
 | ICCS↔座標、螢幕座標 | `iccsToCoord`:35 / `screenX`:25 / `screenY`:29 |
@@ -175,8 +177,9 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 **走子輸入（點選盤面）**
 | 功能 | 函式:行 |
 |---|---|
-| 透明 overlay + 點擊路由 | `installBoardOverlay`:244 / `onSquareClick`:326 |
+| 透明 overlay（含選取暈圈/合法落點/**拿起的浮動子**）+ 點擊路由 | `installBoardOverlay`:244 / `onSquareClick`:326 |
 | 選子/清選/嘗試走子 | `selectSquare`:361 / `clearSelection`:353 / `tryAddMove`:383 |
+| **拿起的子跟隨滑鼠**：選子後 `drawBoard(…,liftIccs)` 把原格子拿起、`installBoardOverlay` 在游標處畫浮動子（`makeFloatingPiece`），`#board` 的 `pointermove` 即時平移（不重畫）。座標換算 `boardPointFromEvent`（client→viewBox）、`floatTransform`（含 `FLOAT_SCALE`）。清選/換子/導航即移除（`clearSelection` 或下次重畫）。`EDITOR.floatEl`/`EDITOR.boardPtr` | `boardPointFromEvent` / `floatTransform` / `installBoardOverlay` 末段 / `#board pointermove`(boot) |
 | 插入/刪除 | `insertMoveAt`:512 / `deleteCurrentMove`:429 |
 | 分支重排（splice 任意排序，非對調；index 0=主線）+ 索引重映射 | `moveVariation`:466 / `remapAfterMove`:487 / `moveActiveVariation`:495（Alt+↑/↓）|
 

@@ -484,7 +484,7 @@ function drawMeanderFrame(svg, opts) {
 
 // ---------- board drawing (SVG) ----------
 
-function drawBoard(svg, fen, bookMove, engineMove) {
+function drawBoard(svg, fen, bookMove, engineMove, liftIccs) {
   // Latch perspective for this redraw so screenY (called many times below)
   // doesn't re-poll the checkbox each call.
   CURRENT_REDP = isRedPerspective();
@@ -708,75 +708,104 @@ function drawBoard(svg, fen, bookMove, engineMove) {
     labelBot.textContent = c + 1;
   }
 
-  // Pieces — style-driven disk + character
+  // Pieces — style-driven disk + character. `liftIccs` (a 2-char square like
+  // "h2") skips that one piece: the editor "lifts" the selected piece off the
+  // board and draws a floating copy under the cursor (makeFloatingPiece).
+  let liftCol = -1, liftRow = -1;
+  if (liftIccs && liftIccs.length >= 2) {
+    liftCol = liftIccs.charCodeAt(0) - 97;
+    liftRow = parseInt(liftIccs[1], 10);
+  }
   const parsed = fen ? parseFen(fen) : null;
   if (parsed) {
     for (let r = 0; r <= 9; r++) {
       for (let c = 0; c <= 8; c++) {
         const p = parsed.rows[r][c];
         if (!p) continue;
-        const isRed = p === p.toUpperCase();
-        const cx = screenX(c), cy = screenY(r);
-        const PS = isRed ? S.red : S.black;
-        // Drop shadow.
-        //   "strong" → wide ambient + tight contact (glossy/premium pieces)
-        //   "soft"   → just the ambient ellipse (matte / wooden disc feel)
-        //   true     → legacy hard 1.5px offset shadow (kept for back-compat)
-        if (S.piece.shadow === "strong") {
-          el("ellipse", { cx, cy: cy + 5, rx: 28, ry: 10, fill: "url(#pshadow)" }, svg);
-          el("ellipse", { cx, cy: cy + 1.5, rx: 25, ry: 25, fill: "rgba(0,0,0,0.18)" }, svg);
-        } else if (S.piece.shadow === "soft") {
-          el("ellipse", { cx, cy: cy + 4, rx: 26, ry: 7, fill: "url(#pshadow)" }, svg);
-        } else if (S.piece.shadow) {
-          el("circle", { cx: cx + 1.5, cy: cy + 1.5, r: 26, fill: "rgba(0,0,0,0.22)" }, svg);
-        }
-        // Outer disk — gradient fill when style enables it
-        el("circle", {
-          cx, cy, r: 26,
-          fill: (S.piece.gradient && PS.grad) ? `url(#pg-${isRed ? "red" : "black"})` : PS.fill,
-          stroke: PS.border,
-          "stroke-width": 1.5,
-        }, svg);
-        // Optional inner-rim shadow (dome bevel)
-        if (S.piece.rim) {
-          el("circle", { cx, cy, r: 24.5, fill: "none",
-                         stroke: "rgba(0,0,0,0.35)", "stroke-width": 1 }, svg);
-        }
-        // Optional inner ring (traditional style)
-        if (S.piece.innerRing && PS.innerRing) {
-          el("circle", {
-            cx, cy, r: 22, fill: "none",
-            stroke: PS.innerRing, "stroke-width": 1,
-          }, svg);
-        }
-        // Optional specular highlight — glossy bead spot at upper-left
-        if (S.piece.specular) {
-          el("ellipse", { cx: cx - 7, cy: cy - 9, rx: 10, ry: 7, fill: "url(#pspec)" }, svg);
-        }
-        // Character — optional engraved shadow under main glyph (looks like
-        // the character is pressed into the disc face).
-        // Piece-font resolution hook (future「更換棋子類型」): a picker can set
-        // html[data-piece-font] (from PREFS.pieceFont) to override the per-board
-        // font WITHOUT touching board styles. Inert until that attr exists.
-        const fontKey = document.documentElement.dataset.pieceFont || S.font;
-        const PF = PIECE_FONTS[fontKey] || PIECE_FONTS.classic;
-        if (S.piece.engrave) {
-          const ts = el("text", {
-            x: cx, y: cy + PF.dy + 1.2, "text-anchor": "middle",
-            "font-size": 28, "font-family": PF.family, "font-weight": PF.weight,
-            fill: "rgba(0,0,0,0.45)",
-          }, svg);
-          ts.textContent = PIECE_CHAR[p] || p;
-        }
-        const t = el("text", {
-          x: cx, y: cy + PF.dy, "text-anchor": "middle",
-          "font-size": 28, "font-family": PF.family, "font-weight": PF.weight,
-          fill: PS.text,
-        }, svg);
-        t.textContent = PIECE_CHAR[p] || p;
+        if (c === liftCol && r === liftRow) continue;   // lifted → drawn floating
+        drawPieceAt(svg, p, screenX(c), screenY(r), S);
       }
     }
   }
+}
+
+// Draw a single piece (disk + character) at absolute (cx, cy) into `parent`.
+// Factored out of drawBoard's loop so the editor can reuse the exact same look
+// for the floating "carried" piece (makeFloatingPiece). `S` defaults to the
+// active board style. Gradient/shadow fills reference defs (#pg-*, #pshadow,
+// #pspec) created by drawBoard, so `parent` must live in a freshly-drawn board.
+function drawPieceAt(parent, p, cx, cy, S) {
+  S = S || currentBoardStyle();
+  const isRed = p === p.toUpperCase();
+  const PS = isRed ? S.red : S.black;
+  // Drop shadow.
+  //   "strong" → wide ambient + tight contact (glossy/premium pieces)
+  //   "soft"   → just the ambient ellipse (matte / wooden disc feel)
+  //   true     → legacy hard 1.5px offset shadow (kept for back-compat)
+  if (S.piece.shadow === "strong") {
+    el("ellipse", { cx, cy: cy + 5, rx: 28, ry: 10, fill: "url(#pshadow)" }, parent);
+    el("ellipse", { cx, cy: cy + 1.5, rx: 25, ry: 25, fill: "rgba(0,0,0,0.18)" }, parent);
+  } else if (S.piece.shadow === "soft") {
+    el("ellipse", { cx, cy: cy + 4, rx: 26, ry: 7, fill: "url(#pshadow)" }, parent);
+  } else if (S.piece.shadow) {
+    el("circle", { cx: cx + 1.5, cy: cy + 1.5, r: 26, fill: "rgba(0,0,0,0.22)" }, parent);
+  }
+  // Outer disk — gradient fill when style enables it
+  el("circle", {
+    cx, cy, r: 26,
+    fill: (S.piece.gradient && PS.grad) ? `url(#pg-${isRed ? "red" : "black"})` : PS.fill,
+    stroke: PS.border,
+    "stroke-width": 1.5,
+  }, parent);
+  // Optional inner-rim shadow (dome bevel)
+  if (S.piece.rim) {
+    el("circle", { cx, cy, r: 24.5, fill: "none",
+                   stroke: "rgba(0,0,0,0.35)", "stroke-width": 1 }, parent);
+  }
+  // Optional inner ring (traditional style)
+  if (S.piece.innerRing && PS.innerRing) {
+    el("circle", {
+      cx, cy, r: 22, fill: "none",
+      stroke: PS.innerRing, "stroke-width": 1,
+    }, parent);
+  }
+  // Optional specular highlight — glossy bead spot at upper-left
+  if (S.piece.specular) {
+    el("ellipse", { cx: cx - 7, cy: cy - 9, rx: 10, ry: 7, fill: "url(#pspec)" }, parent);
+  }
+  // Character — optional engraved shadow under main glyph (looks like
+  // the character is pressed into the disc face).
+  // Piece-font resolution hook (future「更換棋子類型」): a picker can set
+  // html[data-piece-font] (from PREFS.pieceFont) to override the per-board
+  // font WITHOUT touching board styles. Inert until that attr exists.
+  const fontKey = document.documentElement.dataset.pieceFont || S.font;
+  const PF = PIECE_FONTS[fontKey] || PIECE_FONTS.classic;
+  if (S.piece.engrave) {
+    const ts = el("text", {
+      x: cx, y: cy + PF.dy + 1.2, "text-anchor": "middle",
+      "font-size": 28, "font-family": PF.family, "font-weight": PF.weight,
+      fill: "rgba(0,0,0,0.45)",
+    }, parent);
+    ts.textContent = PIECE_CHAR[p] || p;
+  }
+  const t = el("text", {
+    x: cx, y: cy + PF.dy, "text-anchor": "middle",
+    "font-size": 28, "font-family": PF.family, "font-weight": PF.weight,
+    fill: PS.text,
+  }, parent);
+  t.textContent = PIECE_CHAR[p] || p;
+}
+
+// Build a detached piece (same look as on-board) at the local origin, wrapped in
+// a <g class="floatPiece"> that the caller positions with a transform. Powers
+// the editor's "carry the piece under the cursor" interaction. The gradient /
+// shadow defs come from the last drawBoard() of the same `svg`, so this must be
+// appended to that svg. pointer-events:none so clicks pass through to the cells.
+function makeFloatingPiece(svg, p) {
+  const g = el("g", { class: "floatPiece" }, svg);
+  g.style.pointerEvents = "none";
+  drawPieceAt(g, p, 0, 0);
+  return g;
 }
 
 // Re-draw the board at the current STATE using whatever board style is now

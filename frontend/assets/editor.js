@@ -18,6 +18,8 @@ const EDITOR = {
   activePath: [],     // index path into roots[][.children]... — [] = init position
   selectedSquare: null,  // "h2" when user has selected a from-square via click
   legalTargets: [],   // list of dest iccs ("e2",...) for currently selected piece
+  floatEl: null,      // <g> of the carried piece following the cursor (or null)
+  boardPtr: null,     // last cursor position in board viewBox coords {x,y}
   // Read-only eval data from chess-book-ai's positions.db. Loaded by
   // fetchEvalsForFile() after each selectFile. {fen -> {d12?,d22?,d28?,d32?,cdb?}}.
   // Empty object when the DB is missing or the file's FENs aren't in it.
@@ -289,6 +291,23 @@ function squareIccs(col, row) {
   // ICCS: cols a-i = 0-8, rows 0-9 as digits.
   return String.fromCharCode(97 + col) + row;
 }
+// Carried-piece visual: when a piece is selected it lifts off its square and
+// follows the cursor (makeFloatingPiece in board.js). A slight scale sells the
+// "picked up" feel; the same transform is applied on creation and on each move.
+const FLOAT_SCALE = 1.08;
+function floatTransform(p) { return `translate(${p.x},${p.y}) scale(${FLOAT_SCALE})`; }
+// Client (mouse) coords → board viewBox (540×600) coords, accounting for the
+// CSS-scaled SVG, so the floating piece sits exactly under the cursor.
+function boardPointFromEvent(e) {
+  const svg = $("#board");
+  if (!svg || !svg.getScreenCTM) return null;
+  const m = svg.getScreenCTM();
+  if (!m) return null;
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  const loc = pt.matrixTransform(m.inverse());
+  return { x: loc.x, y: loc.y };
+}
 function parseSquare(sq) {
   return { col: sq.charCodeAt(0) - 97, row: parseInt(sq[1], 10) };
 }
@@ -426,6 +445,22 @@ function installBoardOverlay(svg) {
     layer.insertBefore(halo, layer.firstChild);
   }
   svg.appendChild(layer);
+
+  // Carried piece: when a source square is selected, drawBoard() already lifted
+  // that piece off its square (liftIccs), so draw a floating copy that tracks
+  // the cursor. Recreated on every redraw (drawBoard wipes the SVG); the
+  // pointermove handler then keeps EDITOR.floatEl positioned without redrawing.
+  EDITOR.floatEl = null;
+  if (EDITOR.selectedSquare) {
+    const piece = pieceAt(EDITOR.selectedSquare);
+    if (piece) {
+      const { col, row } = parseSquare(EDITOR.selectedSquare);
+      const ptr = EDITOR.boardPtr || { x: screenX(col), y: screenY(row) };
+      const fg = makeFloatingPiece(svg, piece);   // board.js
+      fg.setAttribute("transform", floatTransform(ptr));
+      EDITOR.floatEl = fg;
+    }
+  }
 }
 
 function onSquareClick(sq) {
@@ -458,6 +493,9 @@ function onSquareClick(sq) {
 function clearSelection() {
   EDITOR.selectedSquare = null;
   EDITOR.legalTargets = [];
+  // Drop the carried piece. The next redraw won't recreate it (no selection),
+  // but remove it now in case a caller doesn't immediately redraw.
+  if (EDITOR.floatEl) { EDITOR.floatEl.remove(); EDITOR.floatEl = null; }
 }
 
 // Show selection immediately, then async-fetch legal destinations and redraw
@@ -488,7 +526,6 @@ async function selectSquare(sq) {
 async function tryAddMove(fromSq, toSq) {
   const iccs = fromSq + toSq;
   const fen = boardFen();
-  setStatus("驗證走法…");
   try {
     const r = await fetch("/api/xqf/move-info", {
       method: "POST",
@@ -496,7 +533,15 @@ async function tryAddMove(fromSq, toSq) {
       body: JSON.stringify({ fen, iccs }),
     });
     const resp = await r.json();
-    if (resp.error) { setStatus(resp.error, "err"); return; }
+    if (resp.error) {
+      // Illegal move: silently drop the selection and put the carried piece back
+      // on its square (clearSelection removes the float; redraw un-lifts it). No
+      // status message — an illegal target just resets, nothing to announce.
+      setStatus("");
+      clearSelection();
+      redrawBoardView();
+      return;
+    }
     const ap = EDITOR.autoPlay;
     if (ap.running && !ap.recording) {
       // Sandbox auto-play: the human's move joins the ephemeral line, never the
@@ -1803,9 +1848,10 @@ function navigateTo(path) {
 function refreshActive() {
   const path = EDITOR.activePath;
   const { fen, lastIccs } = fenAndLastIccsFor(path);
-  // board.js drawBoard signature: drawBoard(svg, fen, bookMove, engineMove)
-  drawBoard($("#board"), fen, lastIccs, null);
-  installBoardOverlay($("#board"));   // click rects + selection halo on top
+  // board.js drawBoard signature: drawBoard(svg, fen, bookMove, engineMove, liftIccs)
+  // liftIccs lifts the selected piece off its square so it can float at the cursor.
+  drawBoard($("#board"), fen, lastIccs, null, EDITOR.selectedSquare);
+  installBoardOverlay($("#board"));   // click rects + selection halo + carried piece
   updateBoardArrows();                // branch hints + live engine best-move
 
   renderMoveList();
@@ -2752,8 +2798,8 @@ function renderSandbox() {
   const last = ap.sandboxLine.length ? ap.sandboxLine[ap.sandboxLine.length - 1] : null;
   const fen = last ? last.fen : ap.sandboxBaseFen;
   const lastIccs = last ? last.iccs : null;
-  drawBoard($("#board"), fen, lastIccs, null);
-  installBoardOverlay($("#board"));   // halo + legal dots read selection + boardFen()
+  drawBoard($("#board"), fen, lastIccs, null, EDITOR.selectedSquare);
+  installBoardOverlay($("#board"));   // halo + legal dots + carried piece read selection + boardFen()
 }
 
 // Append one move to the sandbox line and redraw. Selection is consumed.
@@ -3482,6 +3528,15 @@ $("#board").addEventListener("click", (e) => {
   const target = e.target.closest("[data-iccs]");
   if (!target) return;
   onSquareClick(target.getAttribute("data-iccs"));
+});
+
+// Carry-the-piece: track the cursor in board (viewBox) coords so a selected
+// piece floats under the mouse. Live transform update — no full redraw.
+$("#board").addEventListener("pointermove", (e) => {
+  const p = boardPointFromEvent(e);
+  if (!p) return;
+  EDITOR.boardPtr = p;
+  if (EDITOR.floatEl) EDITOR.floatEl.setAttribute("transform", floatTransform(p));
 });
 
 // Root directory picker — opens native Windows folder dialog.
