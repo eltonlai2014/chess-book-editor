@@ -2125,7 +2125,6 @@ function renderVarPicker() {
     picker.innerHTML = `<div class="varEmpty">此步無其他分支</div>`;
     return;
   }
-  const letters = "ABCDEFGHIJKLMN";
   const parentPath = path.length === 0 ? [] : path.slice(0, -1);
   opts.forEach((opt, i) => {
     const row = document.createElement("div");
@@ -2134,7 +2133,7 @@ function renderVarPicker() {
       + (i === 0 ? " mainLine" : "");
     const L = document.createElement("span");
     L.className = "varLetter";
-    L.textContent = letters[i] + ".";
+    L.textContent = (i + 1) + ".";
     row.appendChild(L);
     const t = document.createElement("span");
     t.textContent = opt.notation;

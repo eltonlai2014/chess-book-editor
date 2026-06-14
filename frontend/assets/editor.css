@@ -1109,6 +1109,21 @@ h2.panelHead {
   margin-bottom: 12px;
 }
 
+/* 檔案面板標題列固定（比照 #rpMoves）：#filePane 自身就是捲動容器，標題
+   sticky 到頂、加不透明底（樹從底下滑過時不透出），補上圓角貼齊卡片。 */
+#filePane>.panelHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-top: 0;
+  box-sizing: border-box;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(44, 38, 31, 1), rgba(27, 24, 20, 1));
+}
+
 h2.panelHead>span {
   flex: 1 1 auto;
 }
