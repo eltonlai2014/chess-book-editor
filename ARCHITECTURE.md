@@ -208,11 +208,12 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 **☁ 雲庫即時查（chessdb.cn）—— 雲庫 tab + 評估列「雲」格**
 | 功能 | 函式 |
 |---|---|
-| **查哪個局面**：分支點＝前一步（非走完本步之後）。同引擎「前一步」用的 `analysisFen` | `cdbFen` |
-| 導航時 lazy 查 `cdbFen()`（debounce 220ms；已有 cdb 即跳過；**殘局不查**→`cdbLive.endgame`） | `ensureCdbLive`／`isEndgameFen` |
+| **評估列查哪個局面**：恆＝前一步決策點（同引擎「前一步」`analysisFen`）。整條評估列鎖此局面（見下方原則） | `cdbFen` |
+| **雲庫 tab 查哪個局面（可切換）**：`當前步`＝`analysisFen`（前一步決策點，預設、與評估列同）／`下一步`＝`currentFen`（走完本步後）。切換鈕 `#cdbScopePrev`/`#cdbScopeNext`（`setCdbScope`，存 pref `cdbScope`、`updateCdbScopeBtns` 上色）。**評估列永遠用 `cdbFen`，只有 tab 吃 `EDITOR.cdbScope`** | `cdbTabFen`／`setCdbScope`／`EDITOR.cdbScope` |
+| 導航時 lazy 查 `cdbTabFen()`（debounce 220ms；已有 cdb 即跳過；**殘局不查**→`cdbLive.endgame`） | `ensureCdbLive`／`isEndgameFen` |
 | 殘局判定（雲庫只涵蓋開局＋中局）：雙方合計**無車** or **大子(車R/馬N/炮C)≤2** | `isEndgameFen`（near `cdbFen`） |
-| 實際抓取（merge 進 `evalsByFen[cdbFen].cdb`；`fresh` 跳快取；失敗不快取以利重試） | `fetchCdbLive` |
-| 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳；標出目前所在變化 `.current`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
+| 實際抓取（merge 進 `evalsByFen[fen].cdb`；`fresh` 跳快取；失敗不快取以利重試；finally 用 `cdbTabFen()` 比對） | `fetchCdbLive` |
+| 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳）。標記：`當前步`→目前所在變化 ←／`下一步`→已在棋譜的後續 ✓（`markedSet`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
 | 雲庫著法翻中文：**僅在 tab 可見時翻 + 一次 batch**（避免落點時對隱藏 tab 狂打 move-info） | `fillCdbNotations`（gate on `#rpCdbBody.hidden`）/ `notationsForBatch`；`switchRpTab('cdb')` 切過去時補翻 |
 
 **☁ 雲庫演繹（cdbline tab）—— 從本局面沿雲庫最佳著往前推一條主線**
@@ -225,17 +226,19 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 設定 pref：`cdbLineDepth`（步數，預設12）、`cdbLineThrottleMs`（live 查詢間隔 ms，預設250） | `cdbLineDepth`/`cdbLineThrottle`；設定欄 `#cdbLineDepthInput`/`#cdbLineThrottleInput` |
 
 > **為何這不違反「雲庫逐盤面、勿批掃」原則**：它是**按鈕觸發的單次連查**（非隨導航自動、非整檔掃），且 cache-first＋live 才節流 250ms，仍守 chessdb ~5 req/s。離開開局庫後很快 `status≠ok` 自動停，多半跑不滿 12 步。
-| 點列＝在**分支點**加同層變化（非當前著的子著）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
-| 「重查」按鈕（`fresh=1` 跳快取重打 `cdbFen()`） | boot 段綁 `#cdbRefreshBtn` |
+| 點列加入棋譜（依 scope）：`當前步`＝在**分支點**加同層變化（前一步、`activePath.slice(0,-1)`）／`下一步`＝加**當前著的子著**（`activePath`）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
+| 「重查」按鈕（`fresh=1` 跳快取重打 `cdbTabFen()`，配合目前 scope） | boot 段綁 `#cdbRefreshBtn` |
 
 > **整條評估列都看「前一步＝決策點」(`cdbFen`)**：深N分數、建議、雲全部 key 在 `cdbFen()`，回答「目前這步走得好不好、該決策點還能怎麼走」，對齊 chess-book-ai 的逐步表（其「分」也是走這步之前的評分）。**這也讓最後一步有分**：葉節點（走完之後）不在 positions.db，但它的決策點（前一步）在，故 `renderEvalLine` 用 `cdbFen` 就查得到。深度分數來自 `fetchEvalsForFile` 的 batch（`collectAllFens` 已含每個節點的決策點 FEN），不需逐步打網路。
+> **`下一步` scope 的取捨**：導航時只 `ensureCdbLive(cdbTabFen())`＝`currentFen`，所以**評估列「雲」格在 `下一步` 模式下，off-book 局面可能無 live 資料**（只靠 batch 的 `analysisFen`；棋譜內局面 batch 都有，故多半仍在）。預設 `當前步` 兩者同 FEN、零差異。刻意不為評估列再開第二發 live 查詢（`cdbLive` 單槽，雙發會抖動且多打網路）。
 > 雲庫資料形狀＝後端 `cdb`（`{status,moves,best,source}`），與 `/api/eval/batch` 一致，故 batch 命中與即時查可共用 `renderEvalLine`/`renderCdbTab`。分數是行棋方 POV cp，顯示時 ×flip 轉紅方視角（同 `_parse_info_line` 慣例）。
 
 **即時引擎分析（SSE）—— 引擎分析 tab**
 | 功能 | 函式:行 |
 |---|---|
-| 起/停分析（開 EventSource） | `startAnalysis`:1891 / `stopAnalysis`:1875 / `toggleAnalysis`:1921 |
-| 分析「前一步」局面 / 「本步」局面 | `analysisFen`:1869 / `analyzeCurrentStep`:1926 |
+| 起/停分析（開 EventSource） | `startAnalysis` / `stopAnalysis` |
+| **前一步/本步 segmented 切換**（`.segToggle`，與雲庫當前步/下一步同元件）：點同模式＝停、點另一模式＝切換分析局面；正在分析的一邊 `.active` 高亮 | `engineModeClick` / `updateEngineToggleBtns`；`#engineToggleBtn`(prev)/`#engineCurBtn`(cur) |
+| 分析「前一步」局面（`analysisFen`）/「本步」局面（`currentFen`） | `analysisFen` |
 | 收事件→歷程（最新在上，並更新藍箭頭） | `recordEngineEvent`:1796 / `renderEngineHistory`:1811 |
 | 清除 / 導出歷程 | `clearAnalysisHistory`:1836 / `exportAnalysisHistory`:1843 |
 | 分數/WDL 格式 | `fmtEngineScore`:1768 / `fmtWdl`:1778 / `fmtWdlHtml`:1785 |
@@ -325,9 +328,10 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 
 | 區塊 | 位置 | 備註 |
 |---|---|---|
-| header（logo「梅友弈鑑」朱文方印/主題/視角/賽事/儲存） | h1 含 inline `.appLogo.appSeal` SVG（硃砂「梅」印，固定色不隨主題；同款 favicon.svg） | metaBtn/saveBtn 在此 |
+| header（logo「梅友弈鑑」朱文方印/棋盤主題/介面主題/儲存） | h1 含 inline `.appLogo.appSeal` SVG（硃砂「梅」印，固定色不隨主題；同款 favicon.svg） | **只剩外觀下拉（棋盤/介面）＋ `.actionsDivider` ＋儲存**。賽事資訊(`#metaBtn`)已移到棋譜名稱列；紅黑視角已移到導航列 |
+| 棋譜名稱列（`#fileTitleBar`） | `#fileTitle`（h2）＋`#metaBtn`(賽事資訊，icon-only) | 名稱**靠左固定**（`flex:1;text-align:left;ellipsis`，名稱長短不飄）；賽事資訊鈕靠右；**無底線/底色**（純標題列） |
 | 檔案樹 pane | settingsBtn / rescanBtn / newXqfBtn | 🔄 重掃＝重新掃描目錄 |
-| 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis；走法無前綴符號，窄時 `@container navbar` 隱藏 `.miPly`（「第N步：」前綴）只留著法（如 傌二進三） |
+| 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis；走法無前綴符號，窄時 `@container navbar` 隱藏 `.miPly`（「第N步：」前綴）只留著法（如 傌二進三）。**紅黑視角＝`#perspectiveBtn` 在此列末端**（一顆按鈕，顯示目前視角＋flip 圖示、點擊翻面；`togglePerspective`/`updatePerspectiveBtn`，真實來源仍是隱藏 `#redPerspective`；`#moveInfo` flex:3 把它頂到最右） |
 | 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析+🤖AI走棋(`#rpAutoBody`：控制列 `#autoStartBtn`(start/stop)/`#autoClearBtn`/`#autoState`+歷程 `#autoHistory`) |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
 | settings 分區（兩欄瀑布流 `.settingsForm{column-count:2}`，`break-inside:avoid`） | 資料來源 / 引擎分析 / 雲庫演繹 / **AI 自動走棋**（`#autoAiRedChk`/`#autoAiBlackChk`/`#autoRedSecsInput`/`#autoBlackSecsInput`/`#autoMaxPliesInput`；**加入棋譜 `#autoRecordChk` 已移到 🤖AI走棋 分頁**）/ 匯出動畫 |

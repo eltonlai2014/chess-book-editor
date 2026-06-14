@@ -478,6 +478,14 @@ header h1 {
   align-items: center;
 }
 
+/* Sets the appearance pickers apart from the 儲存 action (its own concern). */
+.actionsDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 0;
+  background: var(--line-strong);
+}
+
 .boardThemePicker {
   display: inline-flex;
   align-items: center;
@@ -499,75 +507,6 @@ header h1 {
 
 .boardThemePicker select:hover {
   border-color: var(--accent);
-}
-
-.viewToggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  user-select: none;
-}
-
-.viewToggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.viewToggleTrack {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 3px 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--bg-3), var(--bg-2));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
-}
-
-.viewToggle:hover .viewToggleTrack {
-  border-color: var(--accent);
-}
-
-.viewToggleText {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-faint);
-  min-width: 24px;
-  text-align: center;
-  transition: color 120ms ease;
-}
-
-.viewToggleThumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: radial-gradient(circle at 34% 34%, rgba(255, 244, 220, 0.52), rgba(255, 244, 220, 0.10) 42%, transparent 62%), linear-gradient(180deg, #dbc07c, #9d7940);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24), inset 0 1px 1px rgba(255, 255, 255, 0.12);
-  transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-}
-
-.viewToggle input:not(:checked)+.viewToggleTrack .viewToggleText:first-child {
-  color: var(--accent-strong);
-}
-
-.viewToggle input:checked+.viewToggleTrack .viewToggleText:last-child {
-  color: #b9ddf0;
-}
-
-.viewToggle input:checked+.viewToggleTrack .viewToggleThumb {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: radial-gradient(circle at 34% 34%, rgba(234, 244, 248, 0.42), rgba(234, 244, 248, 0.10) 42%, transparent 62%), linear-gradient(180deg, #8aa3b1, #54636f);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.26), inset 0 1px 1px rgba(255, 255, 255, 0.10);
-}
-
-.viewToggle input:focus-visible+.viewToggleTrack {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 #status {
@@ -1020,26 +959,41 @@ h2 {
   background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
 
+/* Title row: game name (left-aligned, fixed — so a longer/shorter name never
+   shifts it) + the compact 賽事資訊 icon button on the right. Side margins cancel
+   boardPane's --board-pad-x so the underline meets the panel border, matching
+   the 檔案/棋譜/注解 headers. */
+#fileTitleBar {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 calc(-1 * var(--board-pad-x)) 8px;
+  padding: 8px calc(var(--board-pad-x) + var(--header-pad-x)) 6px;
+  flex: 0 0 auto;
+}
+
 #fileTitle {
   color: var(--accent-strong);
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: none;
-  /* Side margins cancel boardPane's --board-pad-x so the underline meets
-     the panel border, matching the 檔案/棋譜/注解 headers. padding-x bumps
-     to keep text in its original visual position. */
-  margin: 0 calc(-1 * var(--board-pad-x)) 12px;
-  padding: 14px calc(var(--board-pad-x) + var(--header-pad-x)) 10px;
-  align-self: stretch;
-  text-align: center;
+  margin: 0;
+  /* Cancel the base h2 underline (border-bottom + padding-bottom). */
+  border-bottom: none;
+  padding-bottom: 0;
+  flex: 1 1 auto;
+  min-width: 0;            /* allow ellipsis inside the flex row */
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 0 0 auto;
-  border-bottom: 1px solid rgba(var(--accent-strong-rgb), 0.12);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
   text-shadow: 0 0 18px rgba(var(--accent-strong-rgb), 0.10);
+}
+
+#fileTitleBar #metaBtn {
+  flex: 0 0 auto;
 }
 
 #board {
@@ -1202,6 +1156,27 @@ h2.panelHead>span {
   #moveInfo .miPly { display: none; }
 }
 
+/* 紅|黑 perspective: a single button at the nav row's right edge (#moveInfo,
+   flex:3, grows to push it there). Shows the CURRENT side; click flips. Wider
+   than the glyph nav buttons (it carries a CJK label) so it opts out of their
+   flex:1/max-width sizing. The side tints the label (red=accent, black=blue),
+   echoing the old toggle's colour cue. */
+#navBar #perspectiveBtn {
+  flex: 0 0 auto;
+  max-width: none;
+  min-width: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+#navBar #perspectiveBtn.persRed {
+  color: var(--accent-strong);
+}
+
+#navBar #perspectiveBtn.persBlack {
+  color: #b9ddf0;
+}
+
 /* ---------- right: 棋譜 | (注解 / 本步可選) — flex with splitters ---------- */
 .rpSection {
   padding: var(--rp-pad-y) var(--rp-pad-x);
@@ -1328,17 +1303,15 @@ h2.panelHead>span {
   display: none !important;
 }
 
-/* 引擎分析 — control bar + scrolling history (newest on top, Pikafish-style). */
-#rpEngineBody {
+/* All four control-bar tabs (雲庫 / 雲庫演繹 / 引擎分析 / AI走棋) share one
+   layout: a control bar on top + a scrolling body below, 8px apart. */
+#rpEngineBody,
+#rpCdbBody,
+#rpCdbLineBody,
+#rpAutoBody {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-#rpCdbBody {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .engineBar {
@@ -2286,26 +2259,45 @@ h2.panelHead>span {
   cursor: default;
 }
 
-/* ---------- ☁ 雲庫 (chessdb.cn cloud-library) tab ---------- */
-.cdbBar {
-  display: flex;
+/* ---------- segmented toggle (shared mode-switch component) ---------- */
+/* A joined segmented control: one pill, internal divider, active half
+   highlighted. Reads as a "pick one mode" switch, distinct from the action
+   pills, yet height-matched to .engineBar .iconBtn (30px). Used by 雲庫
+   (當前步/下一步) and 引擎分析 (前一步/本步). */
+.segToggle {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 2px 6px;
-  flex: 0 0 auto;
-}
-
-.cdbBar .engineState {
-  margin-left: 0;
-}
-
-.cdbBar .iconBtn {
-  margin-left: auto;
-  height: 26px;
-  padding: 0 10px;
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.16);
   border-radius: 999px;
-  font-size: 12px;
+  overflow: hidden;
 }
+
+.segToggle .iconBtn {            /* flatten the engineBar pill into a segment */
+  min-width: 0;
+  height: 30px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.segToggle .iconBtn + .iconBtn {
+  border-left: 1px solid rgba(var(--accent-strong-rgb), 0.16);
+}
+
+.segToggle .iconBtn:hover {       /* no lift inside the clipped pill */
+  transform: none;
+}
+
+.segBtn.active {
+  background: var(--btn-gold-hover-bg);
+  color: var(--accent-strong);
+}
+
+/* ---------- ☁ 雲庫 (chessdb.cn cloud-library) tab ---------- */
+/* The bar reuses .engineBar (shared with 雲庫演繹/引擎分析/AI走棋): action
+   controls on the left, #cdbState (.engineState) pushed right; the 當前步/下一步
+   mode switch is the shared .segToggle above. */
 
 .cdbList {
   font-size: 15px;

@@ -151,10 +151,21 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   positions.db, but the leaf's decision point is. Depth data comes from the
   `fetchEvalsForFile` batch (`collectAllFens` already includes every node's
   decision-point FEN) — no per-navigation network call.
-- **Cloud list = the branch's alternatives, not opponent replies.** Same `cdbFen`
-  framing: the 雲庫 tab lists the moves playable at the decision point (the active
-  move + its siblings). Clicking one adds it as a *sibling* at the branch point
-  (`addCdbMove`→`insertMoveAt(branchPath,…)`), NOT a child of the active move.
+- **Cloud list defaults to the branch's alternatives; a toggle adds "下一步".**
+  The 雲庫 tab has a `當前步`／`下一步` toggle (`EDITOR.cdbScope`, `cdbTabFen()`).
+  - `當前步` (DEFAULT, prev): same `cdbFen` framing as the eval line — lists the
+    moves playable at the decision point (active move + its siblings). Clicking
+    adds a *sibling* at the branch point (`insertMoveAt(activePath.slice(0,-1),…)`).
+    Behaviour is byte-for-byte the old single-scope path.
+  - `下一步` (next): lists moves at `currentFen` (after the active move) — the
+    next ply's options. Clicking adds a *child* of the active move
+    (`insertMoveAt(activePath,…)`).
+  **Only the tab honours `cdbScope`; the eval line ALWAYS keys to `cdbFen()`**
+  (the decision-point rule above is unchanged). Consequence: in `下一步` mode the
+  navigation live-query targets `currentFen`, so the eval line's 雲 cell falls
+  back to batch data for `analysisFen` (off-book positions may show no 雲). This
+  is deliberate — `cdbLive` is a single slot; a second live query per nav would
+  thrash. See ARCHITECTURE.md 雲庫 section.
 - **Return shape mirrors `eval_service`'s `cdb`** (`{status, moves, best,
   source}`) so cached (batch) and live results share `renderEvalLine` /
   `renderCdbTab`. Scores are mover-POV cp; UI flips to red POV for display.

@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>梅友弈鑑 — 象棋譜分析</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/editor.css?v=17">
+  <link rel="stylesheet" href="/assets/editor.css?v=20">
 </head>
 
 <body>
@@ -30,15 +30,7 @@
           <option value="gilded">鎏金歲月</option>
         </select>
       </label>
-      <label class="viewToggle" for="boardViewToggle" title="切換紅黑方棋盤視角">
-        <input id="boardViewToggle" type="checkbox">
-        <span class="viewToggleTrack">
-          <span class="viewToggleText">紅方</span>
-          <span class="viewToggleThumb"></span>
-          <span class="viewToggleText">黑方</span>
-        </span>
-      </label>
-      <button id="metaBtn" disabled title="編輯賽事資訊">賽事資訊</button>
+      <span class="actionsDivider" aria-hidden="true"></span>
       <button id="saveBtn" disabled>儲存</button>
       <span id="status"></span>
     </div>
@@ -55,7 +47,10 @@
     </aside>
     <div class="splitter splitter-v" data-resize="filePane" data-pref="splitFileW"></div>
     <section id="boardPane">
-      <h2 id="fileTitle">尚未載入</h2>
+      <div id="fileTitleBar">
+        <h2 id="fileTitle">尚未載入</h2>
+        <button id="metaBtn" class="iconBtn" disabled title="編輯賽事資訊"></button>
+      </div>
       <svg id="board" viewBox="0 0 540 600"></svg>
       <div id="navBar">
         <button id="navFirst" title="回開局 (Home)">|◀</button>
@@ -64,6 +59,7 @@
         <button id="navNext" title="下一步 (→)">▶</button>
         <button id="navLast" title="最末步 (End)">▶|</button>
         <span id="moveInfo"></span>
+        <button id="perspectiveBtn" title="切換紅黑方棋盤視角">紅方</button>
       </div>
       <div id="evalLine" title="評估的是「走這步之前」的決策點（前一步）：深N＝該局面引擎分、建議＝該局面最佳著、雲＝雲庫最佳著。用來評斷目前這步走得好不好。"></div>
     </section>
@@ -115,9 +111,13 @@
             <div id="varPicker"></div>
           </div>
           <div id="rpCdbBody" class="rpTabBody" data-tab="cdb" hidden>
-            <div class="cdbBar">
+            <div class="engineBar">
+              <div class="segToggle" role="group" aria-label="查詢局面">
+                <button id="cdbScopePrev" class="iconBtn segBtn active" data-scope="prev" title="列出走「目前這一步」可選的著法（當前著＋同層分支）">當前步</button>
+                <button id="cdbScopeNext" class="iconBtn segBtn" data-scope="next" title="列出走完本步「之後」局面可走的著法（點擊加入為當前著的後續）">下一步</button>
+              </div>
+              <button id="cdbRefreshBtn" class="iconBtn" title="重新向 chessdb.cn 查詢目前顯示的局面（略過快取）">重查</button>
               <span id="cdbState" class="engineState">—</span>
-              <button id="cdbRefreshBtn" class="iconBtn" title="重新向 chessdb.cn 查詢本局面（略過快取）">重查</button>
             </div>
             <div id="cdbList" class="cdbList"></div>
           </div>
@@ -132,8 +132,10 @@
           </div>
           <div id="rpEngineBody" class="rpTabBody" data-tab="engine" hidden>
             <div class="engineBar">
-              <button id="engineToggleBtn" class="iconBtn engineToggle" title="分析前一步的局面（評斷本步走法好壞）／停止">分析前一步</button>
-              <button id="engineCurBtn" class="iconBtn engineToggle" title="分析本步的局面（走完本步之後）">分析本步</button>
+              <div class="segToggle" role="group" aria-label="分析局面">
+                <button id="engineToggleBtn" class="iconBtn segBtn" title="分析前一步的局面（評斷本步走法好壞）；再按一次停止">前一步</button>
+                <button id="engineCurBtn" class="iconBtn segBtn" title="分析本步的局面（走完本步之後）；再按一次停止">本步</button>
+              </div>
               <button id="engineClearBtn" class="iconBtn" title="清除分析歷程">清除</button>
               <button id="engineExportBtn" class="iconBtn" title="複製分析歷程到剪貼簿">導出</button>
               <span id="engineState" class="engineState">尚未開始</span>
