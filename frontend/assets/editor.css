@@ -1159,8 +1159,9 @@ h2.panelHead>span {
 /* 紅|黑 perspective: a single button at the nav row's right edge (#moveInfo,
    flex:3, grows to push it there). Shows the CURRENT side; click flips. Wider
    than the glyph nav buttons (it carries a CJK label) so it opts out of their
-   flex:1/max-width sizing. The side tints the label (red=accent, black=blue),
-   echoing the old toggle's colour cue. */
+   flex:1/max-width sizing. The side tints the label with the semantic side
+   colours (--side-red-strong / --side-black-strong, bold) so 紅/黑 read the
+   same as the annote pills + analysis chart. */
 #navBar #perspectiveBtn {
   flex: 0 0 auto;
   max-width: none;
@@ -1169,12 +1170,15 @@ h2.panelHead>span {
   font-size: 13px;
 }
 
+/* 紅/黑視角字色用語意側色（與注解 pill、分析圖同源），加粗以醒目。 */
 #navBar #perspectiveBtn.persRed {
-  color: var(--accent-strong);
+  color: var(--side-red-strong);
+  font-weight: 700;
 }
 
 #navBar #perspectiveBtn.persBlack {
-  color: #b9ddf0;
+  color: var(--side-black-strong);
+  font-weight: 700;
 }
 
 /* ---------- right: 棋譜 | (注解 / 本步可選) — flex with splitters ---------- */

@@ -2509,7 +2509,7 @@ function updatePerspectiveBtn() {
   const btn = $("#perspectiveBtn");
   if (!btn) return;
   const isRed = currentPerspective() === "red";
-  btn.innerHTML = iconLabel("flip", isRed ? "紅方" : "黑方");
+  btn.innerHTML = iconLabel("flip", isRed ? "紅" : "黑");
   btn.classList.toggle("persRed", isRed);
   btn.classList.toggle("persBlack", !isRed);
   btn.title = `目前：${isRed ? "紅方" : "黑方"}視角（點擊切換）`;
