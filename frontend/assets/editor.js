@@ -72,6 +72,7 @@ const UI_THEMES = {
   copper: "赤銅棕",
   pineash: "松煙灰",
   moxa: "摩莎青",
+  light: "霜月白",
 };
 function editorColors() {
   const t = document.documentElement.dataset.board || "traditional";
@@ -3369,9 +3370,12 @@ function drawAiChart(svg, points, cursorIdx) {
     // Read the LEAF hex tokens (getComputedStyle doesn't resolve nested var()).
     const aRed = cssVar("--side-red-strong") || "#e2594f";
     const aBlk = cssVar("--side-black-strong") || "#5b9be0";
+    // Area depth is theme-tunable: light theme dials it down (--chart-area-alpha
+    // 0.16) for a 素淨 look; dark keeps the original 0.42.
+    const aA = parseFloat(cssVar("--chart-area-alpha")) || 0.42;
     for (const [off, col] of [
-      [0, hexToRgba(aRed, 0.42)], [f, hexToRgba(aRed, 0.05)],
-      [f, hexToRgba(aBlk, 0.05)], [1, hexToRgba(aBlk, 0.42)],
+      [0, hexToRgba(aRed, aA)], [f, hexToRgba(aRed, 0.05)],
+      [f, hexToRgba(aBlk, 0.05)], [1, hexToRgba(aBlk, aA)],
     ]) {
       const s = document.createElementNS(SVG_NS, "stop");
       s.setAttribute("offset", off); s.setAttribute("stop-color", col);

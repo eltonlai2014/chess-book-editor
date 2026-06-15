@@ -62,6 +62,36 @@
   --eval-black: var(--side-black-strong);
   --eval-query: var(--accent-strong);
   --eval-flag: #f4a521;
+  --chart-area-alpha: 0.42;   /* advantage-fill depth; light theme dials down */
+
+  /* === State / data text colours === these defaults are LIGHT (tuned for the
+     dark themes); the 霜月白 light theme overrides each to a dark, legible value.
+     Tokenised so hardcoded cream/parchment/gold/delta hexes stop disappearing
+     on a light background. Dark themes inherit these defaults unchanged. */
+  --text-active: #fff2d8;
+  /* emphasis text on active/selected rows (was #fff2d8/#fff1d8/#fff4de) */
+  --accent-gold: #e8bb60;
+  /* best-move / rank gold accent, cross-theme */
+  --score-text: #eadcc0;
+  /* score & move readouts on panels (was #eadcc0/#cdc6aa) */
+  /* muted readout base for the nav move-info + eval line (was hard-coded
+     #c7bda9/#bfb5a2 warm-beige — washed out on the light grey board panel) */
+  --readout-muted: #c7bda9;
+  --delta-pos-strong: #6fcf7d;
+  --delta-pos-mild: #9bd6a4;
+  --delta-neg-strong: #e07a6b;
+  --delta-neg-mild: #d6a59b;
+  --delta-neutral: #b9ad92;
+  /* trap=amber / brilliant=violet row marks (border + text), per chess-book-ai */
+  --mark-trap: #c0763a;
+  --mark-trap-text: #e09864;
+  --mark-brilliant: #9b7cd9;
+  --mark-brilliant-text: #b8a0e8;
+  /* 勝/和/負 (engine winrate) — light-green/faint-grey/red read on dark panels;
+     the light theme darkens all three so they don't wash out on near-white. */
+  --wdl-win: #74c79b;
+  --wdl-draw: var(--text-faint);
+  --wdl-loss: var(--delta-neg-mild);
 
   /* Monospace token — Sarasa Fixed TC (更紗等寬) makes Latin digits exactly
      half a CJK width, so 棋譜編號/分數/PV align with 中文 glyphs per-column.
@@ -97,6 +127,34 @@
   --btn-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
   --btn-gold-hover-bg: linear-gradient(180deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.06));
   --btn-danger-hover-bg: linear-gradient(180deg, rgba(var(--err-rgb), 0.18), rgba(var(--err-rgb), 0.08));
+  /* Button text/active/chip colours. Defaults assume a dark-on-bright accent
+     (gold/teal) for the FILLED primary, and a soft tint for active segments —
+     correct on dark themes. The light theme flips primary/active text to white
+     (dark-brown-on-teal was illegible) and darkens ghost/chip text so controls
+     read on a near-white surface. */
+  --btn-primary-text: #2a1f0a;
+  --btn-primary-text-hover: #1a1305;
+  --btn-ghost-text: var(--text-muted);
+  --btn-active-bg: var(--btn-gold-hover-bg);
+  --btn-active-text: var(--accent-strong);
+  --chip-text: var(--accent);
+  --chip-text-strong: var(--accent-strong);
+
+  /* === Surface gradient tokens ===
+     The panel/card/input backgrounds were hard-coded warm-brown dark gradients
+     (an implicit dark-theme assumption — exactly the trap that left the light
+     theme's panels black). Centralised here so the light theme can override the
+     whole surface family in one place. Values below are byte-identical to the
+     old literals → dark themes unchanged. *-solid = opaque base for sticky
+     headers (must not show scrolling content through). */
+  --surface-panel: linear-gradient(180deg, rgba(47, 42, 35, 0.55) 0%, rgba(29, 26, 22, 0.92) 100%);
+  --surface-head: linear-gradient(180deg, rgba(58, 52, 44, 0.40), rgba(37, 33, 28, 0.88));
+  --surface-head-solid: linear-gradient(180deg, rgba(44, 38, 31, 1), rgba(27, 24, 20, 1));
+  --surface-scroll: linear-gradient(180deg, rgba(44, 38, 31, 0.94), rgba(27, 24, 20, 0.98));
+  --surface-input: linear-gradient(180deg, rgba(30, 27, 22, 0.96), rgba(24, 21, 18, 0.98));
+  --surface-input-focus: linear-gradient(180deg, rgba(42, 37, 30, 0.98), rgba(27, 24, 20, 0.98));
+  --surface-eval: linear-gradient(180deg, rgba(37, 33, 28, 0.96), rgba(32, 28, 23, 0.98));
+  --surface-raised: linear-gradient(180deg, rgba(37, 33, 28, 0.98), rgba(28, 25, 21, 0.98));
 }
 
 html[data-ui-theme="ember"] {
@@ -253,6 +311,97 @@ html[data-ui-theme="moxa"] {
   --info: #5fb2c6;
 }
 
+/* 霜月白 — 唯一的淺色主題：冷淺灰素淨底 + 摩莎青 accent。淺色與暗色主題有兩個
+   結構性差異，所以這個區塊比其他主題覆寫更多 token：
+   (1) elevation 反轉：暗模式「越上層越亮」，淺模式 raised 面板偏白(--bg-2=#fff)、
+       hover/header 反而偏灰(--bg-3/4 更深)，文字才有對比。
+   (2) *-strong 取「更深」而非更亮——淺底上更亮＝更糊。
+   (3) --shadow-* 、--eval-line、--btn-glass-bg 在 :root 是暗色預設（黑陰影過重、
+       淺米色分析線會消失、白玻璃高光反光錯誤），淺底必須一併覆寫。
+   注意：約 30 處元件 CSS 仍寫死 rgba(255,255,255,.02~.05) 的 bevel 高光（暗底假設），
+   在此淺底近乎隱形——不破版，留待後續 token 化精修，勿在此主題逐一 hack。 */
+html[data-ui-theme="light"] {
+  /* backdrop (body + main, behind/between panels) → WHITE; the grey panel cards
+     below read as raised content blocks floating on the white page. */
+  --bg-0: #ffffff;
+  --bg-1: #ffffff;
+  --bg-2: #ffffff;
+  --bg-3: #eef1f3;
+  --bg-4: #e3e7ea;
+  --line: #dfe3e7;
+  --line-strong: #c7cdd3;
+  --text: #1c2226;
+  --text-muted: #5b656d;
+  /* faint deepened for light: #97a0a7 vanished on grey panels (eval labels,
+     hints, placeholders). Still clearly the faintest tier, just legible. */
+  --text-faint: #7a838b;
+  --readout-muted: #4b555d;
+  --accent: #239892;
+  --accent-rgb: 35, 152, 146;
+  --accent-strong: #1b7f79;
+  --accent-strong-rgb: 27, 127, 121;
+  --accent-soft: rgba(var(--accent-rgb), 0.12);
+  --info: #2a7d8c;
+  /* ok-green deepened: the :root #7ec47e (pale, dark-tuned) washed out on white
+     — the 「● 已載入」status was barely legible. */
+  --ok: #2f8f4f;
+  --side-red: #c0392b;
+  --side-red-strong: #a92518;
+  --side-black: #355f8c;
+  --side-black-strong: #2c5180;
+  --eval-line: rgba(28, 34, 40, 0.55);
+  --eval-flag: #c9821a;
+  /* AI 走勢圖 → 素淨: faint advantage fill, muted dots, neutral cursor ring so
+     the chart isn't a 4-hue clutter on white. */
+  --chart-area-alpha: 0.16;
+  --eval-red: #b15a4f;
+  --eval-black: #5e79a0;
+  --eval-query: #33404a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.10);
+  /* ghost buttons: a white→light-grey pill, raised on the grey panel heads. */
+  --btn-glass-bg: linear-gradient(180deg, #ffffff, #eceff1);
+  /* filled primary (儲存/建立/套用) + active segment → white text on teal;
+     ghost/chip text darkened for contrast on the near-white surfaces. */
+  --btn-primary-text: #ffffff;
+  --btn-primary-text-hover: #ffffff;
+  --btn-ghost-text: #3a444c;
+  --btn-active-bg: var(--accent);
+  --btn-active-text: #ffffff;
+  --chip-text: #0f5752;
+  --chip-text-strong: #0f5752;
+  /* state/data text → dark legible variants (defaults above are light-on-dark) */
+  --text-active: #0f3b38;
+  --accent-gold: #946000;
+  --score-text: #1c2226;
+  --delta-pos-strong: #1f7a3d;
+  --delta-pos-mild: #2f8f4f;
+  --delta-neg-strong: #c0392b;
+  --delta-neg-mild: #b5564a;
+  --delta-neutral: #6b6456;
+  --mark-trap: #b5651f;
+  --mark-trap-text: #8a4a12;
+  --mark-brilliant: #6d44b8;
+  --mark-brilliant-text: #4e2f8c;
+  --wdl-win: #1f7a3d;
+  --wdl-draw: #5b656d;
+  --wdl-loss: var(--delta-neg-strong);
+  /* surface family → cool-grey cards sitting on the WHITE backdrop. Cards a
+     clear grey; heads a step deeper; scroll/eval soft grey. Inputs + modals
+     stay near-white as the editable/elevated foreground. */
+  --surface-panel: linear-gradient(180deg, #e9edf0 0%, #e1e6ea 100%);
+  /* navBar (--surface-head) + eval line (--surface-eval) → soft celadon tint so
+     the control/readout zone reads distinct from the neutral grey panels. Only
+     these two selectors use these tokens, so panel headers stay grey. */
+  --surface-head: linear-gradient(180deg, #e4f1f0, #d8eae8);
+  --surface-head-solid: linear-gradient(180deg, #e0e5e9, #d7dde2);
+  --surface-scroll: linear-gradient(180deg, #ebeef1, #e3e8eb);
+  --surface-input: linear-gradient(180deg, #ffffff, #f7f9fa);
+  --surface-input-focus: linear-gradient(180deg, #ffffff, #f3f6f8);
+  --surface-eval: linear-gradient(180deg, #e4f1f0, #d8eae8);
+  --surface-raised: linear-gradient(180deg, #fdfdfe, #f1f4f6);
+}
+
 /* Sarasa Fixed TC (更紗等寬, SIL OFL) — bundled locally for offline use, like
    the vendored cchess wheel. Subset to the xiangqi-notation charset keeps the
    woff2 tiny. If the file is absent the --mono stack falls back to SF Mono. */
@@ -339,7 +488,7 @@ body {
 #saveBtn:not(:disabled),
 .modalActions button.primary {
   background: var(--accent);
-  color: #2a1f0a;
+  color: var(--btn-primary-text);
   border: 1px solid var(--accent-strong);
   font-weight: 600;
   cursor: pointer;
@@ -349,7 +498,7 @@ body {
 #saveBtn:not(:disabled):hover,
 .modalActions button.primary:hover:not(:disabled) {
   background: var(--accent-strong);
-  color: #1a1305;
+  color: var(--btn-primary-text-hover);
   border-color: var(--accent-strong);
 }
 
@@ -392,7 +541,7 @@ body {
 .evalDbRowSide #evalDbPickBtn,
 .varOpt .varPromote {
   background: var(--btn-glass-bg);
-  color: var(--text-muted);
+  color: var(--btn-ghost-text);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: var(--btn-radius);
   cursor: pointer;
@@ -549,7 +698,7 @@ main {
   padding: 10px;
   background:
     radial-gradient(circle at top center, rgba(var(--accent-rgb), 0.05), transparent 38%),
-    linear-gradient(180deg, #191611 0%, var(--bg-1) 100%);
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
 }
 
 #filePane {
@@ -573,6 +722,17 @@ main {
   flex-direction: row;
   overflow: hidden;
   gap: 10px;
+  /* #rightPane is a pure flex CONTAINER (holds the 棋譜 column + 注解/走法
+     column), NOT a visual panel — but as an <aside> it matched `aside, section`
+     and inherited that rule's card border + box-shadow + surface bg. Its top
+     border read as a stray horizontal line across the panel tops (the line the
+     master kept seeing). Strip the card styling; the inner .rpSection panels
+     carry the real frames. (The sibling #rpMoves/.rpRightCol/… reset only
+     cleared background, not border/shadow, and missed #rightPane entirely.) */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 #rpMoves {
@@ -594,7 +754,7 @@ main {
 aside,
 section {
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(47, 42, 35, 0.55) 0%, rgba(29, 26, 22, 0.92) 100%);
+  background: var(--surface-panel);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 12px;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.02);
@@ -833,7 +993,7 @@ h2 {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--accent);
+  color: var(--chip-text);
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.06));
   border: 1px solid rgba(var(--accent-rgb), 0.22);
   padding: 8px 8px 8px 10px;
@@ -941,7 +1101,7 @@ h2 {
 
 #fileTree li.file.active {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.24), rgba(var(--accent-rgb), 0.10));
-  color: #fff2d8;
+  color: var(--text-active);
   border-left-color: var(--accent-strong);
   font-weight: 600;
   box-shadow: inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.16);
@@ -1023,7 +1183,7 @@ h2 {
   width: 100%;
   flex: 0 0 auto;
   padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(58, 52, 44, 0.40), rgba(37, 33, 28, 0.88));
+  background: var(--surface-head);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -1090,7 +1250,7 @@ h2.panelHead {
   border-top-right-radius: 12px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
-    linear-gradient(180deg, rgba(44, 38, 31, 1), rgba(27, 24, 20, 1));
+    var(--surface-head-solid);
 }
 
 #rpMoves>.panelHead {
@@ -1121,7 +1281,7 @@ h2.panelHead {
   border-top-right-radius: 12px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
-    linear-gradient(180deg, rgba(44, 38, 31, 1), rgba(27, 24, 20, 1));
+    var(--surface-head-solid);
 }
 
 h2.panelHead>span {
@@ -1150,7 +1310,7 @@ h2.panelHead>span {
 #moveInfo {
   margin-left: 12px;
   font-size: 13px;
-  color: #bfb5a2;
+  color: var(--readout-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1203,7 +1363,7 @@ h2.panelHead>span {
   scrollbar-gutter: stable;
   min-height: 0;
   min-width: 0;
-  background: linear-gradient(180deg, rgba(44, 38, 31, 0.94), rgba(27, 24, 20, 0.98));
+  background: var(--surface-scroll);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   border-radius: 12px;
   box-shadow:
@@ -1369,7 +1529,7 @@ h2.panelHead>span {
 }
 
 .engEntry:first-child .engMeta .engBig {
-  color: #fff1d8;
+  color: var(--text-active);
 }
 
 .engMeta {
@@ -1393,17 +1553,17 @@ h2.panelHead>span {
 }
 
 .engMeta .wdlW {
-  color: #74c79b;
+  color: var(--wdl-win);
 }
 
 /* 勝 — green */
 .engMeta .wdlD {
-  color: var(--text-faint);
+  color: var(--wdl-draw);
 }
 
 /* 和 — muted */
 .engMeta .wdlL {
-  color: #e08a90;
+  color: var(--wdl-loss);
 }
 
 /* 負 — red */
@@ -1424,8 +1584,8 @@ h2.panelHead>span {
 /* Side-coloured move text, shared by the 引擎分析 PV and the 🤖AI走棋 log:
    red side warm-red, black side blue — same hues as the annote tone chips,
    tuned for legibility as text on the dark panel. */
-.moveRed { color: #e8796a; }
-.moveBlk { color: #6aa6e8; }
+.moveRed { color: var(--side-red-strong); }
+.moveBlk { color: var(--side-black-strong); }
 
 /* Inline icons — one stroke set across the whole app. */
 .ico {
@@ -1594,7 +1754,7 @@ h2.panelHead>span {
 .plyLine.active {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
   border-left-color: var(--accent-strong);
-  color: #fff4de;
+  color: var(--text-active);
   font-weight: 600;
   box-shadow: inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.16);
 }
@@ -1650,24 +1810,24 @@ h2.panelHead>span {
    violet-brilliant convention. Border-left replaces the active accent only
    when the row is NOT active, so navigation highlight still wins visually. */
 .plyLine.ply-trap:not(.active) {
-  border-left-color: #c0763a;
+  border-left-color: var(--mark-trap);
   background: rgba(192, 118, 58, 0.08);
 }
 
 .plyLine.ply-brilliant:not(.active) {
-  border-left-color: #9b7cd9;
+  border-left-color: var(--mark-brilliant);
   background: rgba(155, 124, 217, 0.08);
 }
 
 .plyMark-trap {
-  border-color: #c0763a !important;
-  color: #e09864 !important;
+  border-color: var(--mark-trap) !important;
+  color: var(--mark-trap-text) !important;
   background: rgba(192, 118, 58, 0.12);
 }
 
 .plyMark-brilliant {
-  border-color: #9b7cd9 !important;
-  color: #b8a0e8 !important;
+  border-color: var(--mark-brilliant) !important;
+  color: var(--mark-brilliant-text) !important;
   background: rgba(155, 124, 217, 0.12);
 }
 
@@ -1687,7 +1847,7 @@ h2.panelHead>span {
 #annoteBox {
   flex: 1 1 auto;
   width: 100%;
-  background: linear-gradient(180deg, rgba(30, 27, 22, 0.96), rgba(24, 21, 18, 0.98));
+  background: var(--surface-input);
   color: var(--text);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
   border-radius: 10px;
@@ -1703,7 +1863,7 @@ h2.panelHead>span {
 #annoteBox:focus {
   outline: none;
   border-color: rgba(var(--accent-strong-rgb), 0.40);
-  background: linear-gradient(180deg, rgba(42, 37, 30, 0.98), rgba(27, 24, 20, 0.98));
+  background: var(--surface-input-focus);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 0 3px rgba(var(--accent-rgb), 0.10);
@@ -2042,7 +2202,7 @@ h2.panelHead>span {
 }
 
 .aiReadDual .aiDiff.flag {
-  color: #f4a521;
+  color: var(--eval-flag);
 }
 
 /* settings — numeric input (AI analysis depth) */
@@ -2066,7 +2226,7 @@ h2.panelHead>span {
   padding: 7px 8px 7px 11px;
   font-size: 11px;
   font-family: var(--mono);
-  color: var(--accent-strong);
+  color: var(--chip-text-strong);
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.10));
   border: 1px solid rgba(var(--accent-rgb), 0.30);
   border-radius: 10px;
@@ -2103,12 +2263,12 @@ h2.panelHead>span {
 #evalLine {
   margin-top: 8px;
   padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(37, 33, 28, 0.96), rgba(32, 28, 23, 0.98));
+  background: var(--surface-eval);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.12);
   border-radius: 10px;
   font-size: 13px;
   line-height: 1.45;
-  color: #c7bda9;
+  color: var(--readout-muted);
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
@@ -2130,19 +2290,19 @@ h2.panelHead>span {
 }
 
 #evalLine .evalLabel {
-  color: #9f957f;
+  color: var(--text-faint);
   margin-right: 4px;
   letter-spacing: 0.03em;
 }
 
 #evalLine .evalScore {
-  color: #eadcc0;
+  color: var(--score-text);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 
 #evalLine .evalBest .evalMove {
-  color: #e8bb60;
+  color: var(--accent-gold);
   font-weight: 600;
 }
 
@@ -2188,7 +2348,7 @@ h2.panelHead>span {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
   border-color: rgba(var(--accent-strong-rgb), 0.16);
   border-left-color: var(--accent-strong);
-  color: #fff1d8;
+  color: var(--text-active);
   box-shadow: none;
 }
 
@@ -2309,8 +2469,8 @@ h2.panelHead>span {
 }
 
 .segBtn.active {
-  background: var(--btn-gold-hover-bg);
-  color: var(--accent-strong);
+  background: var(--btn-active-bg);
+  color: var(--btn-active-text);
 }
 
 /* ---------- ☁ 雲庫 (chessdb.cn cloud-library) tab ---------- */
@@ -2354,7 +2514,7 @@ h2.panelHead>span {
 }
 
 .cdbOpt.best {
-  border-left-color: #e8bb60;
+  border-left-color: var(--accent-gold);
   background: linear-gradient(90deg, rgba(232, 187, 96, 0.12), rgba(232, 187, 96, 0.02));
 }
 
@@ -2362,7 +2522,7 @@ h2.panelHead>span {
   border-color: rgba(var(--accent-strong-rgb), 0.35);
   border-left-color: var(--accent-strong);
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.04));
-  color: #fff1d8;
+  color: var(--text-active);
 }
 
 .cdbOpt .cdbHere {
@@ -2382,12 +2542,12 @@ h2.panelHead>span {
 }
 
 .cdbOpt.best .cdbRank {
-  color: #e8bb60;
+  color: var(--accent-gold);
 }
 
 .cdbOpt .cdbMove {
   flex: 1 1 auto;
-  color: #eadcc0;
+  color: var(--score-text);
 }
 
 .cdbOpt .cdbWr {
@@ -2403,28 +2563,28 @@ h2.panelHead>span {
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  color: #cdc6aa;
+  color: var(--score-text);
 }
 
 /* Red-POV signed colouring (editor.css doesn't load the site's delta-* set). */
 .cdbScore.delta-pos-strong {
-  color: #6fcf7d;
+  color: var(--delta-pos-strong);
 }
 
 .cdbScore.delta-pos-mild {
-  color: #9bd6a4;
+  color: var(--delta-pos-mild);
 }
 
 .cdbScore.delta-neg-strong {
-  color: #e07a6b;
+  color: var(--delta-neg-strong);
 }
 
 .cdbScore.delta-neg-mild {
-  color: #d6a59b;
+  color: var(--delta-neg-mild);
 }
 
 .cdbScore.delta-neutral {
-  color: #b9ad92;
+  color: var(--delta-neutral);
 }
 
 /* ☁ 雲庫演繹: the forward chessdb main line, rendered as a flowing sequence. */
@@ -2441,7 +2601,7 @@ h2.panelHead>span {
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   background: var(--bg-3);
-  color: #eadcc0;
+  color: var(--score-text);
 }
 
 .cdbLineMove>b {
@@ -2457,23 +2617,23 @@ h2.panelHead>span {
 }
 
 .cdbLineScore.delta-pos-strong {
-  color: #6fcf7d;
+  color: var(--delta-pos-strong);
 }
 
 .cdbLineScore.delta-pos-mild {
-  color: #9bd6a4;
+  color: var(--delta-pos-mild);
 }
 
 .cdbLineScore.delta-neg-strong {
-  color: #e07a6b;
+  color: var(--delta-neg-strong);
 }
 
 .cdbLineScore.delta-neg-mild {
-  color: #d6a59b;
+  color: var(--delta-neg-mild);
 }
 
 .cdbLineScore.delta-neutral {
-  color: #b9ad92;
+  color: var(--delta-neutral);
 }
 
 /* ---------- modal (metadata editor) ---------- */
@@ -2538,7 +2698,7 @@ h2.panelHead>span {
   border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
   background:
     radial-gradient(circle at top, rgba(var(--accent-rgb), 0.08), transparent 42%),
-    linear-gradient(180deg, rgba(37, 33, 28, 0.98), rgba(28, 25, 21, 0.98));
+    var(--surface-raised);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 

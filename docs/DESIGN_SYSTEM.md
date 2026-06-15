@@ -18,7 +18,15 @@ UI **介面主題**與**棋盤風格**是兩個獨立下拉，可自由配對（
     （zhongguose.com）。對映：松煙灰←Gallery Stone、琥珀夜←Bronze Artifact、
     赤銅棕←Terracotta Exhibit、梅影紫←Velvet Rope、青玉霧←Patina Frame、
     墨夜藍←黛/群青深藍底＋精煉 azure accent（名字是「藍」→ accent 就是藍，非金）。
+  - 霜月白(light)＝**唯一的淺色主題**（冷白襯底＋灰面板＋摩莎青 accent，配青瓷盤）。淺色不是把暗色
+    反過來改值就好，有三點結構差異：①elevation 反轉（raised 面板偏白 `--bg-2=#fff`、
+    hover/header 反而偏灰）；②`*-strong` 取「更深」而非更亮（淺底上更亮＝更糊）；
+    ③大量視覺值在 `:root` 是**暗色預設**（陰影、表面漸層、按鈕／晶片／狀態／走勢圖文字色…），
+    淺底**必須一併覆寫**——整理成下方〈表面／控件 token 族〉，淺色在那一處翻轉即可。仍有約
+    30 處元件 CSS 寫死 `rgba(255,255,255,.02~.05)` bevel 高光（暗底假設），淺底近乎隱形＝
+    待 token 化的後續，非 bug。
   - 新增主題＝複製一個 `html[data-ui-theme]` 區塊改值；別在元件 CSS 寫死顏色。
+    （淺色主題例外：照上述三點多覆寫繼承自 `:root` 的暗色 token。）
 - **棋盤風格**（5 種）定義在 [frontend/assets/board.js](../frontend/assets/board.js)
   `BOARD_STYLES`（JS 物件，驅動 SVG 程序化背景／棋子）。
 
@@ -31,12 +39,41 @@ UI **介面主題**與**棋盤風格**是兩個獨立下拉，可自由配對（
 
 分析圖另有 `--eval-line / --eval-red / --eval-black / --eval-query / --eval-flag`
 （多數 derive 自 `--side-*`）。CSS 接點在 `.aiChart .ai*`；面積漸層在
-[editor.js](../frontend/assets/editor.js) `renderAiChart`，用 `cssVar()`＋`hexToRgba()`
+[editor.js](../frontend/assets/editor.js) `drawAiChart`，用 `cssVar()`＋`hexToRgba()`
 讀**葉子** token `--side-red-strong/--side-black-strong`（`getComputedStyle` 不會展開
-巢狀 `var()`，故不能讀 `--eval-*`）。
+巢狀 `var()`，故不能讀 `--eval-*`）。面積**深度**另抽 `--chart-area-alpha`（`:root` 0.42；
+霜月白調到 0.16 走素淨），讓淺色把優勢填色變淡而不動暗色。
 
 棋盤箭頭（`ARROW_THEMES`）與選取框（`EDITOR_THEME_COLORS`）仍**隨棋盤**走（非介面主題），
 因為它們疊在棋盤上、要對棋盤底色。
+
+### 表面／控件 token 族（淺色主題的覆寫面）
+
+面板/卡片/輸入框的背景、按鈕文字、晶片字、狀態色等**原本散落寫死成暖棕暗色**（暗底假設，
+正是讓霜月白第一版面板全黑、字暈/糊的根因）。已集中成下列族，**`:root` 值＝原暗色（暗主題
+byte-identical）、`html[data-ui-theme="light"]` 一處覆寫成冷淺色**。新增淺色相關視覺一律
+擴充這些 token，別在元件 CSS 開第二條路。CSS 定義都在
+[editor.css](../frontend/assets/editor.css)：
+
+- **`--surface-*`**（`panel`／`head`／`head-solid`／`scroll`／`input`／`input-focus`／
+  `eval`／`raised`）＝面板/標題列/捲動區/輸入框/eval 行/卡片的背景漸層。`*-solid`＝
+  sticky 標題用不透明底（捲動內容不可透出）。**只有這些 token 帶 surface 背景**，所以淺色
+  在這一族就能整批翻成灰白。注意 `--surface-head` 只給 `#navBar`、`--surface-eval` 只給
+  `#evalLine`（霜月白把這兩個調成淡青，與灰面板區隔），改它們不波及面板標題。
+- **按鈕**：`--btn-primary-text`(/`-hover`)＝填色主鈕（儲存/建立/套用）文字（暗＝深字壓金/青；
+  淺＝白字）；`--btn-ghost-text`＝ghost 鈕文字；`--btn-active-bg`(/`-text`)＝segmented 選中段；
+  `--btn-glass-bg`＝ghost 鈕底（淺色＝白→淺灰藥丸，否則白底上隱形）。
+- **`--chip-text` / `--chip-text-strong`**＝路徑/資料庫晶片（`.rootPath`／`.evalDbRow`）文字
+  （淺色＝深青，否則青字壓青底看不清）。
+- **`--wdl-win` / `--wdl-draw` / `--wdl-loss`**＝引擎勝率 勝/和/負（`.engMeta .wdl*`）；
+  暗色淺綠/淡灰/紅，淺色一律調深。
+- **`--readout-muted`**＝導航列走法字（`#moveInfo`）＋eval 行底字（`#evalLine`）的中性讀數色
+  （原寫死暖米 `#c7bda9/#bfb5a2`，淺底糊）。
+- **`--ok`**＝「● 已載入」狀態綠（`:root` 淡綠 dark-tuned，霜月白覆寫深綠）。
+
+棋盤（`BOARD_STYLES`）是**獨立系統**、不吃上列 UI token。其中 `celadon`(青瓷素雅) 適配白底
+UI：淺盤須 `engrave:false`（深盤的壓印字在淺盤上會雙影＝暈開），紅字取深濃紅、lastMove/
+suggest 取對比強的藍/橘（灰綠環會融進綠灰盤）。
 
 ## 2. 字型：等寬對齊
 

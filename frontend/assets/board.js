@@ -367,14 +367,22 @@ const BOARD_STYLES = {
     grid:   { stroke: "#55685f", width: 1.0, outer: 1.8 },
     coord:  { color: "#61756c", font: "serif" },
     river:  { color: "#5c7068", style: "normal" },
-    red:    { fill: "#efe4d7", border: "#87534d", innerRing: null, text: "#b0554a",
+    // red text: deep saturated red (#9e2414) for a clear, strong glyph on the
+    // light cream disc (the earlier #9c3a2c still read washed).
+    red:    { fill: "#efe4d7", border: "#87534d", innerRing: null, text: "#9e2414",
               grad: { from: "#f9f1e8", to: "#d8c7b8" } },
     black:  { fill: "#2f3a36", border: "#141917", innerRing: null, text: "#eef2ef",
               grad: { from: "#4d5c56", to: "#1f2623" } },
+    // engrave OFF: the red side is a LIGHT disc with dark-rose text, so the
+    // engraved dark under-glyph (meant for dark discs + cream text like
+    // stone/gilded) shows as a doubled edge → 字暈開. Matches the other
+    // light-disc themes (傳統/赤銅古木), which keep engrave:false.
     piece:  { shadow: "strong", innerRing: false, gradient: true,
-              specular: false, engrave: true, rim: true },
-    lastMove: { kind: "ring", color: "#6b8a7e" },
-    suggest:  { kind: "ring", color: "#bf6253" },
+              specular: false, engrave: false, rim: true },
+    // last-move/suggest: vivid blue + clear orange so they pop off the green-grey
+    // 青瓷 ground (the muted grey-green/terracotta were near-invisible on it).
+    lastMove: { kind: "ring", color: "#1565c0" },
+    suggest:  { kind: "ring", color: "#e2651a" },
   },
 };
 
