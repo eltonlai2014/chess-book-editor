@@ -11,7 +11,8 @@
 
 編輯器已端到端可用：瀏覽棋庫 → 開 XQF → 導航走法／變例 → 編輯註解（含譜首引言）
 → 存回 XQF。走子樹編輯（新增／刪除走法、變例升降、賽事資訊）已上線。即時引擎分析、
-AI 整條線走勢圖、雲庫即時查皆已接好。完整脈絡見 [docs/HANDOFF.md](docs/HANDOFF.md)。
+AI 整條線走勢圖、雲庫即時查皆已接好。CBL/CBR（象棋橋）亦可直接在 UI 列表／開啟／編輯／存回。
+功能 → 程式碼 `file:line` 對照見 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 已驗證的持久層／格式工作：
 
@@ -33,7 +34,7 @@ vendor/       io_xqf_patched + cchess_cbl + io_cb_writer + io_cwp + cbl_index_fi
               wheels/ — vendored cchess wheel（離線、不受上游 GitHub 影響的安裝來源）
 tests/        XQF / JSON / CBL / CWP / Big5 各種 round-trip 與整合測試
 samples/      xqf/（XQStudio 驗證）+ cbl/（CCBridge3 驗證）
-docs/         HANDOFF.md（跨 session 上下文）、CHESSDB_CLOUD_QUERY.md（雲庫協定）
+docs/         CHESSDB_CLOUD_QUERY.md（雲庫協定）、DESIGN_SYSTEM.md（配色／設計系統）
 ```
 
 ## 安裝
