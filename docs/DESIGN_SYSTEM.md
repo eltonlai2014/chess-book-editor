@@ -48,6 +48,20 @@ UI **介面主題**與**棋盤風格**是兩個獨立下拉，可自由配對（
 棋盤箭頭（`ARROW_THEMES`）與選取框（`EDITOR_THEME_COLORS`）仍**隨棋盤**走（非介面主題），
 因為它們疊在棋盤上、要對棋盤底色。
 
+### 棋譜紅黑著手 ＋ 文字可讀性（淺色取捨）
+
+- **棋譜清單著手字色走 `--ply-red`／`--ply-black` token**：`:root`＝`var(--text)`／
+  `var(--text-muted)`（暗色 byte-identical），霜月白覆寫成 `--ply-red:var(--side-red-strong)`
+  （＝#a92518 朱紅）、`--ply-black:var(--text)`（近黑）——白底紅黑是最通用譜式。
+  **當前手保留紅/黑原色**：active 只靠青底＋左線＋粗體標示，**不把字染成 accent 青**
+  （淺色限定 `html[data-ui-theme="light"] .plyLine.active{…}` 三條覆寫；暗色仍用
+  `--text-active`/`--accent-strong`，深底才夠亮）。
+- **對比度底線**（淺底最易踩，量過再改）：①承載資訊的文字（著手序號等）至少 `--text-muted`
+  階，別用 `--text-faint`（淺底僅 ~3:1，faint 只留純裝飾）；②**小字不要拿 `--accent` 當文字色**
+  （淺底 ~2.9:1）——要 accent 色感改用更深的 `--accent-strong`（霜月白＝#146f68，已給標題／
+  文字對比餘裕）或 `--chip-text`，並確認 ≥ AA 4.5:1。驗證工具：`tools/ui_shot.py`（真 Chromium
+  截圖＋量 computed style）。
+
 ### 表面／控件 token 族（淺色主題的覆寫面）
 
 面板/卡片/輸入框的背景、按鈕文字、晶片字、狀態色等**原本散落寫死成暖棕暗色**（暗底假設，

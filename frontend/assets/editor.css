@@ -54,6 +54,11 @@
   --side-red-strong: #e0594f;
   --side-black: #3f6da0;
   --side-black-strong: #4f8cd2;
+  /* 棋譜清單紅/黑著手「文字色」。暗色主題沿用 text/muted（紅深、黑灰），所以這裡
+     用變數轉指即可、暗色零變化；淺色主題覆寫成 warm/cool（見 light），讓紅暖黑冷
+     用色相分邊，而非靠明暗讀成「主/次要」(P3)。active 列另有 accent 高亮，不受此影響。 */
+  --ply-red: var(--text);
+  --ply-black: var(--text-muted);
 
   /* === Analysis-chart palette === derives from the side colours + accent so
      the AI 分析圖 follows the theme instead of fixed hex. */
@@ -361,8 +366,12 @@ html[data-ui-theme="light"] {
   --readout-muted: #4b555d;
   --accent: #239892;
   --accent-rgb: 35, 152, 146;
-  --accent-strong: #1b7f79;
-  --accent-strong-rgb: 27, 127, 121;
+  /* P2: 由 #1b7f79 加深一階 → #146f68，給文字對比留餘裕。面板標題在青瓷 header 上
+     原僅 4.03:1（AA-large 過關但很貼線），現 ~5:1；accent-strong 文字在灰面板 3.95→4.91。
+     並順帶把 .rpTab.active 實心膠囊的白字從 4.42（略低於 AA）抬到 5.4。同一藍綠色系，
+     只深一步；低 alpha 的邊框/環（用 -rgb）幾乎無感。 */
+  --accent-strong: #146f68;
+  --accent-strong-rgb: 20, 111, 104;
   --accent-soft: rgba(var(--accent-rgb), 0.12);
   --info: #2a7d8c;
   /* ok-green deepened: the :root #7ec47e (pale, dark-tuned) washed out on white
@@ -372,6 +381,11 @@ html[data-ui-theme="light"] {
   --side-red-strong: #a92518;
   --side-black: #355f8c;
   --side-black-strong: #2c5180;
+  /* P3：棋譜白底紅黑（最通用譜式）。原本紅=--text(深近黑)、黑=--text-muted(灰) 讀起來
+     像「主/次要」；改成紅方真朱紅、黑方近黑，用顏色分邊。紅接語意單一來源
+     --side-red-strong(淺色=#a92518，7.08:1)，黑接 --text(#1c2226)。active 列另有 accent 高亮。 */
+  --ply-red: var(--side-red-strong);
+  --ply-black: var(--text);
   --eval-line: rgba(28, 34, 40, 0.55);
   --eval-flag: #c9821a;
   /* AI 走勢圖 → 素淨: faint advantage fill, muted dots, neutral cursor ring so
@@ -1771,6 +1785,7 @@ h2.panelHead>span {
   display: flex;
   align-items: baseline;
   cursor: pointer;
+  color: var(--ply-red);   /* 紅方著手；黑方由 .plyLine.black 覆寫成 --ply-black */
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   user-select: none;
@@ -1792,7 +1807,9 @@ h2.panelHead>span {
 }
 
 .plyLine .plyNum {
-  color: var(--text-faint);
+  /* 著手序號是資訊（第幾手）非裝飾 → muted 階，非 faint：light 主題下
+     text-faint 在白色棋譜區只有 3.86:1（13px 小字 < AA 4.5），整排號碼發虛。 */
+  color: var(--text-muted);
   min-width: 38px;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -1803,8 +1820,18 @@ h2.panelHead>span {
 }
 
 .plyLine.active .plyNum {
-  color: var(--accent);
+  /* --accent 當小字在 accent 染色的當前列只有 2.88:1（全主題最差）。當前列已用
+     底色＋左線＋粗體標示 active，序號改用高對比的 --text-active 即可（深青黑，
+     仍屬 accent 色系，light 下 7+:1）。 */
+  color: var(--text-active);
 }
+
+/* 淺色霜月白：當前走法保留紅/黑原色，不被 accent 青覆蓋（主人要求）。active 已靠
+   青底＋左線＋粗體標示，足夠辨識；紅 #a92518 在青底上 5.5–6.5:1、黑與序號近黑
+   12+:1，均過 AA。暗色主題不動——深底仍需 --text-active/--accent-strong 才夠亮。 */
+html[data-ui-theme="light"] .plyLine.active { color: var(--ply-red); }
+html[data-ui-theme="light"] .plyLine.black.active { color: var(--ply-black); }
+html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 
 .plyLine .plyText {
   flex: 1 1 auto;
@@ -1814,7 +1841,7 @@ h2.panelHead>span {
 }
 
 .plyLine.black {
-  color: var(--text-muted);
+  color: var(--ply-black);
 }
 
 .plyLine.black.active {
