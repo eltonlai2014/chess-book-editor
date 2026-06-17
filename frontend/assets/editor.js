@@ -1873,6 +1873,12 @@ function navigateTo(path) {
   commitAnnoteEdit();
   EDITOR.activePath = path;
   clearSelection();
+  // Release the trend chart's transient inspect state (set by chart hover, or
+  // latched to the final point after a sweep). Otherwise the cursor stays stuck
+  // on that point and keyboard/list navigation wouldn't move it — it'd only
+  // free up on an incidental chart mouseleave. Cleared here so the cursor falls
+  // back to aiActiveIdx() and tracks the board on every navigation.
+  EDITOR.aiAnalysis.queryIdx = null;
   refreshActive();
 }
 
@@ -3104,16 +3110,28 @@ function aiDiffThreshold() {
 
 // Mate maps to a large signed magnitude so a mate-vs-cp swing always counts as
 // a divergence. Returns null only when there's no score at all.
-function aiScoreNum(cp, mate) {
-  if (mate != null) return mate > 0 ? 100000 : -100000;
+// Red-POV sign of a mate score (+1 = red mating/winning, -1 = red being mated).
+// Non-zero mates already carry the sign (engine score × flip). `mate 0` is the
+// terminal checkmate: the side to move is mated NOW, but 0 is unsigned so the
+// engine drops the sign and `0 × flip` is still 0. Recover it from whose turn
+// it is in the position's fen — that side is the LOSER, so red wins iff black
+// is to move. Falls back to red-loss when the fen is unknown.
+function mateSign(mate, fen) {
+  if (mate > 0) return 1;
+  if (mate < 0) return -1;
+  return (fen || "").split(" ")[1] === "b" ? 1 : -1;
+}
+
+function aiScoreNum(cp, mate, fen) {
+  if (mate != null) return mateSign(mate, fen) > 0 ? 100000 : -100000;
   return cp != null ? cp : null;
 }
 // Deep-minus-shallow gap for a point, or null when dual data is absent. flagged
 // uses the *current* threshold so adjusting it re-evaluates on the next render.
 function aiPointDiff(p) {
   if (!p || (p.cp2 == null && p.mate2 == null)) return null;
-  const a = aiScoreNum(p.cp, p.mate);
-  const b = aiScoreNum(p.cp2, p.mate2);
+  const a = aiScoreNum(p.cp, p.mate, p.fen);
+  const b = aiScoreNum(p.cp2, p.mate2, p.fen);
   if (a == null || b == null) return null;
   const diff = b - a;
   return { diff, flagged: Math.abs(diff) >= aiDiffThreshold() };
@@ -3146,8 +3164,10 @@ async function analyzeCurrentLine() {
   if (ai.running) return;
   const positions = aiLinePositions();
   if (positions.length === 0) { $("#aiState").textContent = "此分支無著法"; return; }
-  // Seed points with labels/paths; scores fill in as records arrive.
-  ai.points = positions.map((p, i) => ({ ply: i, label: p.label, path: p.path, cp: null, mate: null, best: null, cp2: null, mate2: null }));
+  // Seed points with labels/paths/fen; scores fill in as records arrive. The
+  // fen is kept so a terminal `mate 0` can recover its red-POV sign from the
+  // side to move (see mateSign).
+  ai.points = positions.map((p, i) => ({ ply: i, label: p.label, path: p.path, fen: p.fen, cp: null, mate: null, best: null, cp2: null, mate2: null }));
   ai.running = true;
   ai.queryIdx = null;
   const depth = aiDepth();
@@ -3348,7 +3368,7 @@ function drawAiChart(svg, points, cursorIdx) {
       .textContent = lbl > 0 ? "+" + lbl : "" + lbl;
   }
   if (!n) return;
-  const val = (p) => (p.mate != null ? (p.mate > 0 ? RANGE : -RANGE) : p.cp);
+  const val = (p) => (p.mate != null ? (mateSign(p.mate, p.fen) > 0 ? RANGE : -RANGE) : p.cp);
   const scored = points.map((p, i) => ({ i, v: val(p) })).filter((p) => p.v != null);
 
   // Advantage area: fill between the eval curve and the 0 line — red where red
@@ -3428,7 +3448,7 @@ function renderAiReadout(idx) {
   if (idx < 0 || idx >= pts.length) { box.innerHTML = `<div class="varEmpty">移到走勢圖上查看各步分數</div>`; return; }
   const p = pts[idx];
   const fmt = (cp, mate) => mate != null
-    ? (mate > 0 ? `#+${Math.abs(mate)}` : `#-${Math.abs(mate)}`)
+    ? (mateSign(mate, p.fen) > 0 ? `#+${Math.abs(mate)}` : `#-${Math.abs(mate)}`)
     : (cp != null ? (cp > 0 ? "+" + cp : "" + cp) : "…");
   const isActive = idx === aiActiveIdx();
   const d = aiPointDiff(p);

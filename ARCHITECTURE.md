@@ -252,6 +252,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 主流程（串流接收→填點→完成移游標到終局；雙深度時帶 cp2/mate2） | `analyzeCurrentLine`:2081 / `clearAiAnalysis`:2152 |
 | 游標索引（hover 或目前盤面） / hit-test | `aiCursorIdx`:2167 / `aiActiveIdx`:2159 / `aiIndexFromEvent`:2196 |
 | 繪圖：動態 Y 量程 + **紅藍漲跌面積圖**（0 線硬切換漸層）+ 中性壓頂線 + 小分色點 + Δ旗標 + 橙環 | `drawAiChart`:2264（量程 `aiRange`:2190/`aiNiceCeil`:2179、`AI_PAD`:2175） |
+| **終局將死 `mate 0` 正負號還原**：引擎對「行棋方已被將死」回 `score mate 0`，`0×flip` 把正負號吃掉→走勢圖會誤畫到最底。改由該局面 FEN 的行棋方（被將死者＝輸家）還原紅方視角正負（黑行棋＝紅勝→頂、紅行棋＝紅敗→底）。各點存 `fen` 供此用 | `mateSign`（`drawAiChart` val／`aiScoreNum`／`renderAiReadout` fmt 共用）|
 | 分析中圓角提示 / 單筆讀數（雙深度顯示 d1/d2/Δ） | `drawAiBusy`:2223 / `renderAiView`:2207 / `renderAiReadout`:2357 |
 
 > 為何 d12 走勢圖就抓到即時分析 d21 才證出的殺：名目深度≠步數（seldepth/延伸/quiescence）＋掃描共用置換表。詳見 memory `project-ai-line-depth`，內含「是否每點 `ucinewgame` 嚴格獨立」的待決定。
