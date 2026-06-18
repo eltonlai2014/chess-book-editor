@@ -3268,7 +3268,7 @@ async function analyzeCurrentLine() {
         $("#aiState").textContent = `分析中 (${dlabel})… ${done}/${ai.points.length}`;
       }
     }
-    $("#aiState").textContent = `完成 (${dlabel}) · ${ai.points.length} 點`;
+    $("#aiState").textContent = `完成 (${dlabel}) · ${ai.points.length} 步`;
     ai.queryIdx = ai.points.length - 1;   // rest the query line on the final position
     fillAiBlunderBest();   // translate 漏著 best alternatives for the readout (async)
   } catch (e) {
