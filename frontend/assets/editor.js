@@ -3107,9 +3107,12 @@ function aiDiffThreshold() {
   const t = parseInt(PREFS.aiDiffThreshold, 10);
   return Number.isFinite(t) && t >= 0 ? t : 200;
 }
+// Per-ply loss (cp) at or above which a move is flagged 漏著 on the trend chart.
+function aiBlunderThreshold() {
+  const t = parseInt(PREFS.aiBlunderThreshold, 10);
+  return Number.isFinite(t) && t >= 0 ? t : 200;
+}
 
-// Mate maps to a large signed magnitude so a mate-vs-cp swing always counts as
-// a divergence. Returns null only when there's no score at all.
 // Red-POV sign of a mate score (+1 = red mating/winning, -1 = red being mated).
 // Non-zero mates already carry the sign (engine score × flip). `mate 0` is the
 // terminal checkmate: the side to move is mated NOW, but 0 is unsigned so the
@@ -3137,6 +3140,29 @@ function aiPointDiff(p) {
   return { diff, flagged: Math.abs(diff) >= aiDiffThreshold() };
 }
 
+// Red-POV centipawns for a point, mate folded to a large signed magnitude so a
+// move that walks into (or delivers) mate registers as a huge swing (mirrors
+// scoreCp / chess-book-ai). null when the point has no score yet.
+function aiCpRed(p) {
+  if (!p) return null;
+  if (p.mate != null) return mateSign(p.mate, p.fen) * (30000 - Math.abs(p.mate));
+  return p.cp != null ? p.cp : null;
+}
+
+// Centipawns the move LEADING TO point i cost its mover — live per-ply loss from
+// the red-POV sweep scores, no positions.db. Positive = a loss (worse after the
+// move), negative = a gain. The mover is the side to move at the pre-move point
+// (i-1); the loss is the drop from that side's POV (= chess-book-ai's _ply_loss,
+// here derived from red-POV scores). null when a score is missing.
+function aiPlyLoss(points, i) {
+  if (i < 1 || i >= points.length) return null;
+  const before = aiCpRed(points[i - 1]);
+  const after = aiCpRed(points[i]);
+  if (before == null || after == null) return null;
+  const moverRed = ((points[i - 1].fen || "").split(" ")[1] || "w") === "w";
+  return moverRed ? before - after : after - before;
+}
+
 // Position list for the current branch: index 0 = start, index k = the board
 // after the k-th move. Each carries a label + the node path that reaches it
 // (for click-to-navigate). Built off currentLine() so it follows exactly what
@@ -3152,6 +3178,32 @@ function aiLinePositions() {
     });
   }
   return out;
+}
+
+// After a sweep, translate the engine's best move (UCI→中文) at each 漏著's
+// decision point so the readout can show what should have been played. Only the
+// (few) flagged points are translated, batched by fen; cached + cheap. Re-runs
+// when the threshold changes; refreshes the view when done.
+async function fillAiBlunderBest() {
+  const pts = EDITOR.aiAnalysis.points;
+  const byFen = new Map();   // fen -> Set(best iccs) for the 漏著 decision points
+  const thresh = aiBlunderThreshold();
+  for (let i = 1; i < pts.length; i++) {
+    const loss = aiPlyLoss(pts, i);
+    if (loss == null || loss < thresh) continue;
+    const dp = pts[i - 1];
+    if (dp && dp.best && dp.fen && dp.bestZh == null) {
+      if (!byFen.has(dp.fen)) byFen.set(dp.fen, new Set());
+      byFen.get(dp.fen).add(dp.best);
+    }
+  }
+  if (!byFen.size) return;
+  for (const [fen, set] of byFen) {
+    const map = await notationsForBatch(fen, [...set]);
+    if (!map) continue;
+    pts.forEach((p) => { if (p.fen === fen && p.best && map[p.best]) p.bestZh = map[p.best]; });
+  }
+  renderAiView();
 }
 
 async function analyzeCurrentLine() {
@@ -3218,6 +3270,7 @@ async function analyzeCurrentLine() {
     }
     $("#aiState").textContent = `完成 (${dlabel}) · ${ai.points.length} 點`;
     ai.queryIdx = ai.points.length - 1;   // rest the query line on the final position
+    fillAiBlunderBest();   // translate 漏著 best alternatives for the readout (async)
   } catch (e) {
     $("#aiState").textContent = "分析中斷：" + (e && e.message || e);
   } finally {
@@ -3432,6 +3485,19 @@ function drawAiChart(svg, points, cursorIdx) {
     const x = xAt(i), y = yAt(v);
     mk("polygon", { points: `${x - 5},${y - 13} ${x + 5},${y - 13} ${x},${y - 4}` }, "aiFlag");
   });
+  // 漏著 markers: a ✖ glyph (= a mistake) above any point whose incoming move lost
+  // ≥ the blunder threshold (live per-ply loss; no positions.db). A bg-haloed
+  // vivid rose (--eval-blunder) so it stays legible over the red OR blue zone and
+  // on either theme — distinct from the amber divergence flag.
+  const blThresh = aiBlunderThreshold();
+  for (let i = 1; i < n; i++) {
+    const loss = aiPlyLoss(points, i);
+    if (loss == null || loss < blThresh) continue;
+    const v = val(points[i]);
+    if (v == null) continue;
+    const ty = Math.max(padT + 11, yAt(v) - 5);   // clamp so the glyph stays on canvas
+    mk("text", { x: xAt(i), y: ty, "text-anchor": "middle" }, "aiBlunder").textContent = "✖";
+  }
   // Orange ring highlighting the queried point.
   if (cursorIdx >= 0 && cursorIdx < n && val(points[cursorIdx]) != null) {
     mk("circle", { cx: xAt(cursorIdx), cy: yAt(val(points[cursorIdx])), r: 6.5, fill: "none" }, "aiRing");
@@ -3447,8 +3513,8 @@ function renderAiReadout(idx) {
   if (!pts.length) { box.innerHTML = `<div class="varEmpty">按「掃描」開始；分析後可在走勢圖上查詢各步</div>`; return; }
   if (idx < 0 || idx >= pts.length) { box.innerHTML = `<div class="varEmpty">移到走勢圖上查看各步分數</div>`; return; }
   const p = pts[idx];
-  const fmt = (cp, mate) => mate != null
-    ? (mateSign(mate, p.fen) > 0 ? `#+${Math.abs(mate)}` : `#-${Math.abs(mate)}`)
+  const fmt = (cp, mate, fen) => mate != null
+    ? (mateSign(mate, fen !== undefined ? fen : p.fen) > 0 ? `#+${Math.abs(mate)}` : `#-${Math.abs(mate)}`)
     : (cp != null ? (cp > 0 ? "+" + cp : "" + cp) : "…");
   const isActive = idx === aiActiveIdx();
   const d = aiPointDiff(p);
@@ -3465,8 +3531,27 @@ function renderAiReadout(idx) {
   } else {
     scoreHtml = `<span class="aiReadScore">${fmt(p.cp, p.mate)}</span>`;
   }
-  box.innerHTML = `<div class="aiRead${isActive ? " active" : ""}">`
-    + `<span class="aiReadLabel">${p.label}</span>${scoreHtml}</div>`;
+  // 漏著: the move into this point lost ≥ threshold. Shown inline (same row) in
+  // red POV — a ✗ mark + the engine's best alternative at the decision point and
+  // that point's red-POV eval (what best play preserves; compare to the score).
+  let blunderHtml = "";
+  const loss = aiPlyLoss(pts, idx);
+  if (loss != null && loss >= aiBlunderThreshold()) {
+    const dp = pts[idx - 1];
+    const best = dp && dp.bestZh ? dp.bestZh : (dp && dp.best ? "…" : "");
+    const bestEval = dp ? fmt(dp.cp, dp.mate, dp.fen) : "";
+    blunderHtml = `<span class="aiReadBlunder">`
+      + `<span class="aiBlunderTag">✖</span>`
+      + (best ? `<span class="aiBlunderBest">${best} <b>${bestEval}</b></span>` : "")
+      + `</span>`;
+  }
+  // One line: label (ellipsis when tight) + red-POV score + optional 漏著 info —
+  // constant height whether or not the point is flagged (no layout drift).
+  box.innerHTML = `<div class="aiReadCard${isActive ? " active" : ""}">`
+    + `<span class="aiReadLabel">${p.label}</span>`
+    + scoreHtml
+    + blunderHtml
+    + `</div>`;
 }
 
 // ---------- 演示: replay one PV line on a popup board ----------
@@ -3727,6 +3812,18 @@ if (aiDiffThreshInput) {
     savePreference("aiDiffThreshold", v);
     // Re-flag the already-analysed line against the new threshold.
     if (EDITOR.aiAnalysis.points.length) renderAiView();
+  });
+}
+const aiBlunderThreshInput = $("#aiBlunderThreshInput");
+if (aiBlunderThreshInput) {
+  aiBlunderThreshInput.addEventListener("change", () => {
+    let v = parseInt(aiBlunderThreshInput.value, 10);
+    if (!Number.isFinite(v)) v = 200;
+    v = Math.max(0, Math.min(2000, v));
+    aiBlunderThreshInput.value = v;
+    savePreference("aiBlunderThreshold", v);
+    // Re-flag the line + translate any newly-qualifying 漏著 best alternatives.
+    if (EDITOR.aiAnalysis.points.length) { renderAiView(); fillAiBlunderBest(); }
   });
 }
 const gifDelayInput = $("#gifDelayInput");
@@ -4086,6 +4183,8 @@ async function recoverSettingsFromLocalStorage() {
   if (aiDepth2El) aiDepth2El.value = aiDepth2();
   const aiDiffThreshEl = $("#aiDiffThreshInput");
   if (aiDiffThreshEl) aiDiffThreshEl.value = aiDiffThreshold();
+  const aiBlunderThreshEl = $("#aiBlunderThreshInput");
+  if (aiBlunderThreshEl) aiBlunderThreshEl.value = aiBlunderThreshold();
   const aiDualEl = $("#aiDualChk");
   if (aiDualEl) aiDualEl.checked = aiDualEnabled();
   const cdbLineDepthEl = $("#cdbLineDepthInput");

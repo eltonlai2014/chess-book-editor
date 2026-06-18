@@ -67,6 +67,7 @@
   --eval-black: var(--side-black-strong);
   --eval-query: var(--accent-strong);
   --eval-flag: #f4a521;
+  --eval-blunder: #ffd60a;   /* 漏著 mark — bright yellow, pops on the dark chart */
   --chart-area-alpha: 0.42;   /* advantage-fill depth; light theme dials down */
 
   /* === State / data text colours === these defaults are LIGHT (tuned for the
@@ -388,6 +389,7 @@ html[data-ui-theme="light"] {
   --ply-black: var(--text);
   --eval-line: rgba(28, 34, 40, 0.55);
   --eval-flag: #c9821a;
+  --eval-blunder: #b8860b;   /* 漏著 mark — deep goldenrod, readable on the light board */
   /* AI 走勢圖 → 素淨: faint advantage fill, muted dots, neutral cursor ring so
      the chart isn't a 4-hue clutter on white. */
   --chart-area-alpha: 0.16;
@@ -2152,6 +2154,17 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
   stroke-width: 0.8;
 }
 
+.aiChart .aiBlunder {
+  fill: var(--eval-blunder);
+  font-size: 15px;
+  font-weight: 900;
+  font-family: var(--ui-font, system-ui), sans-serif;
+  paint-order: stroke;          /* dark outline so the yellow ✖ reads over any zone/theme */
+  stroke: rgba(20, 16, 12, 0.6);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
 .aiChart .aiBusyPill {
   fill: rgba(var(--accent-strong-rgb), 0.14);
   stroke: rgba(var(--accent-strong-rgb), 0.45);
@@ -2202,26 +2215,35 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 /* Single-row readout under the chart — the point under the query line. */
 .aiReadout {
   flex: 0 0 auto;
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.aiRead {
+/* One line: label (ellipsis when tight) + red-POV score + optional 漏著 info.
+   Constant height whether or not the point is flagged; clips rather than wraps. */
+.aiReadCard {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 11px;
-  font-size: 14px;
+  align-items: baseline;
+  gap: 9px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 6px 11px;
+  font-size: 13px;
   border-radius: 8px;
   border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
   background: rgba(var(--accent-strong-rgb), 0.05);
 }
 
-.aiRead.active {
+.aiReadCard.active {
   background: rgba(var(--accent-strong-rgb), 0.16);
   border-color: rgba(var(--accent-strong-rgb), 0.42);
 }
 
 .aiReadLabel {
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -2229,9 +2251,10 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 }
 
 .aiReadScore {
+  flex: 0 0 auto;
   color: var(--accent-strong);
   font-weight: 700;
-  font-size: 16px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2262,6 +2285,35 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 
 .aiReadDual .aiDiff.flag {
   color: var(--eval-flag);
+}
+
+/* 漏著 info, inline on the same row (all red POV): a ✗ mark + the engine's best
+   alternative and its red-POV eval (compare to the score earlier on the row). */
+.aiReadBlunder {
+  flex: 0 0 auto;
+  margin-left: auto;          /* push the 漏著 cluster to the right; label+score stay paired left */
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.aiReadBlunder .aiBlunderTag {
+  color: var(--eval-blunder);
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.aiReadBlunder .aiBlunderBest {
+  color: var(--text-muted);
+}
+
+.aiReadBlunder .aiBlunderBest b {
+  margin-left: 5px;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* settings — numeric input (AI analysis depth) */

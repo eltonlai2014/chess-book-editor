@@ -249,7 +249,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**）；給 `depth2` 時單次深算同時擷取兩層分數 | `analyze_line`(app.py):661 / `_parse_score`:648 ｜ `POST /api/engine/analyze-line {fens,depth,depth2?}` |
 | 取層數(預設12)/組局面清單 | `aiDepth`:2027（pref `aiAnalysisDepth`）/ `aiLinePositions`:2068 |
 | **雙深度比對**：第二層數(預設20)/開關/門檻(預設200)/深淺差值+旗標 | `aiDepth2`:2035 / `aiDualEnabled`:2039 / `aiDiffThreshold`:2042 / `aiPointDiff`:2055（pref `aiAnalysisDepth2`/`aiDualDepth`/`aiDiffThreshold`）|
-| 主流程（串流接收→填點→完成移游標到終局；雙深度時帶 cp2/mate2） | `analyzeCurrentLine`:2081 / `clearAiAnalysis`:2152 |
+| **漏著偵測（即時、全盤適用、不靠 positions.db）**：相鄰兩點分數即時算「著法損失」（紅POV分換算成走子方POV的下降，mate 折成 ±(30000−\|m\|)）做門檻判定；損失 ≥ 門檻(預設200)即在走勢圖標**亮黃 `✖` 記號**（粗體重十字 U+2716，`--eval-blunder` token：暗 `#ffd60a`／淺 `#b8860b`，深色描邊 outline 跨紅藍區/明暗主題皆清晰；不用紅色/三角因與紅勢區同色不顯）。讀數**單行**（`.aiReadCard` flex row）且**左右分組**：左＝「步名＋該步紅方分」綁一組（走的＋結果），右＝「✖ 最佳著＋該決策點紅方分」（`margin-left:auto` 推到右；該走的＋結果），避免分數被推離步名又與漏著黏在一起。漏著段**全紅方 POV**。過窄時步名 ellipsis、裁切不換行——決策點分＝最佳走法能守住的紅方分，與主行的走子後紅方分一比即見此步讓出多少（刻意不顯示走子方 POV 的損失數，避免與紅方分混 POV）。最佳著＝該決策點引擎 best（UCI→中文，掃描後對少數漏著點批量翻譯） | `aiPlyLoss`／`aiCpRed`／`aiBlunderThreshold`（pref `aiBlunderThreshold`）／`fillAiBlunderBest`（drawAiChart 標記偵測＋renderAiReadout 紅POV 顯示共用） |
+| 主流程（串流接收→填點→完成移游標到終局＋翻譯漏著最佳著；雙深度時帶 cp2/mate2） | `analyzeCurrentLine`:2081 / `clearAiAnalysis`:2152 |
 | 游標索引（hover 或目前盤面） / hit-test | `aiCursorIdx`:2167 / `aiActiveIdx`:2159 / `aiIndexFromEvent`:2196 |
 | 繪圖：動態 Y 量程 + **紅藍漲跌面積圖**（0 線硬切換漸層）+ 中性壓頂線 + 小分色點 + Δ旗標 + 橙環 | `drawAiChart`:2264（量程 `aiRange`:2190/`aiNiceCeil`:2179、`AI_PAD`:2175） |
 | **終局將死 `mate 0` 正負號還原**：引擎對「行棋方已被將死」回 `score mate 0`，`0×flip` 把正負號吃掉→走勢圖會誤畫到最底。改由該局面 FEN 的行棋方（被將死者＝輸家）還原紅方視角正負（黑行棋＝紅勝→頂、紅行棋＝紅敗→底）。各點存 `fen` 供此用 | `mateSign`（`drawAiChart` val／`aiScoreNum`／`renderAiReadout` fmt 共用）|
