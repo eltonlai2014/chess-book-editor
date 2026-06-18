@@ -289,7 +289,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 |---|---|
 | 主流程：`currentLine()` 逐手 → `drawBoard()`(board.js) 畫離屏 SVG → 光柵化進 `<canvas>`（底部字幕條：檔名＋第N步/共M步）→ `gifenc` 編碼 → 下載 | `exportGif` |
 | 影格清單（起始局面＋每手 post-move FEN＋last-move 高亮） | `buildFrames` |
-| **字型內嵌**（離屏光柵化時頁面 `<link>` webfont 不生效）：抓 `PIECE_FONTS[style].googleUrl` 已子集化(&text=)的 CSS → 把 `url(...woff2)` 換 base64 data URI → 注入每格 SVG `<defs><style>`；抓失敗退回系統 CJK 字型，不擋匯出。抓一次快取 | `loadEmbeddedFontCss` / `injectFontStyle` |
+| **字型內嵌**（離屏光柵化時頁面 `<link>` webfont 不生效）：讀 `PIECE_FONTS[style].localUrl`（本地子集化 woff2）→ base64 組成 `@font-face`（family=`localFamily`）→ 注入每格 SVG `<defs><style>`；無 localUrl 才退回舊 `googleUrl` CDN 路徑；抓失敗退回系統 CJK 字型，不擋匯出。抓一次快取 | `loadEmbeddedFontCss` / `injectFontStyle` |
 | SVG→canvas 走 Blob URL（字型 base64 太大，免每格 encodeURIComponent）／字幕條／每手停留 ms（末格 ×2.5） | `svgToImage` / `paintCaption` / `frameDelayMs` |
 | 編碼器：vendored `gifenc`（無相依、無 worker、不走 runtime CDN），IIFE 包成 `window.gifenc`（GIFEncoder/quantize/applyPalette） | frontend/assets/gifenc.global.js |
 | 觸發鈕在棋譜列標頭 `#exportGifBtn`（Lucide `ICON.film`，editor.js boot 注入取代 HTML 的 🎬 fallback；純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |

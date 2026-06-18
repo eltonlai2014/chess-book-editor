@@ -466,6 +466,21 @@ html[data-ui-theme="light"] {
   font-display: swap;
 }
 
+/* LXGW WenKai TC Bold (霞鶩文楷, SIL OFL) — the board PIECE glyph font, now
+   bundled locally instead of pulled from the Google Fonts CDN at runtime (same
+   offline-first rationale as Sarasa). Subset to the 16 piece glyphs + 楚河漢界
+   (~6KB). 700 is the family's HEAVIEST designed weight — there is no 800/900 to
+   download, so on a light disc the extra heft comes from drawPieceAt's textStroke,
+   not a bolder face. DEDICATED family name so this single-weight, 18-glyph subset
+   never bleeds into the UI text that also lists "LXGW WenKai TC" (which keeps
+   falling back to JhengHei as before). board.js PIECE_FONTS.wenkai prepends it. */
+@font-face {
+  font-family: "LXGW WenKai Piece";
+  src: url("fonts/lxgw-wenkai-tc-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
 }

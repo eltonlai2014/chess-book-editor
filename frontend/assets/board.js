@@ -252,12 +252,21 @@ const PIECE_FONTS = {
   },
   // LXGW WenKai TC — free Traditional-Chinese textbook kaishu (楷書). Cleaner
   // than brush fonts, warmer than Songti, well-balanced strokes at 28px.
+  // "LXGW WenKai Piece" is the locally-bundled Bold (700) subset (@font-face in
+  // editor.css) — preferred so the board renders offline without the Google
+  // Fonts CDN. 700 is the family's heaviest real weight; extra heft on light
+  // discs is added via per-side textStroke, not a bolder face. googleUrl is null
+  // now that the face ships locally (no runtime CDN fetch).
   wenkai: {
-    family: '"LXGW WenKai TC", "Noto Serif TC", "Songti TC", serif',
+    family: '"LXGW WenKai Piece", "LXGW WenKai TC", "Noto Serif TC", "Songti TC", serif',
     weight: "700",
     dy: 11,
-    googleUrl: "https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@700&text=" +
-               encodeURIComponent(PIECE_CHARS_SUBSET) + "&display=swap",
+    googleUrl: null,
+    // Bundled subset (editor.css @font-face). localFamily/localUrl let the GIF
+    // exporter embed the SAME face as a base64 @font-face (gifexport.js
+    // loadEmbeddedFontCss) so offscreen frames match the screen — offline, no CDN.
+    localFamily: "LXGW WenKai Piece",
+    localUrl: "/assets/fonts/lxgw-wenkai-tc-bold.woff2",
   },
 };
 
@@ -284,6 +293,7 @@ const BOARD_STYLES = {
     // ring, but NO glossy specular dot and NO engraved character (those made
     // the discs look like glass beads instead of wood).
     red:    { fill: "#fff5db", border: "#8b1a0e", innerRing: "#c0392b", text: "#c0392b",
+              textStroke: 0.6,
               grad: { from: "#fff5db", to: "#e8c889" } },
     black:  { fill: "#222",    border: "#000",    innerRing: "#888",    text: "#f5f5f5",
               grad: { from: "#3a3a3a", to: "#101010" } },
@@ -352,6 +362,7 @@ const BOARD_STYLES = {
     coord:  { color: "#6a4325", font: "serif" },
     river:  { color: "#714323", style: "italic" },
     red:    { fill: "#f6e2cb", border: "#8e3d20", innerRing: "#b85b33", text: "#b14b29",
+              textStroke: 0.6,
               grad: { from: "#fff2df", to: "#deb187" } },
     black:  { fill: "#2d221c", border: "#120d0a", innerRing: "#8b776a", text: "#f4eadf",
               grad: { from: "#4a3a31", to: "#17110d" } },
@@ -368,8 +379,12 @@ const BOARD_STYLES = {
     coord:  { color: "#61756c", font: "serif" },
     river:  { color: "#5c7068", style: "normal" },
     // red text: deep saturated red (#9e2414) for a clear, strong glyph on the
-    // light cream disc (the earlier #9c3a2c still read washed).
+    // light cream disc (the earlier #9c3a2c still read washed). textStroke 0.7
+    // gives a TRUE bold + fills the antialiased rim so the thin kaishu strokes
+    // stop reading washed/blurry (see drawPieceAt — wenkai ships @700 only, so a
+    // higher font-weight would only faux-bold/smear).
     red:    { fill: "#efe4d7", border: "#87534d", innerRing: null, text: "#9e2414",
+              textStroke: 0.7,
               grad: { from: "#f9f1e8", to: "#d8c7b8" } },
     black:  { fill: "#2f3a36", border: "#141917", innerRing: null, text: "#eef2ef",
               grad: { from: "#4d5c56", to: "#1f2623" } },
@@ -801,6 +816,18 @@ function drawPieceAt(parent, p, cx, cy, S) {
     "font-size": 28, "font-family": PF.family, "font-weight": PF.weight,
     fill: PS.text,
   }, parent);
+  // Optional same-colour glyph stroke → a TRUE bold (fattens the outline) without
+  // faux-bolding: the piece fonts ship a single web weight (wenkai @700), so
+  // bumping font-weight would only trigger the browser's synthesised bold, which
+  // smears the antialiased edges. A thin stroke in the text colour thickens the
+  // strokes AND fills in the half-transparent antialiased rim → crisper glyph.
+  // Used by celadon's red (deep red on a light disc read thin/washed at 28px).
+  if (PS.textStroke) {
+    t.setAttribute("stroke", PS.text);
+    t.setAttribute("stroke-width", PS.textStroke);
+    t.setAttribute("stroke-linejoin", "round");
+    t.setAttribute("paint-order", "stroke");  // stroke under fill — pure thickening
+  }
   t.textContent = PIECE_CHAR[p] || p;
 }
 

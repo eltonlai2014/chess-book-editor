@@ -71,16 +71,26 @@
   async function loadEmbeddedFontCss() {
     const key = (typeof currentBoardStyle === "function") ? currentBoardStyle().font : null;
     const f = (typeof PIECE_FONTS !== "undefined" && key) ? PIECE_FONTS[key] : null;
-    if (!f || !f.googleUrl) return "";          // 系統字型（如 classic=serif），免內嵌
+    if (!f || (!f.localUrl && !f.googleUrl)) return "";   // 系統字型（如 classic=serif），免內嵌
     if (_fontCache.key === key) return _fontCache.css;
     try {
-      let css = await (await fetch(f.googleUrl)).text();
-      const urls = [...new Set(
-        [...css.matchAll(/url\(\s*['"]?(https:\/\/[^)'"]+)['"]?\s*\)/g)].map((m) => m[1])
-      )];
-      for (const u of urls) {
-        const buf = await (await fetch(u)).arrayBuffer();
-        css = css.split(u).join("data:font/woff2;base64," + abToB64(buf));
+      let css;
+      if (f.localUrl) {
+        // 本地子集化 woff2 → 直接組 @font-face base64（離線、匯出不靠網路）。
+        const buf = await (await fetch(f.localUrl)).arrayBuffer();
+        const fam = f.localFamily || "LXGW WenKai Piece";
+        css = `@font-face{font-family:'${fam}';font-weight:${f.weight || "700"};`
+            + `font-style:normal;src:url(data:font/woff2;base64,${abToB64(buf)}) format('woff2');}`;
+      } else {
+        // 舊路徑：抓 Google Fonts CSS，把其中 url(...woff2) 換成 base64 data URI。
+        css = await (await fetch(f.googleUrl)).text();
+        const urls = [...new Set(
+          [...css.matchAll(/url\(\s*['"]?(https:\/\/[^)'"]+)['"]?\s*\)/g)].map((m) => m[1])
+        )];
+        for (const u of urls) {
+          const buf = await (await fetch(u)).arrayBuffer();
+          css = css.split(u).join("data:font/woff2;base64," + abToB64(buf));
+        }
       }
       _fontCache.key = key;
       _fontCache.css = css;
