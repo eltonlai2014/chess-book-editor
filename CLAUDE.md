@@ -165,12 +165,16 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
     next ply's options. Clicking adds a *child* of the active move
     (`insertMoveAt(activePath,…)`).
   **Only the tab honours `cdbScope`; the eval line ALWAYS keys to `currentFen()`**
-  (the post-move rule above). Consequence: the navigation live-query targets
-  `cdbTabFen()` (default `當前步` = `analysisFen`), which differs from the eval
-  line's `currentFen`, so the eval line's 雲 cell rides on **batch** data for
-  `currentFen` (棋譜內局面 batch 都有，故多半仍在; switch the tab to `下一步` to
-  point the live query at `currentFen`). This is deliberate — `cdbLive` is a
-  single slot; a second live query per nav would thrash. See ARCHITECTURE.md 雲庫.
+  (the post-move rule above). The navigation live-query is keyed to the eval
+  line's `currentFen` (`ensureCdbLive(currentFen())`), so its 雲 cell gets live
+  chessdb data when positions.db misses — and it misses a lot for the cloud table:
+  positions.db's `chessdb` only covers the AI pipeline's PLY_RANGE 10–25, so
+  front/late moves rely on this live fill (depth scores don't — `evals` has no ply
+  window). The 雲庫 tab's own position (`cdbTabFen`) is (re)queried when you switch
+  to that tab or toggle scope — `cdbLive` is a single slot, so navigation can only
+  live-query one position and the常駐 eval line wins. `fetchCdbLive` repaints by
+  `fen===currentFen()` (eval line) / `fen===cdbTabFen()` (tab) so a late response
+  can't overwrite a newer position. See ARCHITECTURE.md 雲庫 section.
 - **Return shape mirrors `eval_service`'s `cdb`** (`{status, moves, best,
   source}`) so cached (batch) and live results share `renderEvalLine` /
   `renderCdbTab`. Scores are mover-POV cp; UI flips to red POV for display.

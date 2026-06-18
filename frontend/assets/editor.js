@@ -1415,7 +1415,11 @@ async function fetchCdbLive(fen, fresh) {
     EDITOR.cdbLive.error = e.message || "網路錯誤";
   } finally {
     EDITOR.cdbLive.loading = false;
-    if (cdbTabFen() === fen) { renderCdbTab(); renderEvalLine(); }
+    // The eval line keys to currentFen, the 雲庫 tab to cdbTabFen — repaint
+    // whichever this result still matches (navigating away makes both false, so a
+    // stale late response can't overwrite the new position).
+    if (fen === currentFen()) renderEvalLine();
+    if (fen === cdbTabFen()) renderCdbTab();
   }
 }
 
@@ -1933,7 +1937,10 @@ function refreshActive() {
   $("#navLast").disabled = !next;
 
   renderEvalLine();
-  ensureCdbLive(cdbTabFen());   // lazy chessdb.cn lookup for the 雲庫 tab's position (當前步/下一步)
+  // Live chessdb lookup keyed to the EVAL LINE's position (currentFen, post-move)
+  // so its 雲 cell gets live data when positions.db misses. The 雲庫 tab's own
+  // position (cdbTabFen) is (re)queried when you switch to that tab / toggle scope.
+  ensureCdbLive(currentFen());
   if (EDITOR.aiAnalysis.points.length) renderAiView();   // move the trend cursor
   // A derived 雲庫演繹 line belongs to the position it started from; once the
   // board moves elsewhere it's stale — drop it so the panel doesn't show a line
@@ -2634,7 +2641,10 @@ function switchRpTab(tab) {
   switchTabsIn($("#rpVars"), tab);
   // The 雲庫 list defers its Chinese-notation translation until visible — fill
   // it now that the tab is shown (batched; no-op if already cached).
-  if (tab === "cdb") fillCdbNotations();
+  // Switching to 雲庫 tab: translate notations AND live-query the tab's own
+  // position (navigation only live-queries the eval line's currentFen, so the
+  // tab's cdbTabFen — 當前步=analysisFen — needs its own lookup when shown).
+  if (tab === "cdb") { fillCdbNotations(); ensureCdbLive(cdbTabFen()); }
   if (tab === "cdbline") renderCdbLineView();
   if (tab === "auto") renderAutoHistory();
 }

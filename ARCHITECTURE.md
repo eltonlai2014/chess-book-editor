@@ -210,7 +210,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 |---|---|
 | **評估列查哪個局面**：恆＝走完本步後（`currentFen`，與 AI 走勢圖同框架；2026-06-18 由前一步決策點改為此）。整條評估列鎖此局面（見下方原則） | `renderEvalLine`（`currentFen`） |
 | **雲庫 tab 查哪個局面（可切換）**：`當前步`＝`analysisFen`（前一步決策點，預設）／`下一步`＝`currentFen`（走完本步後）。切換鈕 `#cdbScopePrev`/`#cdbScopeNext`（`setCdbScope`，存 pref `cdbScope`、`updateCdbScopeBtns` 上色）。**評估列永遠用 `currentFen`，只有 tab 吃 `EDITOR.cdbScope`**（自 2026-06-18 起評估列＝走完後，與 tab 預設 `當前步`＝決策點為不同 FEN） | `cdbTabFen`／`setCdbScope`／`EDITOR.cdbScope` |
-| 導航時 lazy 查 `cdbTabFen()`（debounce 220ms；已有 cdb 即跳過；**殘局不查**→`cdbLive.endgame`） | `ensureCdbLive`／`isEndgameFen` |
+| 導航時 lazy 查 **`currentFen()`**（對齊評估列；debounce 220ms；已有 cdb 即跳過；**殘局不查**→`cdbLive.endgame`）。雲庫 tab 自身 fen（`cdbTabFen`）在切到該 tab／切 scope 時才查 | `ensureCdbLive`／`isEndgameFen`／`switchRpTab('cdb')` |
 | 殘局判定（雲庫只涵蓋開局＋中局）：雙方合計**無車** or **大子(車R/馬N/炮C)≤2** | `isEndgameFen`（near `cdbTabFen`） |
 | 實際抓取（merge 進 `evalsByFen[fen].cdb`；`fresh` 跳快取；失敗不快取以利重試；finally 用 `cdbTabFen()` 比對） | `fetchCdbLive` |
 | 畫雲庫 tab（全部著法：中文/勝率/紅POV分/★最佳）。標記：`當前步`→目前所在變化 ←／`下一步`→已在棋譜的後續 ✓（`markedSet`） | `renderCdbTab`（狀態標籤 `CDB_STATUS_LABEL`） |
@@ -230,7 +230,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 「重查」按鈕（`fresh=1` 跳快取重打 `cdbTabFen()`，配合目前 scope） | boot 段綁 `#cdbRefreshBtn` |
 
 > **整條評估列都看「走完本步後」(`currentFen`)**：深N分數、建議、雲全部 key 在 `currentFen()`，回答「走完這步後局面如何、最佳應手是什麼」，與 AI 走勢圖同框架（走勢圖每點也是走完後）。**取捨（主人 2026-06-18 拍板，由前一步決策點改來）**：最後一步走完的局面（post-leaf）不在 positions.db，故末步無深N分數——**刻意不補**（即時引擎／走勢圖已有該分）。深度分數來自 `fetchEvalsForFile` 的 batch（`collectAllFens` 已含每個節點走完後的 FEN），不需逐步打網路。
-> **評估列「雲」格 vs 導航 live 查的 FEN**：導航時只 `ensureCdbLive(cdbTabFen())`（預設 `當前步`＝`analysisFen`），而評估列已改用 `currentFen`，兩者不同 FEN，故**評估列「雲」格預設靠 batch 的 `currentFen`**（棋譜內局面 batch 都有，多半仍在）；要讓 live 對齊評估列就把 tab 切到 `下一步`（`cdbTabFen`＝`currentFen`）。刻意不為評估列再開第二發 live 查詢（`cdbLive` 單槽，雙發會抖動且多打網路）。
+> **導航 live 查對齊評估列（`currentFen`）**：導航時 `ensureCdbLive(currentFen())`，所以評估列「雲」格在 positions.db 漏查時由即時 chessdb.cn 補上——而雲庫漏查很常見：positions.db 的 `chessdb` 表只收 AI 管線的第 10–25 手（`PLY_RANGE`），前段／後段多半無（深N 的 `evals` 表無此窗口，故不受影響）。雲庫 tab 自身的 `cdbTabFen`（預設 `當前步`＝`analysisFen`）則在**切到雲庫 tab／切 scope**時才 live 查（`cdbLive` 單槽，導航只能查一個局面，常駐的評估列優先）。`fetchCdbLive` 收尾按 `fen===currentFen()`／`fen===cdbTabFen()` 分別回繪評估列／tab，避免晚到的回應蓋掉新局面。
 > 雲庫資料形狀＝後端 `cdb`（`{status,moves,best,source}`），與 `/api/eval/batch` 一致，故 batch 命中與即時查可共用 `renderEvalLine`/`renderCdbTab`。分數是行棋方 POV cp，顯示時 ×flip 轉紅方視角（同 `_parse_info_line` 慣例）。
 
 **即時引擎分析（SSE）—— 引擎分析 tab**
