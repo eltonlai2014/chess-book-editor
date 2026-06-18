@@ -137,35 +137,40 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   three guards if you touch it.
 - **No cloud query once the position is an endgame.** chessdb only covers
   opening+midgame, so a sparse endgame just returns 查無. `isEndgameFen(fen)`
-  (editor.js, near `cdbFen`) gates BOTH the live lookup (`ensureCdbLive` →
+  (editor.js, near `cdbTabFen`) gates BOTH the live lookup (`ensureCdbLive` →
   `EDITOR.cdbLive.endgame`, shown as 「殘局・不查雲庫」/「殘局略」) and the
   derivation loop (`deriveCdbLine` breaks). Rule (whole board, 大子＝車R/馬N/炮C):
   **no rook (`rooks===0`) OR ≤2 大子 (`bigPieces<=2`)** → endgame. FEN letters per
   cchess `FULL_INIT_FEN` (R/N/C). This is a heuristic to skip dead queries, not a
   correctness gate — widen the rule rather than adding a second code path.
-- **The whole `#evalLine` judges the DECISION POINT (前一步), not the post-move
-  position.** 深N scores, 建議, and 雲 all key to `cdbFen()` (= `analysisFen`, one
-  ply back), answering "was this move good, and what else was playable here" —
-  matching chess-book-ai's per-move table (whose 分 is also the pre-move eval).
-  This also gives the LAST move a score: the post-leaf position isn't in
-  positions.db, but the leaf's decision point is. Depth data comes from the
+- **The whole `#evalLine` judges the position AFTER the active move
+  (`currentFen`), not the decision point.** 深N scores, 建議, and 雲 all key to
+  `currentFen()`, answering "how does this position stand, and what's the best
+  reply" — matching the AI trend chart (which also scores each move's post-move
+  position). (Was the 前一步 decision point until 2026-06-18; master flipped it to
+  the post-move framing so the eval line agrees with the trend chart.) **Trade-off
+  (master's call): the LAST ply's post-leaf position isn't in positions.db, so the
+  final move shows no 深N — deliberately NOT patched** (the live engine / trend
+  chart already carries that number if needed). Depth data comes from the
   `fetchEvalsForFile` batch (`collectAllFens` already includes every node's
-  decision-point FEN) — no per-navigation network call.
+  post-move FEN) — no per-navigation network call.
 - **Cloud list defaults to the branch's alternatives; a toggle adds "下一步".**
   The 雲庫 tab has a `當前步`／`下一步` toggle (`EDITOR.cdbScope`, `cdbTabFen()`).
-  - `當前步` (DEFAULT, prev): same `cdbFen` framing as the eval line — lists the
-    moves playable at the decision point (active move + its siblings). Clicking
+  - `當前步` (DEFAULT, prev): the decision point (`analysisFen`) — lists the
+    moves playable at the branch point (active move + its siblings). Clicking
     adds a *sibling* at the branch point (`insertMoveAt(activePath.slice(0,-1),…)`).
-    Behaviour is byte-for-byte the old single-scope path.
+    (Since 2026-06-18 this no longer matches the eval line, which moved to
+    `currentFen` — see the eval-line bullet above.)
   - `下一步` (next): lists moves at `currentFen` (after the active move) — the
     next ply's options. Clicking adds a *child* of the active move
     (`insertMoveAt(activePath,…)`).
-  **Only the tab honours `cdbScope`; the eval line ALWAYS keys to `cdbFen()`**
-  (the decision-point rule above is unchanged). Consequence: in `下一步` mode the
-  navigation live-query targets `currentFen`, so the eval line's 雲 cell falls
-  back to batch data for `analysisFen` (off-book positions may show no 雲). This
-  is deliberate — `cdbLive` is a single slot; a second live query per nav would
-  thrash. See ARCHITECTURE.md 雲庫 section.
+  **Only the tab honours `cdbScope`; the eval line ALWAYS keys to `currentFen()`**
+  (the post-move rule above). Consequence: the navigation live-query targets
+  `cdbTabFen()` (default `當前步` = `analysisFen`), which differs from the eval
+  line's `currentFen`, so the eval line's 雲 cell rides on **batch** data for
+  `currentFen` (棋譜內局面 batch 都有，故多半仍在; switch the tab to `下一步` to
+  point the live query at `currentFen`). This is deliberate — `cdbLive` is a
+  single slot; a second live query per nav would thrash. See ARCHITECTURE.md 雲庫.
 - **Return shape mirrors `eval_service`'s `cdb`** (`{status, moves, best,
   source}`) so cached (batch) and live results share `renderEvalLine` /
   `renderCdbTab`. Scores are mover-POV cp; UI flips to red POV for display.

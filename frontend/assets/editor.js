@@ -329,23 +329,15 @@ function boardFen() {
   }
   return currentFen();
 }
-// The position whose cloud-library variations we show: the branch point the
-// active move was chosen FROM (one ply back), NOT the position after it.
-// chessdb returns the moves available at a position; we want THIS branch's
-// alternatives (兵五進一 and its siblings), not the opponent's replies to the
-// move just played. Same FEN the engine "前一步" analysis uses (analysisFen).
-function cdbFen() {
-  if (!EDITOR.data) return null;
-  return analysisFen();
-}
 // Which position the 雲庫 TAB queries (selectable via the 當前步/下一步 toggle):
-//   "prev" 當前步 — the decision point (前一步 = cdbFen/analysisFen): the moves
-//          playable for THIS move (current move + siblings). DEFAULT, and
-//          identical to the eval line, so the default path is unchanged.
+//   "prev" 當前步 — the decision point (前一步 = analysisFen): the moves playable
+//          for THIS move (current move + siblings). DEFAULT.
 //   "next" 下一步 — the position AFTER the active move (currentFen): the next
 //          move's options; clicking one adds it as a CHILD of the active move.
-// The eval line ALWAYS keys to cdbFen()/analysisFen() (CLAUDE.md: the whole eval
-// line judges the decision point); only the tab honours EDITOR.cdbScope.
+// NOTE: the eval line keys to currentFen() — the position AFTER the active move
+// (master's call 2026-06-18; see renderEvalLine). So in the default 當前步 mode
+// the tab (analysisFen, the decision point) and the eval line (currentFen)
+// deliberately describe different positions; only the tab honours EDITOR.cdbScope.
 function cdbTabFen() {
   if (!EDITOR.data) return null;
   return EDITOR.cdbScope === "next" ? currentFen() : analysisFen();
@@ -1281,12 +1273,14 @@ async function renderEvalLine() {
   if (!el) return;
   el.innerHTML = "";
   if (!EDITOR.data) return;
-  // The whole eval line describes the DECISION POINT (前一步, cdbFen) the active
-  // move was chosen from — NOT the position after it. So 深N / 建議 / 雲 all
-  // judge "was this move good, and what else could be played here", matching the
-  // chess-book-ai per-move table. This also gives the LAST move a score (the
-  // post-leaf position isn't in positions.db, but the leaf's decision point is).
-  const fen = cdbFen();
+  // The whole eval line describes the position AFTER the active move
+  // (currentFen): 深N / 建議 / 雲 judge "how does this position stand, and what's
+  // the best reply", aligning with the AI trend chart (which also scores each
+  // move's post-move position). Trade-off (master's call 2026-06-18): the LAST
+  // ply's post-leaf position isn't in positions.db, so the final move shows no
+  // depth scores — accepted, NOT patched (the live engine / trend chart already
+  // carries that number if it's ever needed).
+  const fen = currentFen();
   const entry = (fen && EDITOR.evalsByFen[fen]) || {};
 
   const cells = [];

@@ -144,10 +144,13 @@ def query_chessdb(fen: str, timeout: int = 10) -> dict:
    `query_chessdb(fen)` 即時抓 → 回傳並寫回**自有快取**（不寫唯讀 positions.db、
    也不碰 ai repo 的 `chessdb_cache.json`）。`fresh=1` 可跳過兩層快取重打。
 4. 前端「☁ 雲庫」tab（`renderCdbTab`）列出全部雲庫著法（中文/勝率/紅POV分/★最佳），
-   並標出目前所在變化；點列＝`addCdbMove` 在分支點加同層變化或切換過去；棋盤下方
-   評估列「雲」格顯示分支點最佳著＋勝率。導航時 `ensureCdbLive` lazy 查（debounce 220ms）。
-   **查的是「前一步＝分支點」局面**（`cdbFen`，同引擎「前一步」），所以列出的是「該分支
-   可以怎麼走」（本著＋替代著），而非「走完本步後對手如何因應」。
+   並標出目前所在變化；點列＝`addCdbMove` 在分支點加同層變化或切換過去。導航時
+   `ensureCdbLive` lazy 查（debounce 220ms）。
+   - **雲庫 tab 預設「當前步」查「前一步＝分支點」局面**（`cdbTabFen`→`analysisFen`，
+     同引擎「前一步」），列出「該分支可以怎麼走」（本著＋替代著）；切「下一步」改查
+     `currentFen`（走完本步後對手如何因應）。
+   - **棋盤下方評估列「雲」格查「走完本步後」**（`currentFen`，2026-06-18 起，與 AI
+     走勢圖同框架；早期＝分支點）。
 
 > 實作細節與設計原則見 [ARCHITECTURE.md](../ARCHITECTURE.md)（§2 雲庫 cache-first
 > 列、§3 chessdb_service 表）與 [CLAUDE.md](../CLAUDE.md)「Live cloud-library query」節。
