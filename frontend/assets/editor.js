@@ -3633,14 +3633,22 @@ function closeDemo() {
   $("#demoModal").hidden = true;
 }
 
+// Persisted 延伸 search DEPTH (plies). Depth beats a time budget here: a fixed
+// depth is quantifiable + reproducible (same depth = same search quality), while
+// seconds vary with position complexity + machine speed. Mirrors aiDepth() house
+// style: read PREFS, clamp 6–40, default 16. Saved on the input's change.
+function demoExtendDepth() { const d = parseInt(PREFS.demoExtendDepth, 10); return Number.isFinite(d) && d >= 6 && d <= 40 ? d : 16; }
+
 // ---------- 延伸: extend the demo line with a fresh engine PV from the leaf ----------
 // Headless analyze (own EventSource on EDITOR.demo.es so closeDemo can abort it) —
 // deliberately NOT startAnalysis (bound to the 引擎分析 tab) nor requestBestMove
-// (resolves one move; we want the whole deepest PV). Resolves {pvUci, pv}.
-function requestDemoPv(fen, movetimeMs) {
+// (resolves one move; we want the whole deepest PV). `go depth N` (the backend
+// prioritises depth over movetime), so the search stops at a quantifiable depth.
+// Resolves {pvUci, pv}.
+function requestDemoPv(fen, depth) {
   return new Promise((resolve) => {
     let lastEv = null;   // most recent info event carries the deepest pv/pvUci
-    const url = "/api/engine/analyze?fen=" + encodeURIComponent(fen) + "&movetime=" + movetimeMs + "&depth=0";
+    const url = "/api/engine/analyze?fen=" + encodeURIComponent(fen) + "&depth=" + depth;
     const es = new EventSource(url);
     EDITOR.demo.es = es;
     const close = () => { try { es.close(); } catch (_) { } if (EDITOR.demo.es === es) EDITOR.demo.es = null; };
@@ -3668,11 +3676,11 @@ async function demoExtend() {
   const at = d.idx;                        // branch point = the step now on screen
   const leaf = d.fens[at];
   const dropped = d.lastIccs.length - at;  // demo plies after `at` that will be discarded
-  const secs = Math.min(60, Math.max(1, parseInt($("#demoExtendSecs").value, 10) || 3));
+  const depth = demoExtendDepth();   // persisted; the input's change handler keeps PREFS in sync
   const btn = $("#demoExtendBtn");
   d.extending = true;
-  if (btn) { btn.disabled = true; btn.innerHTML = iconLabel("fish", "計算中…"); }
-  const res = await requestDemoPv(leaf, secs * 1000);
+  if (btn) { btn.disabled = true; btn.innerHTML = iconLabel("fish", `計算中(深${depth})…`); }
+  const res = await requestDemoPv(leaf, depth);
   d.extending = false;
   resetDemoExtendBtn();
   if ($("#demoModal").hidden) return;      // dialog closed mid-search
@@ -3691,7 +3699,7 @@ async function demoExtend() {
   renderDemo();
   const tail = dropped > 0 ? `（捨棄原尾 ${dropped} 步）` : "";
   const from = at === 0 ? "自起始局面" : `自第 ${at} 步`;
-  setStatus(`${from}延伸 ${res.pvUci.length} 步${tail}，共 ${d.lastIccs.length} 步，可再延伸或按加入`, "ok");
+  setStatus(`${from}以深度 ${depth} 延伸 ${res.pvUci.length} 步${tail}，共 ${d.lastIccs.length} 步，可再延伸或按加入`, "ok");
 }
 
 // ---------- 加入: merge the demo line (original + extensions) into the tree ----------
@@ -4046,6 +4054,18 @@ $("#demoLast").onclick = () => demoGo(EDITOR.demo.fens.length - 1);
 $("#demoPlay").onclick = demoTogglePlay;
 $("#demoExtendBtn").onclick = demoExtend;
 $("#demoAddBtn").onclick = demoAdd;
+const demoExtendDepthInput = $("#demoExtendDepth");
+if (demoExtendDepthInput) {
+  // Value is hydrated from PREFS in boot() (after loadPreferences); here we only
+  // wire the change handler that persists edits.
+  demoExtendDepthInput.addEventListener("change", () => {
+    let v = parseInt(demoExtendDepthInput.value, 10);
+    if (!Number.isFinite(v)) v = 16;
+    v = Math.max(6, Math.min(40, v));
+    demoExtendDepthInput.value = v;
+    savePreference("demoExtendDepth", v);
+  });
+}
 $("#demoClose").onclick = closeDemo;
 $("#demoModal").addEventListener("click", (e) => { if (e.target.id === "demoModal") closeDemo(); });
 reorderEvalRows();
@@ -4296,6 +4316,7 @@ async function recoverSettingsFromLocalStorage() {
   if ($("#autoRedSecsInput")) $("#autoRedSecsInput").value = autoRedSecs();
   if ($("#autoBlackSecsInput")) $("#autoBlackSecsInput").value = autoBlackSecs();
   if ($("#autoMaxPliesInput")) $("#autoMaxPliesInput").value = autoMaxPlies();
+  if ($("#demoExtendDepth")) $("#demoExtendDepth").value = demoExtendDepth();   // 演示「延伸」搜尋層數, persisted
   renderAnnotePresets();   // static chips, read from PREFS (defaults until managed)
   setupSplitters();
   // Pulsing badge on the empty board while the tree + last file load, so the

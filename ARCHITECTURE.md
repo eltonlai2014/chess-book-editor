@@ -263,7 +263,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 |---|---|
 | 開/關 dialog（用 applyIccs 串 fens；存 `startFen`/`startPath` 供延伸＋加入） | `openDemo` / `closeDemo`（關閉時 abort 進行中的延伸 SSE） |
 | 畫 / 跳步 / 自動播放 | `renderDemo` / `demoGo` / `demoTogglePlay` / `demoStopPlay` |
-| **延伸**：從**目前所在步**（`d.idx`）用引擎重算一段 PV（headless SSE，`go movetime`，取最深 PV），**捨棄此步之後的演示尾段**（尾段可信度低）再接上，續播。走在末步＝單純加長 | `demoExtend`（取線 `requestDemoPv`，自己的 `EDITOR.demo.es`，**不複用** `startAnalysis`/`requestBestMove`） |
+| **延伸**：從**目前所在步**（`d.idx`）用引擎重算一段 PV（headless SSE，`go movetime`，取最深 PV），**捨棄此步之後的演示尾段**（尾段可信度低）再接上，續播。走在末步＝單純加長。計算用**固定層數**（非秒數——層數可量化、可重現）＝pref `demoExtendDepth`（存取子 `demoExtendDepth()`，預設16，夾6–40；`#demoExtendDepth` change 即存、boot 回填）；後端 `go depth N` | `demoExtend`（取線 `requestDemoPv`，自己的 `EDITOR.demo.es`，**不複用** `startAnalysis`/`requestBestMove`） |
 | **把整條（信得過的頭＋引擎算的尾）加進走子樹**：demo state 本身就是完整 `{fen,path,pvUci,pv}`，原線複用既有節點、延伸段在分歧點新增 | `demoAdd` → `addPvLine` |
 
 **🤖 AI 自動走棋（pikafish 自動走子；後端零改動，複用 `/api/engine/analyze` 的 `movetime`）**

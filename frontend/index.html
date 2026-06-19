@@ -231,12 +231,12 @@
           <input id="demoInterval" type="number" min="0.2" max="10" step="0.1" value="2"> 秒
         </label>
       </div>
-      <!-- 延伸 = 從「目前所在步」用引擎重算一段 PV（捨棄此步之後的演示著法，
-           因尾段可信度低）；加入 = 把整條（信得過的頭＋引擎算的尾）併進走子樹。
-           兩者皆複用 openDemo state + addPvLine。 -->
+      <!-- 延伸 = 從「目前所在步」用引擎以固定層數重算一段 PV（捨棄此步之後的
+           演示著法，因尾段可信度低；層數可量化勝過秒數）；加入 = 把整條（信得過
+           的頭＋引擎算的尾）併進走子樹。兩者皆複用 openDemo state + addPvLine。 -->
       <div class="demoActions">
         <label class="demoInterval">計算
-          <input id="demoExtendSecs" type="number" min="1" max="60" step="1" value="3"> 秒
+          <input id="demoExtendDepth" type="number" min="6" max="40" step="1" value="16"> 層
         </label>
         <button id="demoExtendBtn" class="iconBtn" title="從目前所在步用引擎重算延伸（會捨棄此步之後的演示著法）"></button>
         <button id="demoAddBtn" class="iconBtn" title="把整條變化例（含延伸）加入走子樹"></button>
