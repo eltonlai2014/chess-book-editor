@@ -3604,15 +3604,102 @@ function openDemo(entry) {
   if (!moves.length || !entry.fen) { setStatus("此變化例無走子可演示", "err"); return; }
   const fens = [entry.fen];
   for (const u of moves) fens.push(applyIccs(fens[fens.length - 1], u));
-  EDITOR.demo = { fens, notations: entry.pv || [], lastIccs: moves, idx: 0, timer: null };
+  // startFen/startPath persist so 延伸 can append from the leaf and 加入 can merge
+  // the WHOLE line (original + every extension) back at the original branch point.
+  // notations/lastIccs ARE the running pv/pvUci — they grow in place as we extend,
+  // so the demo state itself is always the full {fen,path,pvUci,pv} addPvLine wants.
+  EDITOR.demo = {
+    fens, notations: (entry.pv || []).slice(), lastIccs: moves.slice(), idx: 0, timer: null,
+    startFen: entry.fen, startPath: Array.isArray(entry.path) ? [...entry.path] : [],
+    es: null, extending: false,
+  };
   $("#demoModal").hidden = false;
+  resetDemoExtendBtn();   // never inherit a stale 計算中… from a prior aborted run
   demoStopPlay();   // ensure the play button shows ▶ (not a stale ⏸)
   renderDemo();
 }
 
+function resetDemoExtendBtn() {
+  const btn = $("#demoExtendBtn");
+  if (btn) { btn.disabled = false; btn.innerHTML = iconLabel("fish", "延伸"); }
+}
+
 function closeDemo() {
   demoStopPlay();
+  const d = EDITOR.demo;
+  if (d.es) { try { d.es.close(); } catch (_) { } d.es = null; }  // abort an in-flight 延伸
+  d.extending = false;
+  resetDemoExtendBtn();
   $("#demoModal").hidden = true;
+}
+
+// ---------- 延伸: extend the demo line with a fresh engine PV from the leaf ----------
+// Headless analyze (own EventSource on EDITOR.demo.es so closeDemo can abort it) —
+// deliberately NOT startAnalysis (bound to the 引擎分析 tab) nor requestBestMove
+// (resolves one move; we want the whole deepest PV). Resolves {pvUci, pv}.
+function requestDemoPv(fen, movetimeMs) {
+  return new Promise((resolve) => {
+    let lastEv = null;   // most recent info event carries the deepest pv/pvUci
+    const url = "/api/engine/analyze?fen=" + encodeURIComponent(fen) + "&movetime=" + movetimeMs + "&depth=0";
+    const es = new EventSource(url);
+    EDITOR.demo.es = es;
+    const close = () => { try { es.close(); } catch (_) { } if (EDITOR.demo.es === es) EDITOR.demo.es = null; };
+    es.onmessage = (e) => {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch (_) { return; }
+      if (ev.error) { close(); resolve({ pvUci: [], pv: [], error: ev.error }); return; }
+      if (ev.done) { close(); resolve({ pvUci: (lastEv && lastEv.pvUci) || [], pv: (lastEv && lastEv.pv) || [] }); return; }
+      if (ev.pvUci || ev.pv) lastEv = ev;
+    };
+    es.onerror = () => { close(); resolve({ pvUci: [], pv: [], error: "連線中斷" }); };
+  });
+}
+
+// Extend from the CURRENTLY-shown step (d.idx), not the tail: navigate to the
+// step you still trust, hit 延伸, and everything after it is replaced by a fresh
+// engine PV. (The demo's last few plies — esp. a chessdb-derived / shallow tail —
+// are low-confidence; this lets the master cut the tail and recompute from any
+// point.) At the last step it's a no-op truncation, i.e. plain "extend deeper".
+async function demoExtend() {
+  const d = EDITOR.demo;
+  if (d.extending) return;
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) { setStatus("引擎未設定（請在檔案窗格設定引擎）", "err"); return; }
+  demoStopPlay();
+  const at = d.idx;                        // branch point = the step now on screen
+  const leaf = d.fens[at];
+  const dropped = d.lastIccs.length - at;  // demo plies after `at` that will be discarded
+  const secs = Math.min(60, Math.max(1, parseInt($("#demoExtendSecs").value, 10) || 3));
+  const btn = $("#demoExtendBtn");
+  d.extending = true;
+  if (btn) { btn.disabled = true; btn.innerHTML = iconLabel("fish", "計算中…"); }
+  const res = await requestDemoPv(leaf, secs * 1000);
+  d.extending = false;
+  resetDemoExtendBtn();
+  if ($("#demoModal").hidden) return;      // dialog closed mid-search
+  if (res.error) { setStatus("引擎錯誤：" + res.error, "err"); return; }
+  if (!res.pvUci.length) { setStatus("引擎無延伸著法（可能已終局）", "err"); return; }
+  // Cut the tail beyond `at`, then graft the fresh engine PV from there.
+  d.fens.length = at + 1;
+  d.lastIccs.length = at;
+  d.notations.length = at;
+  for (let i = 0; i < res.pvUci.length; i++) {
+    d.fens.push(applyIccs(d.fens[d.fens.length - 1], res.pvUci[i]));
+    d.lastIccs.push(res.pvUci[i]);
+    d.notations.push(res.pv[i] || res.pvUci[i]);
+  }
+  d.idx = at;   // park at the join so ▶ plays the newly computed line
+  renderDemo();
+  const tail = dropped > 0 ? `（捨棄原尾 ${dropped} 步）` : "";
+  const from = at === 0 ? "自起始局面" : `自第 ${at} 步`;
+  setStatus(`${from}延伸 ${res.pvUci.length} 步${tail}，共 ${d.lastIccs.length} 步，可再延伸或按加入`, "ok");
+}
+
+// ---------- 加入: merge the demo line (original + extensions) into the tree ----------
+// The demo state is already a full {fen,path,pvUci,pv}; addPvLine reuses existing
+// nodes for the original portion and only creates the extension as new branches.
+function demoAdd() {
+  const d = EDITOR.demo;
+  addPvLine({ fen: d.startFen, path: d.startPath, pvUci: d.lastIccs, pv: d.notations });
 }
 
 // ---------- 加入: merge a PV line into the move tree as a branch ----------
@@ -3940,6 +4027,8 @@ $("#demoFirst").innerHTML = ICON.skipBack;
 $("#demoPrev").innerHTML = ICON.chevL;
 $("#demoNext").innerHTML = ICON.chevR;
 $("#demoLast").innerHTML = ICON.skipFwd;
+$("#demoExtendBtn").innerHTML = iconLabel("fish", "延伸");
+$("#demoAddBtn").innerHTML = iconLabel("branch", "加入");
 // Per-line 演示 / 加入 (event-delegated; the history list re-renders often).
 $("#engineHistory").addEventListener("click", (e) => {
   const entryEl = e.target.closest(".engEntry");
@@ -3955,6 +4044,8 @@ $("#demoPrev").onclick = () => demoGo(EDITOR.demo.idx - 1);
 $("#demoNext").onclick = () => demoGo(EDITOR.demo.idx + 1);
 $("#demoLast").onclick = () => demoGo(EDITOR.demo.fens.length - 1);
 $("#demoPlay").onclick = demoTogglePlay;
+$("#demoExtendBtn").onclick = demoExtend;
+$("#demoAddBtn").onclick = demoAdd;
 $("#demoClose").onclick = closeDemo;
 $("#demoModal").addEventListener("click", (e) => { if (e.target.id === "demoModal") closeDemo(); });
 reorderEvalRows();

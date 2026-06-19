@@ -1761,6 +1761,31 @@ h2.panelHead>span {
   border-radius: 6px;
 }
 
+/* 延伸 / 加入 row — sits under the transport controls. Gold-accented pills so
+   they read as the dialog's primary actions, not transport buttons. */
+.demoActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.demoActions .iconBtn {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.28);
+}
+
+.demoActions .iconBtn .ico {
+  width: 14px;
+  height: 14px;
+}
+
 /* 棋譜 panel header */
 .moveListHeader {
   margin-bottom: 10px;
