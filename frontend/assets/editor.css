@@ -68,6 +68,11 @@
   --eval-query: var(--accent-strong);
   --eval-flag: #f4a521;
   --eval-blunder: #ffd60a;   /* 漏著 mark — bright yellow, pops on the dark chart */
+  /* 漏著 ✖ outline. Dark on the dark themes so the yellow glyph pops; the light
+     theme flips it to a white halo (see 霜月白) so the marker doesn't read as a
+     muddy dark blob on white. Tokenised here so the component (.aiBlunder) stops
+     hard-coding the dark-theme outline. */
+  --eval-blunder-halo: rgba(20, 16, 12, 0.6);
   --chart-area-alpha: 0.42;   /* advantage-fill depth; light theme dials down */
 
   /* === State / data text colours === these defaults are LIGHT (tuned for the
@@ -389,7 +394,11 @@ html[data-ui-theme="light"] {
   --ply-black: var(--text);
   --eval-line: rgba(28, 34, 40, 0.55);
   --eval-flag: #c9821a;
-  --eval-blunder: #b8860b;   /* 漏著 mark — deep goldenrod, readable on the light board */
+  /* 漏著: 悶金 #b8860b 在白底＋深描邊讀成髒暗黃塊 → 改更亮乾淨的橘琥珀（白底 ~3.9:1，
+     900 粗字大字 AA 過關），描邊翻成白色光暈：白底上隱形，壓在粉紅/淺藍優勢填色上才現出
+     細白邊把 ✖ 分離。warning 色相，與 --eval-flag 琥珀拉開。 */
+  --eval-blunder: #e0670f;   /* 漏著 mark — vivid burnt-orange, clean on white */
+  --eval-blunder-halo: rgba(255, 255, 255, 0.92);
   /* AI 走勢圖 → 素淨: faint advantage fill, muted dots, neutral cursor ring so
      the chart isn't a 4-hue clutter on white. */
   --chart-area-alpha: 0.16;
@@ -533,13 +542,14 @@ body {
    Three intents — primary / outline / ghost — share the rules below.
    Targets keep their existing selectors so the HTML doesn't need to change.
 
-     primary  — filled gold; lead action (儲存, 建立, 套用)
+     primary  — filled accent-strong; lead action (儲存, 建立, 套用).
+                Same green as .rpTab.active so the two filled buttons match.
      outline  — bg-3 + line-strong border; neutral default
      ghost    — transparent + glass highlight + faint gold border;
                 used for icon buttons, nav row, chips, promote pill
 
    Hover language:
-     primary  → brighter gold + brighter text
+     primary  → accent-strong deepened one step (dark overlay) + brighter text
      outline  → bg-4 + accent border + accent-strong text
      ghost    → gold-soft bg + accent border + accent-strong text + lift -1px
 
@@ -547,10 +557,14 @@ body {
    each section's own block below.
    ===================================================================== */
 
-/* --- Primary (filled gold) --- */
+/* --- Primary (filled accent-strong) --- the lead action fill. Uses
+   --accent-strong (NOT --accent) so it's the SAME green as the active-tab pill
+   (.rpTab.active, also accent-strong) — one filled-emphasis colour, no
+   light-vs-dark mismatch — and so white text on it clears AA in light
+   (accent-strong #146f68 = 5.4:1; plain --accent #239892 was only ~3.3:1). */
 #saveBtn:not(:disabled),
 .modalActions button.primary {
-  background: var(--accent);
+  background: var(--accent-strong);
   color: var(--btn-primary-text);
   border: 1px solid var(--accent-strong);
   font-weight: 600;
@@ -558,9 +572,12 @@ body {
   transition: var(--btn-transition);
 }
 
+/* Hover deepens by one step (a uniform dark overlay) — theme-safe in the same
+   direction both ways, since --accent-strong is the bright end in dark themes
+   and the dark end in light, so we can't just hop to another accent token. */
 #saveBtn:not(:disabled):hover,
 .modalActions button.primary:hover:not(:disabled) {
-  background: var(--accent-strong);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.14)), var(--accent-strong);
   color: var(--btn-primary-text-hover);
   border-color: var(--accent-strong);
 }
@@ -725,6 +742,14 @@ header h1 {
   font-size: 12px;
   color: var(--text-muted);
   min-width: 180px;
+  /* Cap + ellipsis so a long message (e.g. the 延伸 feedback) can never widen
+     .actions and squeeze the header title/buttons. Full text stays in title=. */
+  max-width: 340px;
+  display: inline-block;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-variant: small-caps;
   letter-spacing: 0.04em;
 }
@@ -1786,6 +1811,38 @@ h2.panelHead>span {
   height: 14px;
 }
 
+/* 延伸／加入 feedback line — full dialog width, wraps freely (the message was
+   formerly cramped into the header #status). Colour follows the same ok/err/warn
+   semantics as #status, via tokens. */
+.demoStatus {
+  margin-top: 10px;
+  padding: 8px 12px;
+  /* Left-aligned, not centred: a wrapping sentence centred leaves the short last
+     line ("或按加入") orphaned mid-box. Left edge keeps both lines anchored. */
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: rgba(var(--accent-strong-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
+  border-radius: 8px;
+}
+
+.demoStatus.ok {
+  color: var(--ok);
+  background: rgba(var(--accent-strong-rgb), 0.07);
+}
+
+.demoStatus.err {
+  color: var(--err);
+  background: rgba(var(--err-rgb), 0.08);
+  border-color: rgba(var(--err-rgb), 0.22);
+}
+
+.demoStatus.warn {
+  color: var(--accent-strong);
+}
+
 /* 棋譜 panel header */
 .moveListHeader {
   margin-bottom: 10px;
@@ -2199,8 +2256,8 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
   font-size: 15px;
   font-weight: 900;
   font-family: var(--ui-font, system-ui), sans-serif;
-  paint-order: stroke;          /* dark outline so the yellow ✖ reads over any zone/theme */
-  stroke: rgba(20, 16, 12, 0.6);
+  paint-order: stroke;          /* outline so the ✖ reads over any zone/theme (dark on dark themes, white halo on 霜月白) */
+  stroke: var(--eval-blunder-halo);
   stroke-width: 2;
   stroke-linejoin: round;
 }

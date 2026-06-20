@@ -167,7 +167,19 @@ function reorderEvalRows() {
 function setStatus(text, cls) {
   const s = $("#status");
   s.textContent = text || "";
+  s.title = text || "";   // header span is ellipsised; keep the full text on hover
   s.className = cls || "";
+}
+
+// Feedback line INSIDE the 演示窗 (延伸／加入). Lives there rather than the header
+// #status so a long message (depth / dropped tail / total / next action) has the
+// dialog's full width to wrap, instead of squeezing the header title + buttons.
+function setDemoStatus(text, cls) {
+  const s = $("#demoStatus");
+  if (!s) return;
+  s.textContent = text || "";
+  s.className = "demoStatus" + (cls ? " " + cls : "");
+  s.hidden = !text;
 }
 
 function showConfirmDialog(message, title = "請確認", okLabel = "確定", cancelLabel = "取消") {
@@ -3614,6 +3626,7 @@ function openDemo(entry) {
     es: null, extending: false,
   };
   $("#demoModal").hidden = false;
+  setDemoStatus("");      // fresh dialog: no stale 延伸 feedback
   resetDemoExtendBtn();   // never inherit a stale 計算中… from a prior aborted run
   demoStopPlay();   // ensure the play button shows ▶ (not a stale ⏸)
   renderDemo();
@@ -3630,6 +3643,7 @@ function closeDemo() {
   if (d.es) { try { d.es.close(); } catch (_) { } d.es = null; }  // abort an in-flight 延伸
   d.extending = false;
   resetDemoExtendBtn();
+  setDemoStatus("");
   $("#demoModal").hidden = true;
 }
 
@@ -3671,7 +3685,7 @@ function requestDemoPv(fen, depth) {
 async function demoExtend() {
   const d = EDITOR.demo;
   if (d.extending) return;
-  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) { setStatus("引擎未設定（請在檔案窗格設定引擎）", "err"); return; }
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) { setDemoStatus("引擎未設定（請在檔案窗格設定引擎）", "err"); return; }
   demoStopPlay();
   const at = d.idx;                        // branch point = the step now on screen
   const leaf = d.fens[at];
@@ -3679,13 +3693,18 @@ async function demoExtend() {
   const depth = demoExtendDepth();   // persisted; the input's change handler keeps PREFS in sync
   const btn = $("#demoExtendBtn");
   d.extending = true;
-  if (btn) { btn.disabled = true; btn.innerHTML = iconLabel("fish", `計算中(深${depth})…`); }
+  // Busy label MUST stay the same width as the resting "延伸" or the centred
+  // .demoActions row drifts as it widens. "計算" is the same 2 CJK glyphs + same
+  // icon → identical width, zero drift. The depth detail (redundant with the
+  // 「計算 N 層」input beside it) goes to #demoStatus, not onto the button.
+  if (btn) { btn.disabled = true; btn.innerHTML = iconLabel("fish", "計算"); }
+  setDemoStatus(`計算中(深${depth})…`, "warn");
   const res = await requestDemoPv(leaf, depth);
   d.extending = false;
   resetDemoExtendBtn();
   if ($("#demoModal").hidden) return;      // dialog closed mid-search
-  if (res.error) { setStatus("引擎錯誤：" + res.error, "err"); return; }
-  if (!res.pvUci.length) { setStatus("引擎無延伸著法（可能已終局）", "err"); return; }
+  if (res.error) { setDemoStatus("引擎錯誤：" + res.error, "err"); return; }
+  if (!res.pvUci.length) { setDemoStatus("引擎無延伸著法（可能已終局）", "err"); return; }
   // Cut the tail beyond `at`, then graft the fresh engine PV from there.
   d.fens.length = at + 1;
   d.lastIccs.length = at;
@@ -3697,9 +3716,11 @@ async function demoExtend() {
   }
   d.idx = at;   // park at the join so ▶ plays the newly computed line
   renderDemo();
-  const tail = dropped > 0 ? `（捨棄原尾 ${dropped} 步）` : "";
-  const from = at === 0 ? "自起始局面" : `自第 ${at} 步`;
-  setStatus(`${from}以深度 ${depth} 延伸 ${res.pvUci.length} 步${tail}，共 ${d.lastIccs.length} 步，可再延伸或按加入`, "ok");
+  // Terse, one-line: drop the spaces + the「可再延伸或按加入」hint (the buttons are
+  // right above) so it never wraps. 深N matches the busy-button wording.
+  const tail = dropped > 0 ? `（捨尾${dropped}）` : "";
+  const from = at === 0 ? "自起始" : `自第${at}步`;
+  setDemoStatus(`${from}以深${depth}延伸${res.pvUci.length}步${tail}，共${d.lastIccs.length}步`, "ok");
 }
 
 // ---------- 加入: merge the demo line (original + extensions) into the tree ----------

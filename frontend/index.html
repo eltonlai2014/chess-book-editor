@@ -241,6 +241,9 @@
         <button id="demoExtendBtn" class="iconBtn" title="從目前所在步用引擎重算延伸（會捨棄此步之後的演示著法）"></button>
         <button id="demoAddBtn" class="iconBtn" title="把整條變化例（含延伸）加入走子樹"></button>
       </div>
+      <!-- 延伸／加入 的回饋（深度、捨尾、總步數、下一步可做什麼）顯示於此，窗內有
+           整列寬度可換行 — 不再塞進 header 的 #status 把標題列擠壓。 -->
+      <div id="demoStatus" class="demoStatus" hidden></div>
     </div>
   </div>
   <!-- Settings dialog. Holds the rarely-changed paths (library root / eval DB /
