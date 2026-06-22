@@ -84,6 +84,14 @@ Persistence layer (the original foundation, still the correctness anchor):
 # if Playwright/Chromium/sample absent. Run after frontend or save-path changes.
 .\.venv\Scripts\python.exe tests\test_smoke_ui.py
 
+# Engine SSE contract test (execs the REAL Pikafish; bounded depth, sub-second).
+# Verifies /api/engine/analyze (SSE: per-depth info + done.bestmove) and
+# /api/engine/analyze-line (NDJSON: per-fen cp/best, depth2->cp2). All three
+# frontend streams (engine tab, AI auto-play via movetime, demo→延伸 via depth)
+# route through these two endpoints. SKIPs if no engine configured (CI-safe).
+# Run after touching either SSE route or engine_service.
+.\.venv\Scripts\python.exe tests\test_engine_sse.py
+
 # Regenerate XQStudio sanity samples
 .\.venv\Scripts\python.exe tools\emit_sample.py
 ```

@@ -92,10 +92,12 @@
 > **動手前先跑基準**：`tests\test_routes.py` + `tests\test_smoke_ui.py`（都應全綠）；每改一步
 > 重跑，當回歸網。
 
-### 0. 先做：手動驗證（非程式碼）
-- **引擎 / auto-play / demo 的 SSE 串流**：T1-2 的 `openAnalyzeStream` 重構，自動測試**未覆蓋**
-  這三條串流的執行期行為（smoke 沙盒無引擎）。在跑起來的 app 手動點「引擎分析」「🤖AI走棋」
-  「演示→延伸」各一次確認正常。若異常，回看 commit `aba8129` 的三處等價改寫。
+### 0. ~~先做：手動驗證（非程式碼）~~ ✅ 已用自動測試取代（2026-06-22）
+- **引擎 / auto-play / demo 的 SSE 串流**：原本只能手動驗（smoke 沙盒無引擎）。改成
+  `tests/test_engine_sse.py`——用**真引擎**端到端驗 `/api/engine/analyze`（SSE：逐層 info
+  ＋末 `done.bestmove`）與 `/api/engine/analyze-line`（NDJSON：逐局面 cp/best，含 depth2→cp2）。
+  三條前端串流（引擎分頁、🤖AI走棋走 `movetime`、演示→延伸走 depth）都經這兩支端點，故此測
+  涵蓋。無引擎則 SKIP（CI 安全，同 smoke）。動 SSE 程式前先跑它當基準。
 
 ### T2 — 結構債（大工程，一次一個邊界，每步跑測試）
 - **T2-1 拆 `editor.js`（~4400 行單檔 + `EDITOR` 48 欄全域）**：建議模組邊界——
