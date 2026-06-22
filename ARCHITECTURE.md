@@ -17,7 +17,10 @@
 ```
 瀏覽器 (vanilla JS, 無框架)
   ├─ board.js   棋盤渲染器 + FEN/ICCS helper（與 chess-book-ai 同源，會漂移）
-  └─ editor.js  編輯器全部邏輯（狀態機 EDITOR + 走子樹 + 即時分析 + 演示）
+  └─ editor*.js  編輯器邏輯（T2-1 拆多檔 classic script，共享全域 scope，依序載入）
+       editor.js（核心：狀態機 EDITOR/走子樹/檔案/評估列/棋譜/boot wiring）
+       + editor-cdb.js（雲庫）/ -engine.js（引擎分頁＋SSE helper）
+       / -autoplay.js（AI 走棋）/ -aichart.js（走勢圖）/ -demo.js（PV 演示）
         │  fetch / EventSource(SSE)
         ▼
 Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 Response）
@@ -168,9 +171,18 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 > board.js 也含一套獨立的 game-page bootstrap（STATE:896 起、`initGamePage` 等）——
 > 那是 chess-book-ai 的瀏覽 UI，editor **不呼叫**，只借渲染器與 helper。改 editor 別動那段。
 
-### 前端 — 編輯器邏輯（frontend/assets/editor.js）
+### 前端 — 編輯器邏輯（frontend/assets/editor*.js）
 
-**狀態 / 樹導航**
+> **T2-1 多檔拆分（2026-06-22）**：editor.js（~4400 行）拆成數個 **classic script**，
+> 由 index.html **依序**載入（board.js → editor-cdb → -engine → -autoplay → -aichart →
+> -demo → **editor.js**）。全部共享同一全域 lexical scope——函式體可自由互相參照
+> （都在 boot 後 runtime 才呼叫）；唯一約束是「**頂層執行碼**不可前向參照尚未載入的
+> 符號」，故 boot/wiring 留在最後的 editor.js。各模組只含宣告（函式＋字面 const）。
+> **加新模組要逐一抽、每步跑 smoke**（曾因一次抽多個用過時行號壞切而回歸）。
+> 模組：`-cdb`（雲庫 client/UI）、`-engine`（引擎分頁＋`openAnalyzeStream`）、
+> `-autoplay`（AI 走棋沙盒）、`-aichart`（走勢圖）、`-demo`（PV 演示彈窗）。
+
+**狀態 / 樹導航**（以下函式名仍有效，行號為拆分前舊值、僅供概念定位——拆分後散落各 editor-*.js）
 | 功能 | 函式:行 |
 |---|---|
 | 全域狀態 | `EDITOR`:15（含 `engineAnalysis` / `aiAnalysis`:28 / `demo`） |

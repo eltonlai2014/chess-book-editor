@@ -10,7 +10,7 @@
 
 | 檔案 | 行數(盤點日) | 角色 |
 |---|---|---|
-| `frontend/assets/editor.js` | ~4372 | 整個編輯器前端（單檔） |
+| `frontend/assets/editor.js` | ~2950 | 編輯器核心（T2-1 已拆出 cdb/engine/autoplay/aichart/demo 為同層 classic script） |
 | `frontend/assets/editor.css` | ~3048 | UI 樣式（唯一被 index.html 載入的） |
 | `backend/app.py` | ~564 | Flask **薄路由**（T2-2 已拆出 `config.py`/`picker_service.py`/`engine_service.py`） |
 | `frontend/assets/board.js` | ~1722 | 盤面繪製（自 chess-book-ai 複製，接受漂移） |
@@ -47,7 +47,7 @@
 
 | ID | 項目 | 證據 | 修法方向 / 取捨 | 狀態 |
 |---|---|---|---|---|
-| T2-1 | **拆 `editor.js` god-file** | ~4372 行單檔 + `EDITOR` 48 欄全域物件（[editor.js:15](../frontend/assets/editor.js#L15)） | 切 demo / engine / chessdb / auto-play / tree-ops 模組。**取捨**：純 vanilla、無打包工具，拆 ES module 要先定載入方式 | TODO |
+| T2-1 | **拆 `editor.js` god-file** | ~4400 行單檔 + `EDITOR` 全域物件 | ✅ 主人裁示「多 `<script>` 漸進抽出」。逐一抽出 5 模組（cdb/engine/autoplay/aichart/demo）為**同層 classic script**（共享全域 scope、依序載入），每步跑 smoke。editor.js ~4400→~2950。**教訓**：一次抽多個用過時行號會壞切→改逐一抽＋每步重新定界＋smoke 把關。智慧化過程中發現並修掉 smoke 對「同 server 第二次整頁載入」的 dev-server 卡死（reload 改 fresh server）。`EDITOR` 全域物件仍未拆（與 T3-3 一起再議） | **DONE**（2026-06-22） |
 | T2-2 | **拆 `app.py` god-module** | ~1064 行混路由 + 路徑解析 + picker + 兩支 SSE | ✅ 抽 `config.py`（路徑/prefs/DEFAULT_*）、`picker_service.py`（tkinter 對話框）、`engine_service.py`（Pikafish 子行程＋UCI 解析＋兩支串流，共用 `_spawn`/`_engine_fen`/`_shutdown`）。app.py 1064→564，只剩薄路由。route+SSE+smoke 全綠（smoke isolation seam 改 patch `config`） | **DONE**（2026-06-22） |
 | T2-3 | **DB 連線 per-request churn** | `eval_service`（read-only positions.db）、`chessdb_service` 每次查詢開新連線 | ✅ `backend/db_pool.py`：程序級連線池（`get_ro`/`get_rw`，path-keyed、序列化、不 close）。`lookup_batch`＋雲庫 `_read_positions_db`/`_ensure_cache` 改用池；`db_info` 仍短命（要驗證任意候選檔）。route + eval-integration + trap-spotcheck 全綠 | **DONE**（2026-06-22） |
 | T2-4 | **導覽時全樹走訪 + 全盤重繪** | `refreshActive`（[editor.js:1895](../frontend/assets/editor.js#L1895)）每次重畫整個 SVG + 重裝 overlay | `path→fen` 快取 + 箭頭層增量更新。**取捨**：小檔無感、無 profiling 證據前不提前優化（codex 亦持此見）；只有大棋譜/深樹才值得 | TODO |
@@ -73,7 +73,10 @@
 3. ~~Playwright 煙霧測試~~ ✅ **T3-1b 已做**（`tests/test_smoke_ui.py`，8 checks 全綠）。
 4. ~~T1-2 SSE helper~~ ✅、~~T1-3 FEN side 收斂~~ ✅（安全網就位後做，smoke+routes 全綠）。
 5. ~~T2-3 連線池~~ ✅、~~T2-2 拆 app.py~~ ✅、~~引擎 SSE 自動測試（取代手動驗證）~~ ✅（2026-06-22）。
-6. **NEXT → T2-1 拆 editor.js（需先定載入方式）、T2-5（fetchCdb 共用＋回填）、其餘 T3。**
+6. ~~T3-2 門檻單一來源~~ ✅、~~T3-5 SSE watchdog~~ ✅、~~T3-4 monkeypatch thread-local~~ ✅、
+   ~~T2-5 fetchCdb 共用~~ ✅、~~T2-1 拆 editor.js（多 script）~~ ✅（2026-06-22）。
+7. **剩餘：T3-3 board.js `window.POSITIONS` 解耦（＋`EDITOR` 全域物件，與此一起想）；
+   T2-4 `refreshActive` 全盤重繪（無 profiling 證據前不動）。editor.js 續拆核心模組為選配。**
 
 > **觀察（非 bug，已定案）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
 > `ok:true side:black`（輪次由 UI 控管）。**主人裁示（2026-06-22）：後端先不擋**，維持現狀；
@@ -100,10 +103,11 @@
   涵蓋。無引擎則 SKIP（CI 安全，同 smoke）。動 SSE 程式前先跑它當基準。
 
 ### T2 — 結構債（大工程，一次一個邊界，每步跑測試）
-- **T2-1 拆 `editor.js`（~4400 行單檔 + `EDITOR` 48 欄全域）**：建議模組邊界——
-  board-render / tree-ops / engine-SSE（`openAnalyzeStream`+`startAnalysis`…）/ chessdb
-  （`ensureCdbLive`/`deriveCdbLine`）/ auto-play / demo / eval-line。**先決定載入方式**：多
-  `<script>` 依序載入（沿用現狀、零建置）vs 改 `type=module` ESM。取捨：純 vanilla、無打包工具。
+- ~~**T2-1 拆 `editor.js`（~4400 行）**~~ ✅ **DONE**（2026-06-22）：多 `<script>` 漸進抽出
+  （主人裁示）。5 模組 editor-cdb/-engine/-autoplay/-aichart/-demo.js，同層 classic script、
+  依序載入、共享全域 scope。editor.js ~4400→~2950。**逐一抽＋每步 smoke**（批次壞切教訓）。
+  `EDITOR` 全域物件未拆（留與 T3-3 一起想）。剩餘可抽：tree-ops / eval-line / file-tree（核心，
+  耦合較深，需更細心）——若續拆，沿用「逐一抽、每步重新定界、跑 smoke」。
 - ~~**T2-2 拆 `app.py`（~1064 行）**~~ ✅ **DONE**（2026-06-22）：抽 `config.py`／`picker_service.py`／
   `engine_service.py`（兩支串流共用 `_spawn`/`_engine_fen`/`_shutdown`）。app.py 1064→564 薄路由。
   route+`test_engine_sse`+smoke 全綠。
