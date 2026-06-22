@@ -65,7 +65,11 @@ from backend.cb_service import (  # noqa: E402
     save_cbl_game,
     save_cbr,
 )
-from backend.eval_service import db_info as eval_db_info, lookup_batch as eval_lookup_batch  # noqa: E402
+from backend.eval_service import (  # noqa: E402
+    TRAP_THRESHOLDS,
+    db_info as eval_db_info,
+    lookup_batch as eval_lookup_batch,
+)
 from backend.chessdb_service import lookup as chessdb_lookup  # noqa: E402
 from backend.config import (  # noqa: E402
     CHESSDB_CACHE_PATH,
@@ -407,6 +411,14 @@ def new_xqf():
 # ---------- eval DB config + lookup ------------------------------------------
 # Path resolution lives in backend/config.py (_get_eval_db); the read layer is
 # backend/eval_service.py. These routes are the HTTP surface.
+
+@app.get("/api/eval/thresholds")
+def eval_thresholds():
+    """Trap / brilliant detection thresholds — the single source the editor UI
+    fetches on boot instead of hardcoding (T3-2). See eval_service.TRAP_THRESHOLDS.
+    """
+    return jsonify(TRAP_THRESHOLDS)
+
 
 @app.get("/api/eval/info")
 def eval_info():

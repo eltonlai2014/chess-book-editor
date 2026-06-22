@@ -123,11 +123,17 @@ for the full design and schema.
   `?mode=ro`. Never INSERT/UPDATE — the AI repo's pipeline owns the file.
 - **Default path**: `../chess-book-ai/output/positions.db` (sibling). Override
   via `preferences.json` key `evalDbPath`.
-- **Trap / brilliant thresholds** in `editor.js` (`SKIP_OPENING_PLIES`,
-  `TRAP_SHALLOW_MAX`, `TRAP_DEEP_MIN`, `BRILLIANT_MIN`, `BRILLIANT_MAX`)
-  **must stay in sync with `chess-book-ai/site_builder/render_site.py`**.
-  Same goes for the `_ply_loss` formula. There's a sanity-check script:
-  `backend/test_trap_spotcheck.py`.
+- **Trap / brilliant thresholds — single in-repo source (T3-2):**
+  `backend/eval_service.py` `TRAP_THRESHOLDS` (`skipOpeningPlies`,
+  `trapShallowMax`, `trapDeepMin`, `trapDeepMax`, `brilliantMin`, `brilliantMax`).
+  The editor UI **fetches** them via `GET /api/eval/thresholds` on boot
+  (`editor.js` `fetchThresholds`, in boot()'s parallel batch; the consts are now
+  fallback mirrors, not authoritative) and `backend/test_trap_spotcheck.py`
+  **imports** the dict — so there's exactly one copy here. It **must still match
+  `chess-book-ai/site_builder/render_site.py`** (cross-repo: that pipeline can't
+  import this one), but only this dict has to track it now. Same for the
+  `_ply_loss` formula. Sanity-check script: `backend/test_trap_spotcheck.py`;
+  route contract in `tests/test_routes.py`.
 - **FEN format compatibility** (must remain `<board> <w|b>`, no move counters):
   `backend/test_eval_integration.py` measures hit rate against the DB and
   will tank to ~0% if either side's FEN serialiser drifts.

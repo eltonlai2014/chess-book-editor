@@ -1761,14 +1761,35 @@ function currentLine() {
 // Mirrors chess-book-ai's site_builder/render_site.py:
 //   _ply_loss(fen_before, fen_after) = score_cp(before) + score_cp(after)
 // Both POV-relative — that's why the SUM (not the diff) gives the mover-cp loss.
-// Thresholds and SKIP_OPENING_PLIES must stay in sync with render_site.py.
+// Thresholds come from the backend single source (GET /api/eval/thresholds →
+// eval_service.TRAP_THRESHOLDS) — fetched on boot by fetchThresholds(), before
+// the first move-list render. The values below are a FALLBACK mirror used only
+// if that fetch fails; they must match the backend (and render_site.py), but the
+// backend is authoritative so the UI auto-follows it. (T3-2: was hand-copied.)
+let SKIP_OPENING_PLIES = 15;     // skip plies 1..15; trap/brilliant from ply 16
+let TRAP_SHALLOW_MAX = 50;      // shallow says "fine"
+let TRAP_DEEP_MIN = 100;     // deep says "blunder"
+let TRAP_DEEP_MAX = 2000;    // sanity cap
+let BRILLIANT_MIN = 50;
+let BRILLIANT_MAX = 300;
 
-const SKIP_OPENING_PLIES = 15;     // skip plies 1..15; trap/brilliant from ply 16
-const TRAP_SHALLOW_MAX = 50;      // shallow says "fine"
-const TRAP_DEEP_MIN = 100;     // deep says "blunder"
-const TRAP_DEEP_MAX = 2000;    // sanity cap
-const BRILLIANT_MIN = 50;
-const BRILLIANT_MAX = 300;
+// Pull the authoritative thresholds from the backend. On failure the fallback
+// values above stand in (graceful: trap/brilliant marking still works). Called
+// in boot()'s parallel fetch batch so it resolves before any renderMoveList().
+async function fetchThresholds() {
+  try {
+    const r = await fetch("/api/eval/thresholds");
+    const t = await r.json();
+    if (t && typeof t === "object") {
+      if (Number.isFinite(t.skipOpeningPlies)) SKIP_OPENING_PLIES = t.skipOpeningPlies;
+      if (Number.isFinite(t.trapShallowMax)) TRAP_SHALLOW_MAX = t.trapShallowMax;
+      if (Number.isFinite(t.trapDeepMin)) TRAP_DEEP_MIN = t.trapDeepMin;
+      if (Number.isFinite(t.trapDeepMax)) TRAP_DEEP_MAX = t.trapDeepMax;
+      if (Number.isFinite(t.brilliantMin)) BRILLIANT_MIN = t.brilliantMin;
+      if (Number.isFinite(t.brilliantMax)) BRILLIANT_MAX = t.brilliantMax;
+    }
+  } catch (_) { /* keep fallback values */ }
+}
 
 function scoreCp(e) {
   if (!e) return null;
@@ -4388,7 +4409,7 @@ async function recoverSettingsFromLocalStorage() {
   drawBoardLoading("棋譜載入中…");
   // Parallelisable on boot — eval info is independent of the XQF tree fetch
   // and we want it ready before tryAutoLoadLastFile triggers fetchEvalsForFile.
-  await Promise.all([fetchEvalDbInfo(), fetchEngineInfo(), loadFileTree()]);
+  await Promise.all([fetchEvalDbInfo(), fetchEngineInfo(), fetchThresholds(), loadFileTree()]);
   // Offer to restore any path the server lost but the browser still remembers,
   // before auto-loading (root recovery reloads the tree autoload depends on).
   await recoverSettingsFromLocalStorage();

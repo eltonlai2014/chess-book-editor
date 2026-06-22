@@ -35,6 +35,22 @@ from backend import db_pool
 # only that they exist as ints.
 _DEPTHS = (12, 22, 28, 32)
 
+# Trap / brilliant detection thresholds — THE single in-repo source (T3-2).
+# The editor UI fetches these via GET /api/eval/thresholds instead of hardcoding
+# them, and backend/test_trap_spotcheck.py imports this dict — so there's exactly
+# ONE copy in this repo. They MUST still match
+# chess-book-ai/site_builder/render_site.py (cross-repo contract: that repo's
+# static-site pipeline can't import this one), but now only this dict has to be
+# kept in sync there, not three hand-copied sites. cp scale, ply 1-based.
+TRAP_THRESHOLDS = {
+    "skipOpeningPlies": 15,   # skip plies 1..15; trap/brilliant from ply 16
+    "trapShallowMax": 50,     # shallow search says "fine"
+    "trapDeepMin": 100,       # deep search says "blunder"
+    "trapDeepMax": 2000,      # sanity cap (ignore mate-scale swings)
+    "brilliantMin": 50,       # deep says mover GAINED 50..300 cp
+    "brilliantMax": 300,
+}
+
 
 def _open_ro(db_path: Path) -> sqlite3.Connection:
     """Open the eval DB read-only, SHORT-LIVED (caller closes). URI mode means a

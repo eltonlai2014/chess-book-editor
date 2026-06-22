@@ -204,10 +204,26 @@ def test_chessdb():
         app_module.CHESSDB_CACHE_PATH = orig_cache
 
 
+def test_thresholds():
+    print("[/api/eval/thresholds]")
+    c = app.test_client()
+    r = c.get("/api/eval/thresholds")
+    body = r.get_json()
+    check("thresholds -> 200", r.status_code == 200, f"got {r.status_code}")
+    keys = {"skipOpeningPlies", "trapShallowMax", "trapDeepMin",
+            "trapDeepMax", "brilliantMin", "brilliantMax"}
+    check("has all threshold keys", isinstance(body, dict) and keys <= set(body), body)
+    check("values are ints", all(isinstance(body.get(k), int) for k in keys), body)
+    # It IS the single source -> route output must equal the module dict.
+    check("route == eval_service.TRAP_THRESHOLDS",
+          body == app_module.TRAP_THRESHOLDS, body)
+
+
 def main():
     test_move_info()
     test_eval_batch()
     test_chessdb()
+    test_thresholds()
     print()
     if _failures:
         print(f"FAILED: {len(_failures)} check(s): {', '.join(_failures)}")

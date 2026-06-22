@@ -74,28 +74,29 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 
 | 路由 | 函式:行 | 作用 |
 |---|---|---|
-| `GET /` | `index`:102 | 出 index.html（`_no_store` 包，前端不快取） |
-| `GET /assets/<f>` | `assets`:107 | 靜態檔（`_no_store`：`Cache-Control: no-store`，改 CSS/JS 一般重整就生效；VSCode 內建 Simple Browser 仍會吃舊快取，UI 驗證用外部 Edge） |
-| `GET/POST /api/preferences` | `get_preferences`:116 / `set_preferences`:121 | preferences.json 讀寫（儲存層 `config._read_prefs`/`_write_prefs`） |
-| `GET /api/xqf/list` | `list_xqf`:199 | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf`/`.cbr`/`.cbl` 的目錄（如 png/）剪掉不顯示。`.cbr` 當葉、`.cbl` 當可展開 dir（`cbl:true`、children 空＝懶載入） |
-| `GET /api/xqf/cbl-children?path=` | `cbl_children`:264 | 懶載入：列某 `.cbl` 內每盤（`list_cbl_games`），回 `[{rel:"lib.cbl#i", name, type:file}]`。左樹首次展開才打 |
-| `GET /api/xqf/root` | `get_root`:223 | 目前根目錄（`config.get_xqf_root`） |
-| `POST /api/xqf/pick-root` | `pick_root_dialog`:228 | tkinter 資料夾對話框（`picker_service._pick_folder`） |
-| `POST /api/xqf/root` | `set_root`:240 | 設根目錄 |
-| `GET /api/xqf/load` | `load`:288 | 載入→JSON。依 `parse_cb_rel` 分派：`.cbl#N`/`.cbr` 走 `cb_service.load_cb`，否則 `load_xqf`；皆經 `book_to_json` |
-| `POST /api/xqf/legal-targets` | `legal_targets`:310 | 某子合法著點（`compute_legal_targets`） |
-| `POST /api/xqf/move-info` | `move_info`:327 | 單步中文著法（`compute_move_info`） |
-| `POST /api/xqf/move-info-batch` | `move_info_batch`:347 | 同一 fen 多著法一次翻中文（`compute_move_infos_batch`）；雲庫清單用，把 N 發併 1 發 |
-| `POST /api/xqf/new` | `new_xqf`:368 | 新建空棋譜（`create_xqf`） |
-| `GET /api/eval/info` | `eval_info`:412 | DB 狀態（`db_info`） |
-| `POST /api/eval/pick-db` `/db` | `pick_eval_db_dialog`:422 / `set_eval_db`:441 | 選/設評估 DB（路徑解析 `config._get_eval_db`） |
-| `POST /api/eval/batch` | `eval_batch`:577 | 批量查 FEN 評估（`eval_service.lookup_batch`） |
-| `GET /api/chessdb?fen=` | `chessdb_query`:602 | 即時雲庫查（cache-first；`fresh=1` 跳快取重查）。回傳同 `cdb` 形狀＋`source` |
-| `GET /api/engine/info` | `engine_info`:477 | pikafish 設定 chip（`config._get_pikafish`/`engine_service.pikafish_info`） |
-| `POST /api/engine/pick` `/path` | `pick_engine_dialog`:483 / `set_engine_path`:502 | 選/設引擎執行檔 |
-| `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:552 | 單局面即時分析串流→`engine_service.analyze_stream`（逐行 `_parse_info_line`、共用 `_spawn`/`_engine_fen`） |
-| `POST /api/engine/analyze-line` | `analyze_line`:528 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空** |
-| `POST /api/xqf/save` | `save`:629 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
+| `GET /` | `index`:106 | 出 index.html（`_no_store` 包，前端不快取） |
+| `GET /assets/<f>` | `assets`:111 | 靜態檔（`_no_store`：`Cache-Control: no-store`，改 CSS/JS 一般重整就生效；VSCode 內建 Simple Browser 仍會吃舊快取，UI 驗證用外部 Edge） |
+| `GET/POST /api/preferences` | `get_preferences`:120 / `set_preferences`:125 | preferences.json 讀寫（儲存層 `config._read_prefs`/`_write_prefs`） |
+| `GET /api/xqf/list` | `list_xqf`:203 | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf`/`.cbr`/`.cbl` 的目錄（如 png/）剪掉不顯示。`.cbr` 當葉、`.cbl` 當可展開 dir（`cbl:true`、children 空＝懶載入） |
+| `GET /api/xqf/cbl-children?path=` | `cbl_children`:268 | 懶載入：列某 `.cbl` 內每盤（`list_cbl_games`），回 `[{rel:"lib.cbl#i", name, type:file}]`。左樹首次展開才打 |
+| `GET /api/xqf/root` | `get_root`:227 | 目前根目錄（`config.get_xqf_root`） |
+| `POST /api/xqf/pick-root` | `pick_root_dialog`:232 | tkinter 資料夾對話框（`picker_service._pick_folder`） |
+| `POST /api/xqf/root` | `set_root`:244 | 設根目錄 |
+| `GET /api/xqf/load` | `load`:292 | 載入→JSON。依 `parse_cb_rel` 分派：`.cbl#N`/`.cbr` 走 `cb_service.load_cb`，否則 `load_xqf`；皆經 `book_to_json` |
+| `POST /api/xqf/legal-targets` | `legal_targets`:314 | 某子合法著點（`compute_legal_targets`） |
+| `POST /api/xqf/move-info` | `move_info`:331 | 單步中文著法（`compute_move_info`） |
+| `POST /api/xqf/move-info-batch` | `move_info_batch`:351 | 同一 fen 多著法一次翻中文（`compute_move_infos_batch`）；雲庫清單用，把 N 發併 1 發 |
+| `POST /api/xqf/new` | `new_xqf`:372 | 新建空棋譜（`create_xqf`） |
+| `GET /api/eval/thresholds` | `eval_thresholds`:416 | trap/brilliant 門檻單一來源（`eval_service.TRAP_THRESHOLDS`）；前端 boot fetch（T3-2） |
+| `GET /api/eval/info` | `eval_info`:424 | DB 狀態（`db_info`） |
+| `POST /api/eval/pick-db` `/db` | `pick_eval_db_dialog`:434 / `set_eval_db`:453 | 選/設評估 DB（路徑解析 `config._get_eval_db`） |
+| `POST /api/eval/batch` | `eval_batch`:589 | 批量查 FEN 評估（`eval_service.lookup_batch`） |
+| `GET /api/chessdb?fen=` | `chessdb_query`:614 | 即時雲庫查（cache-first；`fresh=1` 跳快取重查）。回傳同 `cdb` 形狀＋`source` |
+| `GET /api/engine/info` | `engine_info`:489 | pikafish 設定 chip（`config._get_pikafish`/`engine_service.pikafish_info`） |
+| `POST /api/engine/pick` `/path` | `pick_engine_dialog`:495 / `set_engine_path`:514 | 選/設引擎執行檔 |
+| `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:564 | 單局面即時分析串流→`engine_service.analyze_stream`（逐行 `_parse_info_line`、共用 `_spawn`/`_engine_fen`） |
+| `POST /api/engine/analyze-line` | `analyze_line`:540 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空** |
+| `POST /api/xqf/save` | `save`:641 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
 
 ### CBL/CBR 編輯整合（backend/cb_service.py）
 

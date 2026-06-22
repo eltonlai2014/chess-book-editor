@@ -8,14 +8,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from backend.xqf_service import load_xqf  # noqa: E402
-from backend.eval_service import lookup_batch  # noqa: E402
+from backend.eval_service import lookup_batch, TRAP_THRESHOLDS  # noqa: E402
 from backend.test_eval_integration import apply_iccs  # noqa: E402
-SKIP_OPENING_PLIES = 15
-TRAP_SHALLOW_MAX = 50
-TRAP_DEEP_MIN = 100
-TRAP_DEEP_MAX = 2000
-BRILLIANT_MIN = 50
-BRILLIANT_MAX = 300
+
+# Single source (T3-2): same dict the editor fetches via /api/eval/thresholds.
+SKIP_OPENING_PLIES = TRAP_THRESHOLDS["skipOpeningPlies"]
+TRAP_SHALLOW_MAX = TRAP_THRESHOLDS["trapShallowMax"]
+TRAP_DEEP_MIN = TRAP_THRESHOLDS["trapDeepMin"]
+TRAP_DEEP_MAX = TRAP_THRESHOLDS["trapDeepMax"]
+BRILLIANT_MIN = TRAP_THRESHOLDS["brilliantMin"]
+BRILLIANT_MAX = TRAP_THRESHOLDS["brilliantMax"]
 
 
 def _score_cp(e):

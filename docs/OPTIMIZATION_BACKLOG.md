@@ -60,7 +60,7 @@
 |---|---|---|---|---|
 | T3-1a | **route 契約測試** | 原本唯一安全網是 persistence round-trip；SSE/chessdb/route 全裸奔 | ✅ `tests/test_routes.py`：Flask `test_client`，25 checks 覆蓋 `/api/xqf/move-info`、`/api/eval/batch`、`/api/chessdb`（含 400/500/降級契約）。網路 seam `query_chessdb` + DB seam monkeypatch，**不碰 chessdb.cn、不依賴 positions.db** | **DONE**（2026-06-22） |
 | T3-1b | **瀏覽器煙霧測試** | route 已覆蓋，但前端 state machine / UI 流程仍無測試 | ✅ `tests/test_smoke_ui.py`（+ `tests/_smoke_server.py` 隔離 launcher）：Chromium 跑「boot→開檔→盤面→導覽→改 annote→存→**重載驗證落地**」。隔離沙盒（暫存 prefs/庫/cache，stub `query_chessdb`），**不碰真實設定、不打網路**；缺 Playwright/Chromium/sample 則 SKIP（CI 安全）。零生產碼改動（launcher 覆寫模組全域） | **DONE**（2026-06-22） |
-| T3-2 | **trap 門檻常數與 chess-book-ai 手抄同步** | editor.js 的 `SKIP_OPENING_PLIES`/`TRAP_*`/`BRILLIANT_*` 必須與 `chess-book-ai/site_builder/render_site.py` 一致 | 後端 `/api/eval/thresholds` 吐單一來源，前端 fetch；杜絕對方一改就靜默漂移 | TODO |
+| T3-2 | **trap 門檻常數與 chess-book-ai 手抄同步** | editor.js 的 `SKIP_OPENING_PLIES`/`TRAP_*`/`BRILLIANT_*` 必須與 `chess-book-ai/site_builder/render_site.py` 一致 | ✅ `eval_service.TRAP_THRESHOLDS` 為唯一來源；`GET /api/eval/thresholds` 吐值，前端 `fetchThresholds`（boot batch，consts 降級為 fallback mirror），`test_trap_spotcheck` 改 import。repo 內 3 份手抄→1 份（仍需對 render_site.py，但只剩一處）。route 測試＋trap spotcheck（同結果）全綠 | **DONE**（2026-06-22） |
 | T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | **主要成本是測試/抽模組的前置阻力**（要測 board.js 得先 mock 全域），其次才是與兄弟 repo 漂移（codex 重定性）。擋住 `xiangqi-board-lib` 抽取 TODO；非急 | TODO |
 | T3-4 | **monkeypatch `is_checking` 全域窗口** | 見上「查證後的修正」 | 改 `contextvars` / 傳旗標，而非全域 patch class method；機率低、可延後 | TODO |
 | T3-5 | **引擎 SSE 無 per-request 逾時** | `finally: proc.kill()` 已有；缺的是上限 | 加 watchdog：最後一次 yield 後 N 秒未進展即 kill | TODO |
@@ -117,8 +117,9 @@
   解析與快取共用，**別合併迴圈**。
 
 ### T3 — 其餘風險缺口
-- **T3-2 trap 門檻單一來源**：後端 `/api/eval/thresholds` 吐值、前端 fetch，杜絕與
-  `chess-book-ai/site_builder/render_site.py` 手抄漂移。
+- ~~**T3-2 trap 門檻單一來源**~~ ✅ **DONE**（2026-06-22）：`eval_service.TRAP_THRESHOLDS`
+  唯一來源，`GET /api/eval/thresholds` 吐值、前端 `fetchThresholds`，`test_trap_spotcheck`
+  改 import。（仍需與 `render_site.py` 對齊，但 repo 內只剩這一份。）
 - **T3-3 `board.js` `window.POSITIONS` 解耦**：測試/抽模組前置阻力，與 T2-1 一起想。
 - **T3-4 monkeypatch `is_checking` 全域窗口**：改 `contextvars`/傳旗標。機率低、可最後。
 - **T3-5 引擎 SSE per-request 逾時**：`finally:proc.kill()` 已有，加 watchdog（末次 yield 後 N
