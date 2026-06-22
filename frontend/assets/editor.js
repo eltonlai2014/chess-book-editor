@@ -2812,6 +2812,32 @@ function engineModeClick(mode) {
   startAnalysis(mode === "cur" ? currentFen() : analysisFen(), mode);
 }
 
+// ---------- shared SSE helper for /api/engine/analyze ----------
+// All three engine streams (startAnalysis live UI, requestBestMove, requestDemoPv)
+// shared the same boilerplate: open an EventSource, JSON-parse each line, and
+// dispatch error / done / info. Centralised here so a fix (parse guard, close
+// timing, error wording) lands once instead of in three places. Dispatch:
+//   onInfo(ev)        — any non-terminal event (depth/score/pv/pvUci…)
+//   onDone(ev)        — the terminal {done:true, bestmove?} event (auto-closed first)
+//   onError(msg, ev?) — ev.error from the backend (ev present), OR a connection
+//                       drop ("連線中斷", ev undefined)
+// Returns {es, close}; close() is idempotent. Callers that store es for external
+// abort (autoPlay.es / demo.es) keep doing so via the returned handle.
+function openAnalyzeStream(url, { onInfo, onDone, onError } = {}) {
+  const es = new EventSource(url);
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; try { es.close(); } catch (_) { } };
+  es.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (_) { return; }
+    if (ev.error) { close(); if (onError) onError(ev.error, ev); return; }
+    if (ev.done) { close(); if (onDone) onDone(ev); return; }
+    if (onInfo) onInfo(ev);
+  };
+  es.onerror = () => { close(); if (onError) onError("連線中斷"); };
+  return { es, close };
+}
+
 // mode: "prev" = the position the active move was chosen from (judge the move);
 //       "cur"  = the position after the active move.
 function startAnalysis(fen, mode) {
@@ -2832,16 +2858,11 @@ function startAnalysis(fen, mode) {
   renderEngineHistory();
   $("#engineState").textContent = mode === "cur" ? "分析中（本步）…" : "分析中（前一步）…";
   updateEngineToggleBtns();   // highlight the running mode on the segmented toggle
-  const es = new EventSource("/api/engine/analyze?fen=" + encodeURIComponent(fen));
-  a.es = es;
-  es.onmessage = (e) => {
-    let ev;
-    try { ev = JSON.parse(e.data); } catch (_) { return; }
-    if (ev.error) { stopAnalysis("錯誤：" + ev.error); return; }
-    recordEngineEvent(ev);
-    if (ev.done) stopAnalysis("完成");
-  };
-  es.onerror = () => { stopAnalysis("連線中斷"); };
+  a.es = openAnalyzeStream("/api/engine/analyze?fen=" + encodeURIComponent(fen), {
+    onInfo: (ev) => recordEngineEvent(ev),
+    onDone: (ev) => { recordEngineEvent(ev); stopAnalysis("完成"); },
+    onError: (msg, ev) => stopAnalysis(ev ? "錯誤：" + msg : msg),
+  }).es;
 }
 
 // ---------- AI 自動走棋 (auto-play) ----------
@@ -2898,15 +2919,14 @@ function requestBestMove(fen, movetimeMs) {
   return new Promise((resolve) => {
     let lastEv = null;   // most recent info event (carries pv/pvUci for notation)
     const url = "/api/engine/analyze?fen=" + encodeURIComponent(fen) + "&movetime=" + movetimeMs + "&depth=0";
-    const es = new EventSource(url);
-    EDITOR.autoPlay.es = es;
-    const close = () => { try { es.close(); } catch (_) { } if (EDITOR.autoPlay.es === es) EDITOR.autoPlay.es = null; };
-    es.onmessage = async (e) => {
-      let ev;
-      try { ev = JSON.parse(e.data); } catch (_) { return; }
-      if (ev.error) { close(); resolve({ bestUci: null, error: ev.error }); return; }
-      if (ev.done) {
-        close();
+    const stream = openAnalyzeStream(url, {
+      onInfo: (ev) => { if (ev.pvUci || ev.pv) lastEv = ev; },
+      onError: (msg) => {
+        if (EDITOR.autoPlay.es === stream.es) EDITOR.autoPlay.es = null;
+        resolve({ bestUci: null, error: msg });
+      },
+      onDone: async (ev) => {
+        if (EDITOR.autoPlay.es === stream.es) EDITOR.autoPlay.es = null;
         const bm = ev.bestmove;
         const cp = lastEv ? (lastEv.cp ?? null) : null;   // red-POV, for the history score
         const mate = lastEv ? (lastEv.mate ?? null) : null;
@@ -2925,11 +2945,9 @@ function requestBestMove(fen, movetimeMs) {
           } catch (_) { notation = bm; }
         }
         resolve({ bestUci: bm, notation, cp, mate });
-        return;
-      }
-      if (ev.pvUci || ev.pv) lastEv = ev;
-    };
-    es.onerror = () => { close(); resolve({ bestUci: null, error: "連線中斷" }); };
+      },
+    });
+    EDITOR.autoPlay.es = stream.es;
   });
 }
 
@@ -3663,17 +3681,18 @@ function requestDemoPv(fen, depth) {
   return new Promise((resolve) => {
     let lastEv = null;   // most recent info event carries the deepest pv/pvUci
     const url = "/api/engine/analyze?fen=" + encodeURIComponent(fen) + "&depth=" + depth;
-    const es = new EventSource(url);
-    EDITOR.demo.es = es;
-    const close = () => { try { es.close(); } catch (_) { } if (EDITOR.demo.es === es) EDITOR.demo.es = null; };
-    es.onmessage = (e) => {
-      let ev;
-      try { ev = JSON.parse(e.data); } catch (_) { return; }
-      if (ev.error) { close(); resolve({ pvUci: [], pv: [], error: ev.error }); return; }
-      if (ev.done) { close(); resolve({ pvUci: (lastEv && lastEv.pvUci) || [], pv: (lastEv && lastEv.pv) || [] }); return; }
-      if (ev.pvUci || ev.pv) lastEv = ev;
-    };
-    es.onerror = () => { close(); resolve({ pvUci: [], pv: [], error: "連線中斷" }); };
+    const stream = openAnalyzeStream(url, {
+      onInfo: (ev) => { if (ev.pvUci || ev.pv) lastEv = ev; },
+      onDone: () => {
+        if (EDITOR.demo.es === stream.es) EDITOR.demo.es = null;
+        resolve({ pvUci: (lastEv && lastEv.pvUci) || [], pv: (lastEv && lastEv.pv) || [] });
+      },
+      onError: (msg) => {
+        if (EDITOR.demo.es === stream.es) EDITOR.demo.es = null;
+        resolve({ pvUci: [], pv: [], error: msg });
+      },
+    });
+    EDITOR.demo.es = stream.es;
   });
 }
 
