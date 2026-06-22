@@ -41,8 +41,8 @@
 | ID | 項目 | 證據 | 為何值得 | 狀態 |
 |---|---|---|---|---|
 | T1-1 | **刪 `style.css` 死碼** | index.html 只 link `editor.css`（[index.html:8](../frontend/index.html#L8)）；全 repo 無人引用 | 純倉庫衛生，零行為改變 | **DONE**（2026-06-22，`git rm`） |
-| T1-2 | **抽共用 SSE helper** | 三處幾乎相同的 EventSource：`startAnalysis`、`requestBestMove`、`requestDemoPv`（[editor.js:3662](../frontend/assets/editor.js#L3662)） | 改一處錯誤要改三份；合成 `openAnalyze(url,{onInfo,onDone,onError})` | TODO（**先補 T3-1 再動**） |
-| T1-3 | **集中 FEN 解析** | 多處 `fen.trim().split(/\s+/)[1]` 取走子方、無驗證；前端 [board.js:44](../frontend/assets/board.js#L44) **已有 `parseFen`**、[board.js:107](../frontend/assets/board.js#L107) 只吐 2 欄 | **收斂到既有 `parseFen` + 加 side normalize**（別另寫新 helper）；杜絕 `<board> <side>` 漂移時 eval/cdb 命中率靜默歸零。**FEN 是載重耦合，無測試前不裸改** | TODO（**先補 T3-1 再動**） |
+| T1-2 | **抽共用 SSE helper** | 三處幾乎相同的 EventSource：`startAnalysis`、`requestBestMove`、`requestDemoPv` | ✅ `openAnalyzeStream(url,{onInfo,onDone,onError})`（editor.js）：集中建立/解析/分派/close，三處改用、逐一等價改寫。**註**：引擎/auto-play/demo SSE 自動測試未覆蓋（沙盒無引擎），靠等價改寫＋boot 測試把關 | **DONE**（2026-06-22） |
+| T1-3 | **集中 FEN side 解析** | 8 處散落的 `split()[1]` 取走子方（格式不一、部分無 null guard） | ✅ `fenSide(fen)`（editor.js:59，board.js `parseFen` 的輕量版，免拆 90 格盤面）：8 處全收斂、語意等價（順帶補上 null guard）。杜絕 `<board> <side>` 漂移時各處不一致 | **DONE**（2026-06-22） |
 
 ## Tier 2｜結構債、值得排程（工程大但有感）
 
@@ -72,9 +72,8 @@
 1. ~~刪 style.css 死碼~~ ✅ **T1-1 已做**。
 2. ~~鋪 route 契約測試~~ ✅ **T3-1a 已做**（`tests/test_routes.py`，25 checks 全綠）。
 3. ~~Playwright 煙霧測試~~ ✅ **T3-1b 已做**（`tests/test_smoke_ui.py`，8 checks 全綠）。
-   **安全網就位 → 以下重構現在可動。**
-4. **T1-2（SSE helper）、T1-3（FEN normalize，收斂到 `parseFen`）＝ NEXT**。
-5. T2 拆檔（editor.js / app.py）、T2-5、其餘 T3 視時間排程。
+4. ~~T1-2 SSE helper~~ ✅、~~T1-3 FEN side 收斂~~ ✅（安全網就位後做，smoke+routes 全綠）。
+5. **NEXT → T2 拆檔（editor.js / app.py）、T2-5（fetchCdb 共用＋回填）、其餘 T3。**
 
 > **觀察（非 bug，已定案）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
 > `ok:true side:black`（輪次由 UI 控管）。**主人裁示（2026-06-22）：後端先不擋**，維持現狀；

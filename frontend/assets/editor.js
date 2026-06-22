@@ -50,6 +50,14 @@ const EDITOR = {
 // 任何會改動 EDITOR.data 的編輯都呼叫這個；切換棋譜前用 EDITOR.dirty 判斷是否提示。
 function markDirty() { EDITOR.dirty = true; }
 
+// Side-to-move ("w"/"b") from a `<board> <side> …` FEN — the editor's FEN
+// contract. The lightweight counterpart to board.js's parseFen (which also
+// expands the board into a 90-cell array we don't need here). Centralised so
+// every caller reads the side field ONE way, and a `<board> <side>` format
+// drift fails in one place instead of eight. Defaults to "w" for a missing or
+// blank side (matches the prior inline behaviour at every call site).
+function fenSide(fen) { return ((fen || "").trim().split(/\s+/)[1]) || "w"; }
+
 // Per-theme editor colours for selection halo + legal-destination markers.
 // Each theme has its own palette in board.js; we pick contrasting accents:
 //   select : ring drawn around the selected own-piece (vivid, not gold so it
@@ -1168,7 +1176,7 @@ async function fetchEvalsForFile() {
 // 100 = 1 兵, so we display the integer cp-like value directly as "分".
 function fmtEvalScore(entry, fen) {
   if (!entry) return "—";
-  const side = (fen && fen.trim().split(/\s+/)[1]) || "w";
+  const side = fenSide(fen);
   const flip = side === "b" ? -1 : 1;
   if (entry.mate != null) {
     const m = Number(entry.mate);
@@ -1324,7 +1332,7 @@ async function renderEvalLine() {
     cdbIccs = b.iccs;
     // Mate (#+N) takes precedence over winrate — chessdb omits winrate for
     // forced results and codes them as a ±30000-ish score (red POV via cFen).
-    const cFlip = ((cFen.trim().split(/\s+/)[1]) || "w") === "b" ? -1 : 1;
+    const cFlip = fenSide(cFen) === "b" ? -1 : 1;
     const cMate = mateFromCdbScore(b.score != null ? b.score * cFlip : null);
     const tag = cMate != null ? cMate : (b.winrate != null ? `${b.winrate.toFixed(1)}%` : "—");
     cells.push(`<span class="evalCell evalCdb"><span class="evalLabel">雲</span> <span class="evalMove" data-cdb-iccs="${cdbIccs}">…</span> (${tag})</span>`);
@@ -1496,7 +1504,7 @@ function renderCdbTab() {
     return;
   }
 
-  const side = (fen.trim().split(/\s+/)[1]) || "w";
+  const side = fenSide(fen);
   const flip = side === "b" ? -1 : 1;
   const srcLabel = { db: "庫", cache: "快取", live: "即時" }[cdb.source] || "";
   setState(`${moves.length} 個著法${srcLabel ? "・" + srcLabel : ""}`);
@@ -1650,7 +1658,7 @@ async function deriveCdbLine() {
         break;
       }
       const best = cdb.best;
-      const side = (fen.trim().split(/\s+/)[1]) || "w";
+      const side = fenSide(fen);
       const flip = side === "b" ? -1 : 1;
       const scoreRed = best.score != null ? Math.round(best.score * flip) : null;
       const mate = mateFromCdbScore(scoreRed);
@@ -2716,7 +2724,7 @@ function recordEngineEvent(ev) {
 // per-row side tint. (The 引擎分析 PV is intentionally left uncoloured — tinting
 // its moves, even just the lead one, read as too busy.)
 function fenSideName(fen) {
-  return ((fen || "").trim().split(/\s+/)[1] || "w") === "w" ? "red" : "black";
+  return fenSide(fen) === "w" ? "red" : "black";
 }
 
 function renderEngineHistory() {
@@ -3156,7 +3164,7 @@ function aiBlunderThreshold() {
 function mateSign(mate, fen) {
   if (mate > 0) return 1;
   if (mate < 0) return -1;
-  return (fen || "").split(" ")[1] === "b" ? 1 : -1;
+  return fenSide(fen) === "b" ? 1 : -1;
 }
 
 function aiScoreNum(cp, mate, fen) {
@@ -3193,7 +3201,7 @@ function aiPlyLoss(points, i) {
   const before = aiCpRed(points[i - 1]);
   const after = aiCpRed(points[i]);
   if (before == null || after == null) return null;
-  const moverRed = ((points[i - 1].fen || "").split(" ")[1] || "w") === "w";
+  const moverRed = fenSide(points[i - 1].fen) === "w";
   return moverRed ? before - after : after - before;
 }
 
@@ -3775,7 +3783,7 @@ async function addPvLine(entry) {
     "加入變化例",
   );
   if (!ok) return;
-  const startSide = (entry.fen.trim().split(/\s+/)[1] || "w") === "w" ? "red" : "black";
+  const startSide = fenSide(entry.fen) === "w" ? "red" : "black";
   let path = Array.isArray(entry.path) ? [...entry.path] : [];
   let added = 0;
   for (let i = 0; i < moves.length; i++) {
