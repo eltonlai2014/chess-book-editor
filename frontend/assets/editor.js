@@ -3723,12 +3723,27 @@ async function demoExtend() {
   setDemoStatus(`${from}以深${depth}延伸${res.pvUci.length}步${tail}，共${d.lastIccs.length}步`, "ok");
 }
 
-// ---------- 加入: merge the demo line (original + extensions) into the tree ----------
-// The demo state is already a full {fen,path,pvUci,pv}; addPvLine reuses existing
-// nodes for the original portion and only creates the extension as new branches.
+// ---------- 加入: merge the demo line UP TO THE CURRENT STEP into the tree ----------
+// Only graft the prefix the master has navigated to (d.idx plies), NOT the whole
+// line: the tail beyond the shown step "floats" (a shallow engine / chessdb end
+// the master hasn't vetted) and isn't worth committing. Navigate to the step you
+// trust, then 加入 — it adds lastIccs[0..d.idx). (At the last step d.idx ===
+// lastIccs.length, so it still grafts everything; 延伸 recomputes a deeper tail.)
+// CLOSE the demo first: it shares .modal z-index:10 with #confirmModal but sits
+// LATER in the DOM, so a still-open demo paints OVER addPvLine's confirm dialog
+// and blocks the 確定/取消 buttons. Snapshot before closing (closeDemo keeps
+// EDITOR.demo's data, but a copy is race-proof) — and after 加入 the board
+// navigates to the new branch, so leaving the demo open would only show a stale
+// position anyway.
 function demoAdd() {
   const d = EDITOR.demo;
-  addPvLine({ fen: d.startFen, path: d.startPath, pvUci: d.lastIccs, pv: d.notations });
+  if (d.idx < 1) { setDemoStatus("請先前進到要加入的步數（起始局面無著法可加入）", "warn"); return; }
+  const entry = {
+    fen: d.startFen, path: d.startPath,
+    pvUci: d.lastIccs.slice(0, d.idx), pv: d.notations.slice(0, d.idx),
+  };
+  closeDemo();
+  addPvLine(entry);
 }
 
 // ---------- 加入: merge a PV line into the move tree as a branch ----------
