@@ -25,6 +25,7 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
   ├─ vendor/io_xqf_patched.py  PatchedXQFWriter（XQF 寫檔，修上游 3 bug）
   ├─ eval_service.py  唯讀讀取 chess-book-ai 的 positions.db（評估/雲庫勝率）
   ├─ chessdb_service.py  即時查 chessdb.cn 雲庫（cache-first；寫 editor 自有快取）
+  ├─ db_pool.py  程序級 SQLite 連線池（熱路徑 reuse，免每查 connect/close）
   └─ (subprocess) pikafish  即時分析，execs 既有 binary，逐層 stream，不落地
         ▲
         └─ 唯讀共享資料：../chess-book-ai/output/positions.db、D:\Elton\TestArea\chess-book\
@@ -44,7 +45,8 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | **即時分析純暫態** | SSE execs pikafish，逐層 stream，斷線即 kill，**任何結果都不落地**（對比 positions.db）。 | app.py `engine_analyze` |
 | **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。 | app.py `analyze_line`；memory `project-ai-line-depth` |
 | **App shell 用 flex** | body flex column＋header 自動高＋main `flex:1`＋`overflow:hidden`；**勿寫死 header 高度**（曾因 `calc(100vh-52px)` 比實際矮而溢出產生捲軸）。 | editor.css `body`/`header`/`main` |
-| **positions.db 唯讀** | `?mode=ro` 開啟，永不 INSERT/UPDATE，檔案歸 AI repo 管。 | eval_service.py `_open_ro` |
+| **positions.db 唯讀** | `?mode=ro` 開啟，永不 INSERT/UPDATE，檔案歸 AI repo 管。 | eval_service.py `_open_ro`（驗證候選檔，短命）／`db_pool.get_ro`（熱路徑、池化、不 close） |
+| **DB 連線池化** | 熱路徑（`lookup_batch`／雲庫查）reuse 程序級連線，**不逐查 connect/close、不 `.close()` 池內連線**；read-only 序列化、單人工具無寫鎖爭用；路徑變動（換評估庫）→新連線、舊的閒置到退出。`db_info` 驗證任意候選檔仍用短命連線。 | db_pool.py；eval_service.py `lookup_batch`／chessdb_service.py |
 | **雲庫 cache-first＋自有快取** | 即時查 chessdb.cn 前先讀唯讀 positions.db→再讀 editor 自有 `output/editor_chessdb_cache.db`（**唯一可寫**的雲庫快取）→miss 才打網路並寫回。**禁寫 positions.db、禁碰 AI repo 的 chessdb_cache.json**。逐局面查（非整檔 batch）以守 chessdb 速率禮貌。 | chessdb_service.py `lookup`；CHESSDB_CLOUD_QUERY.md |
 | **著法字形** | 紅方：馬→傌 士→仕 象→相 車→俥 將→帥；**砲不換**（保留砲）。黑方：砲→包。 | xqf_service.py `_apply_side_glyphs` / board.js `PIECE_CHAR`(紅 C=砲) |
 | **FEN 兩段式** | 編輯器用 `<board> <w\|b>`，無回合計數。餵 pikafish 才補 ` - - 0 1` 成六段。漂移會讓 DB 命中率掉到 ~0%。 | xqf_service / app.py 分析前拼接 |
@@ -131,9 +133,9 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 
 | 功能 | 函式:行 |
 |---|---|
-| 唯讀連線 | `_open_ro`:37 |
-| DB 狀態 | `db_info`:46 |
-| 批量 FEN 查詢 | `lookup_batch`:66（`_chunks`:114 分批） |
+| 唯讀連線（短命，驗證候選檔用） | `_open_ro` |
+| DB 狀態 | `db_info`（用 `_open_ro`，會驗證任意候選檔） |
+| 批量 FEN 查詢（熱路徑，池化連線） | `lookup_batch`（`db_pool.get_ro`；`_chunks` 分批） |
 
 ### 雲庫即時查（backend/chessdb_service.py）
 
@@ -142,8 +144,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | cache-first 解析（positions.db→自有快取→live；`fresh` 跳快取） | `lookup` |
 | 即時打 chessdb.cn（NUL guard／trim／錯誤狀態） | `query_chessdb` |
 | FEN 修剪成 `<position> <side>` | `trim_fen` |
-| 讀唯讀 positions.db chessdb 表 | `_read_positions_db` |
-| editor 自有可寫快取（建表/讀/寫） | `_ensure_cache`/`_read_cache`/`_write_cache` |
+| 讀唯讀 positions.db chessdb 表（池化 RO 連線） | `_read_positions_db`（`db_pool.get_ro`） |
+| editor 自有可寫快取（池化 RW 連線，建表一次） | `_ensure_cache`（`db_pool.get_rw`，`_CACHE_INIT_SQL`）/`_read_cache`/`_write_cache` |
 
 ### 前端 — 棋盤渲染器（frontend/assets/board.js，共用、可漂移）
 

@@ -28,6 +28,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from backend import db_pool
+
 # Schema-known depth columns. Add new depths here when chess-book-ai starts
 # producing them (e.g. 36, 40). The editor doesn't care about depth semantics,
 # only that they exist as ints.
@@ -35,8 +37,11 @@ _DEPTHS = (12, 22, 28, 32)
 
 
 def _open_ro(db_path: Path) -> sqlite3.Connection:
-    """Open the eval DB read-only. URI mode means a missing file errors clearly
-    instead of silently creating an empty one."""
+    """Open the eval DB read-only, SHORT-LIVED (caller closes). URI mode means a
+    missing file errors clearly instead of silently creating an empty one. Used
+    by ``db_info``, which also vets *arbitrary* candidate files (set_eval_db), so
+    it must not pollute the long-lived pool — see ``db_pool``. The hot
+    ``lookup_batch`` path uses the pool instead."""
     uri = f"file:{db_path.as_posix()}?mode=ro"
     con = sqlite3.connect(uri, uri=True, check_same_thread=False)
     con.row_factory = sqlite3.Row
@@ -73,41 +78,40 @@ def lookup_batch(db_path: Path, fens: list[str]) -> dict:
     out: dict[str, dict] = {fen: {} for fen in fens}
     if not fens or not db_path.exists():
         return out
-    con = _open_ro(db_path)
-    try:
-        # Chunk fens to stay under SQLITE_MAX_VARIABLE_NUMBER (default 999).
-        for chunk in _chunks(fens, 800):
-            placeholders = ",".join("?" * len(chunk))
-            # evals: one row per (fen, depth)
-            for row in con.execute(
-                f"SELECT fen, depth, score, mate, best_iccs, pv_json "
-                f"FROM evals WHERE fen IN ({placeholders})",
-                chunk,
-            ):
-                key = f"d{row['depth']}"
-                out[row["fen"]][key] = {
-                    "score": row["score"],
-                    "mate": row["mate"],
-                    "best_iccs": row["best_iccs"],
-                    "pv": json.loads(row["pv_json"]) if row["pv_json"] else [],
+    # Hot path (one batch per navigation) — reuse a pooled connection instead of
+    # connect/close each call. Never close it (see db_pool).
+    con = db_pool.get_ro(db_path)
+    # Chunk fens to stay under SQLITE_MAX_VARIABLE_NUMBER (default 999).
+    for chunk in _chunks(fens, 800):
+        placeholders = ",".join("?" * len(chunk))
+        # evals: one row per (fen, depth)
+        for row in con.execute(
+            f"SELECT fen, depth, score, mate, best_iccs, pv_json "
+            f"FROM evals WHERE fen IN ({placeholders})",
+            chunk,
+        ):
+            key = f"d{row['depth']}"
+            out[row["fen"]][key] = {
+                "score": row["score"],
+                "mate": row["mate"],
+                "best_iccs": row["best_iccs"],
+                "pv": json.loads(row["pv_json"]) if row["pv_json"] else [],
+            }
+        # chessdb: at most one row per fen
+        for row in con.execute(
+            f"SELECT fen, status, moves_json FROM chessdb WHERE fen IN ({placeholders})",
+            chunk,
+        ):
+            moves = json.loads(row["moves_json"]) if row["moves_json"] else []
+            best = moves[0] if moves else None
+            cdb = {"status": row["status"], "moves": moves}
+            if best:
+                cdb["best"] = {
+                    "iccs": best.get("iccs"),
+                    "score": best.get("score"),
+                    "winrate": best.get("winrate"),
                 }
-            # chessdb: at most one row per fen
-            for row in con.execute(
-                f"SELECT fen, status, moves_json FROM chessdb WHERE fen IN ({placeholders})",
-                chunk,
-            ):
-                moves = json.loads(row["moves_json"]) if row["moves_json"] else []
-                best = moves[0] if moves else None
-                cdb = {"status": row["status"], "moves": moves}
-                if best:
-                    cdb["best"] = {
-                        "iccs": best.get("iccs"),
-                        "score": best.get("score"),
-                        "winrate": best.get("winrate"),
-                    }
-                out[row["fen"]]["cdb"] = cdb
-    finally:
-        con.close()
+            out[row["fen"]]["cdb"] = cdb
     return out
 
 

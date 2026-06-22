@@ -33,6 +33,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from backend import db_pool
+
 API = "http://www.chessdb.cn/chessdb.php"
 
 # chessdb single-string error/status responses (not pipe-delimited move lists).
@@ -96,26 +98,17 @@ def query_chessdb(fen: str, timeout: int = 10) -> dict:
 
 # ---------- positions.db (read-only) lookup ----------------------------------
 
-def _open_ro(db_path: Path) -> sqlite3.Connection:
-    uri = f"file:{db_path.as_posix()}?mode=ro"
-    con = sqlite3.connect(uri, uri=True, check_same_thread=False)
-    con.row_factory = sqlite3.Row
-    return con
-
-
 def _read_positions_db(db_path: Path, fen: str) -> dict | None:
     """Read one cdb row from the AI repo's read-only positions.db.
 
     Tries the exact editor FEN first (that's how eval_service keys it), then
     the trimmed FEN as a fallback (doc §2A: migrate keys vary). Returns the
-    cdb-shaped dict on a hit, or None when the file/table/row is absent."""
+    cdb-shaped dict on a hit, or None when the file/table/row is absent.
+    Uses a pooled connection (db_pool) — never closes it."""
     if not db_path.exists():
         return None
     try:
-        con = _open_ro(db_path)
-    except sqlite3.DatabaseError:
-        return None
-    try:
+        con = db_pool.get_ro(db_path)
         for key in (fen, trim_fen(fen)):
             row = con.execute(
                 "SELECT status, moves_json FROM chessdb WHERE fen = ?", (key,)
@@ -126,26 +119,26 @@ def _read_positions_db(db_path: Path, fen: str) -> dict | None:
         return None
     except sqlite3.DatabaseError:
         return None
-    finally:
-        con.close()
 
 
 # ---------- editor-owned writable cache --------------------------------------
 
+# Editor cache schema. Table created once when the pooled connection opens.
+_CACHE_INIT_SQL = (
+    "CREATE TABLE IF NOT EXISTS chessdb ("
+    "  fen TEXT PRIMARY KEY,"      # trimmed FEN (<position> <side>)
+    "  status TEXT,"
+    "  moves_json TEXT"
+    ")"
+)
+
+
 def _ensure_cache(cache_path: Path) -> sqlite3.Connection:
-    """Open (creating if needed) the editor's own chessdb cache. This is the
-    ONLY chessdb store the editor writes to — positions.db stays read-only."""
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(cache_path), check_same_thread=False)
-    con.row_factory = sqlite3.Row
-    con.execute(
-        "CREATE TABLE IF NOT EXISTS chessdb ("
-        "  fen TEXT PRIMARY KEY,"      # trimmed FEN (<position> <side>)
-        "  status TEXT,"
-        "  moves_json TEXT"
-        ")"
-    )
-    return con
+    """Pooled writable connection to the editor's own chessdb cache — the ONLY
+    chessdb store the editor writes to (positions.db stays read-only). The table
+    is created once on first open; the connection lives for the process (db_pool)
+    so callers must NOT close it."""
+    return db_pool.get_rw(cache_path, _CACHE_INIT_SQL)
 
 
 def _read_cache(con: sqlite3.Connection, fen: str) -> dict | None:
@@ -178,14 +171,11 @@ def lookup(positions_db: Path, cache_db: Path, fen: str, timeout: int = 10,
         hit = _read_positions_db(positions_db, fen)
         if hit is not None:
             return hit
-    con = _ensure_cache(cache_db)
-    try:
-        if not fresh:
-            hit = _read_cache(con, fen)
-            if hit is not None:
-                return hit
-        live = query_chessdb(fen, timeout=timeout)
-        _write_cache(con, fen, live["status"], live["moves"])
-        return _shape(live["status"], live["moves"], "live")
-    finally:
-        con.close()
+    con = _ensure_cache(cache_db)   # pooled — do NOT close (see db_pool)
+    if not fresh:
+        hit = _read_cache(con, fen)
+        if hit is not None:
+            return hit
+    live = query_chessdb(fen, timeout=timeout)
+    _write_cache(con, fen, live["status"], live["moves"])
+    return _shape(live["status"], live["moves"], "live")
