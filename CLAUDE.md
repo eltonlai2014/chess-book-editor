@@ -73,6 +73,11 @@ Persistence layer (the original foundation, still the correctness anchor):
 # Side-by-side comparison (shows the bug in upstream)
 .\.venv\Scripts\python.exe tests\test_roundtrip.py both
 
+# Route-contract tests (Flask test_client; NO network/engine/DB needed —
+# chessdb's live query + the eval DB are monkeypatched). Run after touching any
+# /api route, FEN serialisation, or the eval/chessdb JSON shape.
+.\.venv\Scripts\python.exe tests\test_routes.py
+
 # Regenerate XQStudio sanity samples
 .\.venv\Scripts\python.exe tools\emit_sample.py
 ```

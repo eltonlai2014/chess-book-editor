@@ -58,7 +58,8 @@
 
 | ID | 項目 | 證據 | 修法方向 | 狀態 |
 |---|---|---|---|---|
-| T3-1 | **零前端 / 零 route 測試** | 唯一安全網是 persistence round-trip（`tests/test_roundtrip.py`、`test_cb_roundtrip.py`）；SSE 解析、chessdb 三層快取、cdbScope、UI 同步全裸奔 | 鋪最小骨架：`/api/chessdb`（mock）+ `/api/eval/batch` + 一條 `/api/xqf/move-info` route test，一條 Playwright 煙霧測試（開檔→導覽→改 annote→存→重載）。**Playwright 已在 `.venv`**（基建半就位）。**最大隱性風險、其他重構的前置** | **NEXT** |
+| T3-1a | **route 契約測試** | 原本唯一安全網是 persistence round-trip；SSE/chessdb/route 全裸奔 | ✅ `tests/test_routes.py`：Flask `test_client`，25 checks 覆蓋 `/api/xqf/move-info`、`/api/eval/batch`、`/api/chessdb`（含 400/500/降級契約）。網路 seam `query_chessdb` + DB seam monkeypatch，**不碰 chessdb.cn、不依賴 positions.db** | **DONE**（2026-06-22） |
+| T3-1b | **瀏覽器煙霧測試** | route 已覆蓋，但前端 state machine / UI 流程仍無測試 | 一條 Playwright 煙霧測試（開檔→導覽→改 annote→存→重載）。**Playwright 已在 `.venv`**（基建半就位） | TODO（T1-2/T1-3 前置） |
 | T3-2 | **trap 門檻常數與 chess-book-ai 手抄同步** | editor.js 的 `SKIP_OPENING_PLIES`/`TRAP_*`/`BRILLIANT_*` 必須與 `chess-book-ai/site_builder/render_site.py` 一致 | 後端 `/api/eval/thresholds` 吐單一來源，前端 fetch；杜絕對方一改就靜默漂移 | TODO |
 | T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | **主要成本是測試/抽模組的前置阻力**（要測 board.js 得先 mock 全域），其次才是與兄弟 repo 漂移（codex 重定性）。擋住 `xiangqi-board-lib` 抽取 TODO；非急 | TODO |
 | T3-4 | **monkeypatch `is_checking` 全域窗口** | 見上「查證後的修正」 | 改 `contextvars` / 傳旗標，而非全域 patch class method；機率低、可延後 | TODO |
@@ -68,12 +69,15 @@
 
 ## 建議下手順序（codex 亦背書此序）
 
-1. ~~刪 style.css 死碼~~ ✅ **T1-1 已做**（零行為改變，先清掉的小 commit）。
-2. **鋪 T3-1 最小測試骨架（= NEXT）**——目前所有結構債之所以「能忍」，正是因為改動沒
-   東西接得住。先 Flask route test（`/api/chessdb` mock、`/api/eval/batch`、一條
-   `/api/xqf/move-info`）+ 一條 Playwright 煙霧測試。**這是 T1-2/T1-3 與所有拆檔的前置**。
-3. **有測試後**再做 T1-2（SSE helper）、T1-3（FEN normalize，收斂到 `parseFen`）。
-4. T2 拆檔（editor.js / app.py）、其餘 T3 視時間排程。
+1. ~~刪 style.css 死碼~~ ✅ **T1-1 已做**。
+2. ~~鋪 route 契約測試~~ ✅ **T3-1a 已做**（`tests/test_routes.py`，25 checks 全綠）。
+3. **T3-1b Playwright 煙霧測試（= NEXT）**——補上前端 UI 流程那層安全網，再動 live 程式碼。
+4. **有 UI 測試後**再做 T1-2（SSE helper）、T1-3（FEN normalize，收斂到 `parseFen`）。
+5. T2 拆檔（editor.js / app.py）、其餘 T3 視時間排程。
+
+> **觀察（非 bug，待裁示）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
+> `ok:true side:black`（輪次由 UI 控管）。已如實記錄於 `tests/test_routes.py`；若要後端
+> 也擋，該測試會反轉、並升為一個新項目。
 
 > **不裸改原則**：T1-3 動的是載重 FEN 耦合（一漂移 eval 命中率歸零），T1-2 動三條 live
 > SSE 路徑——兩者都等 T3-1 安全網落地後再動，不在無測試下硬改。
