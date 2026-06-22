@@ -59,7 +59,7 @@
 | T2-1 | **拆 `editor.js` god-file** | ~4400 行單檔 + `EDITOR` 全域物件 | ✅ 主人裁示「多 `<script>` 漸進抽出」。逐一抽出 5 模組（cdb/engine/autoplay/aichart/demo）為**同層 classic script**（共享全域 scope、依序載入），每步跑 smoke。editor.js ~4400→~2950。**教訓**：一次抽多個用過時行號會壞切→改逐一抽＋每步重新定界＋smoke 把關。智慧化過程中發現並修掉 smoke 對「同 server 第二次整頁載入」的 dev-server 卡死（reload 改 fresh server）。`EDITOR` 全域物件仍未拆（與 T3-3 一起再議） | **DONE**（2026-06-22） |
 | T2-2 | **拆 `app.py` god-module** | ~1064 行混路由 + 路徑解析 + picker + 兩支 SSE | ✅ 抽 `config.py`（路徑/prefs/DEFAULT_*）、`picker_service.py`（tkinter 對話框）、`engine_service.py`（Pikafish 子行程＋UCI 解析＋兩支串流，共用 `_spawn`/`_engine_fen`/`_shutdown`）。app.py 1064→564，只剩薄路由。route+SSE+smoke 全綠（smoke isolation seam 改 patch `config`） | **DONE**（2026-06-22） |
 | T2-3 | **DB 連線 per-request churn** | `eval_service`（read-only positions.db）、`chessdb_service` 每次查詢開新連線 | ✅ `backend/db_pool.py`：程序級連線池（`get_ro`/`get_rw`，path-keyed、序列化、不 close）。`lookup_batch`＋雲庫 `_read_positions_db`/`_ensure_cache` 改用池；`db_info` 仍短命（要驗證任意候選檔）。route + eval-integration + trap-spotcheck 全綠 | **DONE**（2026-06-22） |
-| T2-4 | **導覽時全樹走訪 + 全盤重繪** | `refreshActive`（[editor.js:1895](../frontend/assets/editor.js#L1895)）每次重畫整個 SVG + 重裝 overlay | `path→fen` 快取 + 箭頭層增量更新。**取捨**：小檔無感、無 profiling 證據前不提前優化（codex 亦持此見）；只有大棋譜/深樹才值得 | TODO |
+| T2-4 | **導覽時全樹走訪 + 全盤重繪** | `refreshActive`（[editor.js:1895](../frontend/assets/editor.js#L1895)）每次重畫整個 SVG + 重裝 overlay | `path→fen` 快取 + 箭頭層增量更新（偏 memoization＋增量，非防閃爍的 double-buffer）。**主人裁示（2026-06-22）：本專案無影響，定案不做**——`refreshActive` 在單一 JS task 內同步完成，瀏覽器把整段 SVG 變更批次成一次 paint→全量重畫也不閃；剩下只是 CPU 浪費，巨樹才有感 | **不做（定案）** |
 | T2-5 | **`deriveCdbLine` 與 `fetchCdbLive` 各自解析 `/api/chessdb`** | 兩處各自 fetch+parse；`deriveCdbLine` 原本不讀不寫快取 | ✅ 抽 `fetchCdb`/`parseCdbResponse`/`cacheCdb`（editor.js）；兩處共用 fetch+parse；`deriveCdbLine` **回填** `evalsByFen[fen].cdb`（含 unknown）→ 導覽到演繹過的局面免重查。**獨立節流迴圈未合併**（CLAUDE.md 授權的唯一多次查詢，刻意分流）。smoke 全綠 | **DONE**（2026-06-22，codex NEW-1） |
 
 ## Tier 3｜風險缺口（不是效能，是安全網）
@@ -69,7 +69,7 @@
 | T3-1a | **route 契約測試** | 原本唯一安全網是 persistence round-trip；SSE/chessdb/route 全裸奔 | ✅ `tests/test_routes.py`：Flask `test_client`，25 checks 覆蓋 `/api/xqf/move-info`、`/api/eval/batch`、`/api/chessdb`（含 400/500/降級契約）。網路 seam `query_chessdb` + DB seam monkeypatch，**不碰 chessdb.cn、不依賴 positions.db** | **DONE**（2026-06-22） |
 | T3-1b | **瀏覽器煙霧測試** | route 已覆蓋，但前端 state machine / UI 流程仍無測試 | ✅ `tests/test_smoke_ui.py`（+ `tests/_smoke_server.py` 隔離 launcher）：Chromium 跑「boot→開檔→盤面→導覽→改 annote→存→**重載驗證落地**」。隔離沙盒（暫存 prefs/庫/cache，stub `query_chessdb`），**不碰真實設定、不打網路**；缺 Playwright/Chromium/sample 則 SKIP（CI 安全）。零生產碼改動（launcher 覆寫模組全域） | **DONE**（2026-06-22） |
 | T3-2 | **trap 門檻常數與 chess-book-ai 手抄同步** | editor.js 的 `SKIP_OPENING_PLIES`/`TRAP_*`/`BRILLIANT_*` 必須與 `chess-book-ai/site_builder/render_site.py` 一致 | ✅ `eval_service.TRAP_THRESHOLDS` 為唯一來源；`GET /api/eval/thresholds` 吐值，前端 `fetchThresholds`（boot batch，consts 降級為 fallback mirror），`test_trap_spotcheck` 改 import。repo 內 3 份手抄→1 份（仍需對 render_site.py，但只剩一處）。route 測試＋trap spotcheck（同結果）全綠 | **DONE**（2026-06-22） |
-| T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | **計畫見 [docs/T3-3_DECOUPLE_PLAN.md](T3-3_DECOUPLE_PLAN.md)**（前提：解耦只在「對 AI 有幫助」才做）。A `POSITIONS`／board.js 切死碼（**做**：移除偽裝成 live 的靜態站平行狀態機，1722→~750；二次掃描訂正＝`deltaSignClass` **必留**(editor-cdb 在用)、`injectBoardPicker` 是死碼)。B `EDITOR` 全域 295 處：**B2 縮編**（宣告本身已是 ownership map，只補 owner 註解＋跨模組函式 API，非快照表）、**B3 砍**（重寫狀態機、AI 非急需） | **A1+B2 DONE**（2026-06-22，board.js 1722→762 純 renderer；B3 不做） |
+| T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | （前提：解耦只在「對 AI 有幫助」才做；原計畫檔已於收尾刪除）。A `POSITIONS`／board.js 切死碼（**做**：移除偽裝成 live 的靜態站平行狀態機，1722→~750；二次掃描訂正＝`deltaSignClass` **必留**(editor-cdb 在用)、`injectBoardPicker` 是死碼)。B `EDITOR` 全域 295 處：**B2 縮編**（宣告本身已是 ownership map，只補 owner 註解＋跨模組函式 API，非快照表）、**B3 砍**（重寫狀態機、AI 非急需） | **A1+B2 DONE**（2026-06-22，board.js 1722→762 純 renderer；B3 不做） |
 | T3-4 | **monkeypatch `is_checking` 全域窗口** | 見上「查證後的修正」 | ✅ 改 thread-local 旗標 `_suppress_check`：`is_checking` 永久包一層閘，只在「當前執行緒正在 `fast_parse_book`」時回 False。跨執行緒不洩漏、可重入、免 lock（移除 `_parse_lock`）。round-trip 逐字節仍相同 | **DONE**（2026-06-22） |
 | T3-5 | **引擎 SSE 無 per-request 逾時** | `finally: proc.kill()` 已有；缺的是上限 | ✅ `engine_service._start_stall_watchdog`：守護執行緒，引擎 `_STALL_TIMEOUT`(30s) 無輸出即 kill（解開 reader 的阻塞 readline）。是「無進展」而非時長上限——`go infinite`/長搜尋持續吐 info 不誤殺；兩支串流都接。`test_engine_sse` happy path 不受影響 | **DONE**（2026-06-22） |
 
@@ -123,7 +123,9 @@
   route+`test_engine_sse`+smoke 全綠。
 - ~~**T2-3 DB 連線 singleton**~~ ✅ **DONE**（2026-06-22）：`backend/db_pool.py` 程序級連線池；
   `lookup_batch`／雲庫讀寫改用池，`db_info` 維持短命（驗證任意候選檔）。
-- **T2-4 `refreshActive` 全盤重繪**：**無 profiling 證據前不提前優化**（保留觀察，非待辦）。
+- ~~**T2-4 `refreshActive` 全盤重繪**~~ **不做（定案，主人裁示 2026-06-22：本專案無影響）**：
+  `refreshActive` 同步完成於單一 JS task→瀏覽器批次成一次 paint，全量重畫不閃；提的「快取＋
+  增量」偏 memoization、非經典 double-buffer，純 CPU 省、巨樹才有感。
 - ~~**T2-5 `fetchCdb` 共用 + 回填快取**~~ ✅ **DONE**（2026-06-22）：抽
   `fetchCdb`/`parseCdbResponse`/`cacheCdb`；`deriveCdbLine` 回填 `evalsByFen`（迴圈未合併）。
 
@@ -135,13 +137,14 @@
   live 的靜態站死碼（`getEntry`/`window.POSITIONS`/`STATE`/`drawChart`/demo/`injectBoardPicker`），
   board.js **1722→762** 純 renderer；保留 `deltaSignClass`（雲庫著色）、`isRedPerspective` 改直讀隱藏
   `#redPerspective`；`board.js?v=36`。B2 補 `EDITOR` 逐欄 `[owner:]` 註解＋ARCHITECTURE「跨模組全域函式
-  API」清單。**B3 不做**（重寫狀態機、回歸面 > 收益）。`node --check`＋smoke 零回歸。計畫檔
-  [docs/T3-3_DECOUPLE_PLAN.md](T3-3_DECOUPLE_PLAN.md) 任務完成、可刪。
+  API」清單。**B3 不做**（重寫狀態機、回歸面 > 收益）。`node --check`＋smoke 零回歸。（計畫檔
+  `docs/T3-3_DECOUPLE_PLAN.md` 任務完成、已於收尾刪除。）
 - ~~**T3-4 monkeypatch `is_checking` 全域窗口**~~ ✅ **DONE**（2026-06-22）：thread-local 旗標
   `_suppress_check` 閘控，跨執行緒不洩漏；移除 `_parse_lock`。round-trip 逐字節相同。
 - ~~**T3-5 引擎 SSE per-request 逾時**~~ ✅ **DONE**（2026-06-22）：`engine_service._start_stall_watchdog`
   守護執行緒，30s 無輸出即 kill（stall 而非時長上限，`go infinite` 不誤殺）。
 
-### 收尾後的清理（週期結束才做）
-- 整個優化做完後，刪掉本次的協作鷹架：`docs/CODEX_REVIEW_HANDOFF.md`、
-  `docs/CODEX_REVIEW_FEEDBACK.md`，並視情況決定本 backlog 去留（見記憶 cleanup 原則）。
+### 收尾後的清理
+- ✅ **已收尾（2026-06-22）**：刪除本次協作鷹架 `docs/CODEX_REVIEW_HANDOFF.md`、
+  `docs/CODEX_REVIEW_FEEDBACK.md`、`docs/T3-3_DECOUPLE_PLAN.md`。本 backlog **保留**作 living
+  backlog（已完成項就地收摺，新發現往對應 Tier 追加）。
