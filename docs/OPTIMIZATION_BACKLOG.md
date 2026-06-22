@@ -75,9 +75,10 @@
 4. **有 UI 測試後**再做 T1-2（SSE helper）、T1-3（FEN normalize，收斂到 `parseFen`）。
 5. T2 拆檔（editor.js / app.py）、其餘 T3 視時間排程。
 
-> **觀察（非 bug，待裁示）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
-> `ok:true side:black`（輪次由 UI 控管）。已如實記錄於 `tests/test_routes.py`；若要後端
-> 也擋，該測試會反轉、並升為一個新項目。
+> **觀察（非 bug，已定案）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
+> `ok:true side:black`（輪次由 UI 控管）。**主人裁示（2026-06-22）：後端先不擋**，維持現狀；
+> 契約如實記錄於 `tests/test_routes.py`（`black-piece move accepted, side==black`）。日後若改
+> 要後端擋，該測試會反轉、並升為新項目。
 
 > **不裸改原則**：T1-3 動的是載重 FEN 耦合（一漂移 eval 命中率歸零），T1-2 動三條 live
 > SSE 路徑——兩者都等 T3-1 安全網落地後再動，不在無測試下硬改。
