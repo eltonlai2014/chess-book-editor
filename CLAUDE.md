@@ -78,6 +78,12 @@ Persistence layer (the original foundation, still the correctness anchor):
 # /api route, FEN serialisation, or the eval/chessdb JSON shape.
 .\.venv\Scripts\python.exe tests\test_routes.py
 
+# Browser smoke test (real Chromium drives the UI end-to-end: open→navigate→
+# edit annote→save→reload→verify). Isolated sandbox (temp prefs/library/cache,
+# stubbed chessdb) — never touches real config, never hits the network. SKIPs
+# if Playwright/Chromium/sample absent. Run after frontend or save-path changes.
+.\.venv\Scripts\python.exe tests\test_smoke_ui.py
+
 # Regenerate XQStudio sanity samples
 .\.venv\Scripts\python.exe tools\emit_sample.py
 ```
