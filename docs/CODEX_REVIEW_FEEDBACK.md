@@ -92,3 +92,89 @@
 ## 一句話總評
 
 這個專案最脆弱的地方不是 XQF/CBL 存檔，而是**多個互相耦合的前後端協議（FEN、SSE、chessdb response、全域狀態）缺乏測試保護**；先補 safety net，再談大規模整理，投報率最高。
+
+---
+
+## 對照 `OPTIMIZATION_BACKLOG.md` 的逐條比對版評論
+
+### Tier 1
+
+- **T1-1｜刪 `style.css` 死碼：同意。**
+  - 證據直接且風險低：`frontend/index.html:8` 只載入 `editor.css`。
+  - 這是純倉庫衛生，適合先清，不需要等待其他前置條件。
+
+- **T1-2｜抽共用 SSE helper：同意，且價值不只是整理。**
+  - 三份 EventSource 流程散落在 `frontend/assets/editor.js:2817`、`frontend/assets/editor.js:2897`、`frontend/assets/editor.js:3662`。
+  - 我同意 backlog 的方向，而且認為這是降低未來 bug surface 的實質性修整，不只是可讀性改善。
+
+- **T1-3｜集中 FEN 解析：強烈同意，建議上調重要性。**
+  - 目前前後端共同依賴 `<board> <w|b>` 縮寫格式；`frontend/assets/board.js:107` 產出 2 欄 FEN，`backend/app.py:821`、`backend/app.py:907` 再補成 6 欄給引擎。
+  - `frontend/assets/editor.js:1653`、`backend/app.py:820`、`backend/app.py:904` 都直接 `split()` 抽 side。
+  - 這是跨模組 contract，不只是 parse convenience；一旦漂移，會產生靜默錯誤。
+
+### Tier 2
+
+- **T2-1｜拆 `editor.js` god-file：同意，但必須排在測試之後。**
+  - `frontend/assets/editor.js:15` 的 `EDITOR` 全域狀態已承載多個子系統。
+  - 沒有前端 / route 測試的情況下先拆，風險太高。
+
+- **T2-2｜拆 `app.py` god-module：同意，但優先級次於測試與協議收斂。**
+  - `backend/app.py:5` 起把 route、偏好、root/path、picker、SSE 都塞在同一模組。
+  - 我同意它是結構債，但在沒有安全網前，不建議先動大刀。
+
+- **T2-3｜DB 連線 per-request churn：部分同意，但建議下調優先級。**
+  - 這是值得做的潔淨化／平順化，但目前較像優化項，不像已知瓶頸。
+  - 若工程時間有限，應晚於 T3-1、T1-2、T1-3。
+
+- **T2-4｜`refreshActive()` 全樹走訪 + 全盤重繪：保留，不建議提前優化。**
+  - `frontend/assets/editor.js:1895` 之後的確是集中式全重繪。
+  - 但沒有 profiling 證據前，我不會把它拉高優先級。
+
+### Tier 3
+
+- **T3-1｜零前端 / 零 route 測試：最同意，應排第一。**
+  - 現有安全網幾乎只保護 persistence round-trip；SSE、`/api/chessdb`、`/api/eval/batch`、UI 狀態同步沒有對應測試。
+  - 這是目前最大的隱性風險來源。
+
+- **T3-2｜trap 門檻常數與 `chess-book-ai` 手抄同步：同意。**
+  - `frontend/assets/editor.js:1758` 起的 `SKIP_OPENING_PLIES` / `TRAP_*` / `BRILLIANT_*` 屬於跨 repo 協議。
+  - 我同意應收斂成單一來源，避免靜默漂移。
+
+- **T3-3｜`board.js` ↔ `editor.js` 全域耦合：同意，但我會改寫理由。**
+  - `frontend/assets/board.js:111` 直接讀 `window.POSITIONS`。
+  - 它的主要成本不只是與兄弟 repo 漂移，而是阻礙測試、抽模組與重用。
+
+- **T3-4｜monkeypatch `is_checking` 全域窗口：同意目前分級。**
+  - `backend/xqf_service.py:513` 到 `backend/xqf_service.py:521` 直接 patch class method；`backend/app.py:1064` 又是 `threaded=True`。
+  - 風險真實，但窗口短、機率低，可延後。
+
+- **T3-5｜引擎 SSE 無 per-request timeout：同意。**
+  - 這不是 zombie 子行程問題，`finally: proc.kill()` 已存在；缺的是單次 request 上限控制。
+
+### 我補充的 backlog 漏項
+
+- **NEW-1｜`deriveCdbLine()` 繞過共享雲庫流程。**
+  - `frontend/assets/editor.js:1621` 直接 loop `fetch('/api/chessdb?...')`，沒有走 `ensureCdbLive()`（`frontend/assets/editor.js:1375`）的共享 cache / stale guard / 狀態收斂。
+  - 這代表同一個 API contract 有兩套前端消費方式；未來 route shape 變更時，漏改風險偏高。
+
+- **NEW-2｜把 FEN contract 明文化。**
+  - 雖然已被 T1-3 部分涵蓋，但我建議 backlog 明寫「保護跨前後端協議」，而非只寫 parse helper。
+
+---
+
+## 濃縮後的 5 條可執行 action items
+
+1. **補最小 Flask route 測試。**
+   - 先覆蓋 `/api/chessdb`、`/api/eval/batch`、`/api/xqf/move-info` 三條最容易漂移的 contract。
+
+2. **加一條最小瀏覽器煙霧測試。**
+   - 覆蓋「開檔 → 導覽 → 改註解 → 存檔 → 重載」，先保住最核心的編輯流程。
+
+3. **抽前端共用 SSE helper。**
+   - 統一 `EventSource` 建立、close、錯誤處理與訊息解析，避免三份邏輯分叉。
+
+4. **集中 FEN side 解析與 normalize。**
+   - 禁止各處直接 `split()` 猜欄位，把 `<board> <side>` contract 收斂到單一 helper / validator。
+
+5. **清掉 `style.css` 死碼並更新 backlog 狀態。**
+   - 這是零行為改變的低風險整理，適合當第一個小 commit。
