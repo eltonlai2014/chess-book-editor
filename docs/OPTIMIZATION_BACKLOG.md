@@ -82,3 +82,45 @@
 
 > **不裸改原則**：T1-3 動的是載重 FEN 耦合（一漂移 eval 命中率歸零），T1-2 動三條 live
 > SSE 路徑——兩者都等 T3-1 安全網落地後再動，不在無測試下硬改。
+
+---
+
+## 未完成事項（需另開 session 執行）
+
+> **進度線（2026-06-22）**：✅ Tier 1 全完（T1-1/T1-2/T1-3）、✅ T3-1 安全網（route 25 +
+> smoke 8）。以下為剩餘工作，附 resume context，新 session 照此接手即可。
+> **動手前先跑基準**：`tests\test_routes.py` + `tests\test_smoke_ui.py`（都應全綠）；每改一步
+> 重跑，當回歸網。
+
+### 0. 先做：手動驗證（非程式碼）
+- **引擎 / auto-play / demo 的 SSE 串流**：T1-2 的 `openAnalyzeStream` 重構，自動測試**未覆蓋**
+  這三條串流的執行期行為（smoke 沙盒無引擎）。在跑起來的 app 手動點「引擎分析」「🤖AI走棋」
+  「演示→延伸」各一次確認正常。若異常，回看 commit `aba8129` 的三處等價改寫。
+
+### T2 — 結構債（大工程，一次一個邊界，每步跑測試）
+- **T2-1 拆 `editor.js`（~4400 行單檔 + `EDITOR` 48 欄全域）**：建議模組邊界——
+  board-render / tree-ops / engine-SSE（`openAnalyzeStream`+`startAnalysis`…）/ chessdb
+  （`ensureCdbLive`/`deriveCdbLine`）/ auto-play / demo / eval-line。**先決定載入方式**：多
+  `<script>` 依序載入（沿用現狀、零建置）vs 改 `type=module` ESM。取捨：純 vanilla、無打包工具。
+- **T2-2 拆 `app.py`（~1064 行）**：抽 `engine_service`（兩支 SSE 合一）、`picker_service`、
+  `config`（frozen/source 路徑 + `DEFAULT_*`）。`test_routes` 已涵蓋 move-info/eval/chessdb，
+  拆完重跑當回歸。
+- **T2-3 DB 連線 singleton**：`eval_service`/`chessdb_service` 每次查詢開新連線 → process-level
+  singleton（read-only 庫無寫鎖問題）。
+- **T2-4 `refreshActive` 全盤重繪**：**無 profiling 證據前不提前優化**（保留觀察，非待辦）。
+- **T2-5 `fetchCdb` 共用 + 回填快取**：`deriveCdbLine` 與 `fetchCdbLive` 各自解析
+  `/api/chessdb`；抽共用 `fetchCdb()/parseCdbResponse()` 並讓演繹**回填 `evalsByFen`**。
+  **注意**：那條獨立節流迴圈是 CLAUDE.md 授權的「唯一多次查詢」，刻意分流——只收斂 response
+  解析與快取共用，**別合併迴圈**。
+
+### T3 — 其餘風險缺口
+- **T3-2 trap 門檻單一來源**：後端 `/api/eval/thresholds` 吐值、前端 fetch，杜絕與
+  `chess-book-ai/site_builder/render_site.py` 手抄漂移。
+- **T3-3 `board.js` `window.POSITIONS` 解耦**：測試/抽模組前置阻力，與 T2-1 一起想。
+- **T3-4 monkeypatch `is_checking` 全域窗口**：改 `contextvars`/傳旗標。機率低、可最後。
+- **T3-5 引擎 SSE per-request 逾時**：`finally:proc.kill()` 已有，加 watchdog（末次 yield 後 N
+  秒無進展即 kill）。
+
+### 收尾後的清理（週期結束才做）
+- 整個優化做完後，刪掉本次的協作鷹架：`docs/CODEX_REVIEW_HANDOFF.md`、
+  `docs/CODEX_REVIEW_FEEDBACK.md`，並視情況決定本 backlog 去留（見記憶 cleanup 原則）。
