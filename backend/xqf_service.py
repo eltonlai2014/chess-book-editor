@@ -502,23 +502,40 @@ def compute_legal_targets(fen: str, from_sq: str) -> list:
 # On a big variation tree (e.g. 12萬-node 合併測試, 22589 moves) that's ~9s of
 # pure overhead. Short-circuiting is_checking()→False during a parse is
 # byte-identical in output (verified: book_to_json identical) and ~3x faster.
-# Scoped + locked: only the load window is affected, so the editor's REAL check
-# detection (move validation, auto-play, engine) keeps its accurate is_checking.
-# The lock serialises the global monkeypatch across Flask's threads; parses are
-# GIL-bound and already serial, so it adds no real latency.
-_parse_lock = threading.Lock()
+#
+# T3-4: suppression is gated on a THREAD-LOCAL flag, not a global class-method
+# swap. `ChessBoard.is_checking` is wrapped ONCE, permanently, with a gate that
+# returns False only when the CURRENT thread is inside `fast_parse_book()`. Any
+# other Flask thread (move validation, auto-play, engine) keeps the accurate
+# is_checking even while a parse runs concurrently — the previous global swap let
+# a ~3s parse on thread A silently disable check detection on thread B. No lock
+# needed (no shared mutable state); concurrent parses are independent + safe.
+# (threading.local fits the thread-per-request model; contextvars would be the
+# async-aware equivalent if this ever moved off threads.)
+_suppress_check = threading.local()
+_ORIG_IS_CHECKING = ChessBoard.is_checking
+
+
+def _is_checking_gated(self):
+    if getattr(_suppress_check, "on", False):
+        return False
+    return _ORIG_IS_CHECKING(self)
+
+
+ChessBoard.is_checking = _is_checking_gated
 
 
 @contextlib.contextmanager
 def fast_parse_book():
-    """Suppress cchess's per-move 將軍/將死 computation for the duration of a parse."""
-    with _parse_lock:
-        orig = ChessBoard.is_checking
-        ChessBoard.is_checking = lambda self: False
-        try:
-            yield
-        finally:
-            ChessBoard.is_checking = orig
+    """Suppress cchess's per-move 將軍/將死 computation for the duration of a parse,
+    on THIS thread only (see T3-4 note above). Reentrant-safe: restores the prior
+    flag value, so a nested parse on the same thread behaves correctly."""
+    prev = getattr(_suppress_check, "on", False)
+    _suppress_check.on = True
+    try:
+        yield
+    finally:
+        _suppress_check.on = prev
 
 
 def load_xqf(path: Path):

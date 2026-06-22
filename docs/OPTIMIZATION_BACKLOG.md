@@ -22,17 +22,16 @@
 
 ## 查證後的修正（把被誇大的 agent 判斷降級，避免當事實）
 
-- **引擎 SSE「殭屍子行程」→ 誇大。** [app.py:868-876](../backend/app.py#L868)、
-  [app.py:959-965](../backend/app.py#L959) 都有 `finally: proc.kill()`，client
-  斷線（GeneratorExit）會收掉 pikafish。真正缺的只是 **per-request 逾時**（卡住的
-  搜尋會跑到 depth 完才停）；影響小，列 T3 末。
+- **引擎 SSE「殭屍子行程」→ 誇大 → per-request 逾時已補（T3-5）。** 兩支串流
+  （T2-2 後在 `engine_service.analyze_stream`/`analyze_line_stream`）都有
+  `finally: _shutdown`，client 斷線（GeneratorExit）會收掉 pikafish。原缺的
+  **per-request 逾時**已由 stall watchdog 補上（見 T3-5）。
 - **annote 每鍵 commit「100 次 mutation」→ 正確但無感**；debounce 只是清爽，非效能
   問題。不排程。
-- **monkeypatch race → 真實但機率低。** `fast_parse_book` 的鎖確實涵蓋整個 parse
-  （[xqf_service.py:515](../backend/xqf_service.py#L515)），併發 parse 不交錯；但
-  `is_checking` 是**全域** patch，A 執行緒 parse 的那 ~3 秒內，B 分頁的走子合法性
-  檢查會看到被改成 `False` 的版本（`threaded=True`，
-  [app.py:1064](../backend/app.py#L1064)）。窗口窄、難重現，列 T3。
+- **monkeypatch race → 真實但機率低 → ✅ 已修（T3-4，2026-06-22）。** 舊版 `is_checking`
+  是**全域** patch，A 執行緒 parse 的 ~3 秒內 B 分頁走子驗證會看到被改成 `False` 的版本
+  （`threaded=True`）。已改 thread-local 旗標 `_suppress_check` 閘控——只在當前執行緒
+  解析時回 False，跨執行緒不再洩漏；可重入、免 lock。詳見 T3-4。
 
 ---
 
@@ -62,7 +61,7 @@
 | T3-1b | **瀏覽器煙霧測試** | route 已覆蓋，但前端 state machine / UI 流程仍無測試 | ✅ `tests/test_smoke_ui.py`（+ `tests/_smoke_server.py` 隔離 launcher）：Chromium 跑「boot→開檔→盤面→導覽→改 annote→存→**重載驗證落地**」。隔離沙盒（暫存 prefs/庫/cache，stub `query_chessdb`），**不碰真實設定、不打網路**；缺 Playwright/Chromium/sample 則 SKIP（CI 安全）。零生產碼改動（launcher 覆寫模組全域） | **DONE**（2026-06-22） |
 | T3-2 | **trap 門檻常數與 chess-book-ai 手抄同步** | editor.js 的 `SKIP_OPENING_PLIES`/`TRAP_*`/`BRILLIANT_*` 必須與 `chess-book-ai/site_builder/render_site.py` 一致 | ✅ `eval_service.TRAP_THRESHOLDS` 為唯一來源；`GET /api/eval/thresholds` 吐值，前端 `fetchThresholds`（boot batch，consts 降級為 fallback mirror），`test_trap_spotcheck` 改 import。repo 內 3 份手抄→1 份（仍需對 render_site.py，但只剩一處）。route 測試＋trap spotcheck（同結果）全綠 | **DONE**（2026-06-22） |
 | T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | **主要成本是測試/抽模組的前置阻力**（要測 board.js 得先 mock 全域），其次才是與兄弟 repo 漂移（codex 重定性）。擋住 `xiangqi-board-lib` 抽取 TODO；非急 | TODO |
-| T3-4 | **monkeypatch `is_checking` 全域窗口** | 見上「查證後的修正」 | 改 `contextvars` / 傳旗標，而非全域 patch class method；機率低、可延後 | TODO |
+| T3-4 | **monkeypatch `is_checking` 全域窗口** | 見上「查證後的修正」 | ✅ 改 thread-local 旗標 `_suppress_check`：`is_checking` 永久包一層閘，只在「當前執行緒正在 `fast_parse_book`」時回 False。跨執行緒不洩漏、可重入、免 lock（移除 `_parse_lock`）。round-trip 逐字節仍相同 | **DONE**（2026-06-22） |
 | T3-5 | **引擎 SSE 無 per-request 逾時** | `finally: proc.kill()` 已有；缺的是上限 | ✅ `engine_service._start_stall_watchdog`：守護執行緒，引擎 `_STALL_TIMEOUT`(30s) 無輸出即 kill（解開 reader 的阻塞 readline）。是「無進展」而非時長上限——`go infinite`/長搜尋持續吐 info 不誤殺；兩支串流都接。`test_engine_sse` happy path 不受影響 | **DONE**（2026-06-22） |
 
 ---
@@ -121,7 +120,8 @@
   唯一來源，`GET /api/eval/thresholds` 吐值、前端 `fetchThresholds`，`test_trap_spotcheck`
   改 import。（仍需與 `render_site.py` 對齊，但 repo 內只剩這一份。）
 - **T3-3 `board.js` `window.POSITIONS` 解耦**：測試/抽模組前置阻力，與 T2-1 一起想。
-- **T3-4 monkeypatch `is_checking` 全域窗口**：改 `contextvars`/傳旗標。機率低、可最後。
+- ~~**T3-4 monkeypatch `is_checking` 全域窗口**~~ ✅ **DONE**（2026-06-22）：thread-local 旗標
+  `_suppress_check` 閘控，跨執行緒不洩漏；移除 `_parse_lock`。round-trip 逐字節相同。
 - ~~**T3-5 引擎 SSE per-request 逾時**~~ ✅ **DONE**（2026-06-22）：`engine_service._start_stall_watchdog`
   守護執行緒，30s 無輸出即 kill（stall 而非時長上限，`go infinite` 不誤殺）。
 

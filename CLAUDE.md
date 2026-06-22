@@ -424,10 +424,14 @@ source, let each user run it on their own machine with their own engine + data.*
   pure overhead. `fast_parse_book()` (xqf_service) short-circuits
   `is_checking`→False for the parse window only: **byte-identical output**
   (verified against the full parse) and ~3x faster (9s→3s). `load_xqf` AND
-  `cb_service.load_cb` both wrap their cchess read in it. It's a module-locked
-  monkeypatch restored in `finally`, so the editor's REAL check detection (move
-  validation, auto-play, engine) is untouched — **never widen its scope to the
-  editing path**, and don't make the patch permanent.
+  `cb_service.load_cb` both wrap their cchess read in it. **T3-4**: it's gated on
+  a **thread-local flag** (`_suppress_check`), not a global class-method swap —
+  `ChessBoard.is_checking` is wrapped once and returns False only when the
+  CURRENT thread is inside `fast_parse_book()`. So a ~3s parse on one Flask
+  thread no longer disables check detection on another thread doing move
+  validation/auto-play/engine (the old global swap did, `threaded=True`).
+  Reentrant-safe (restores prior flag); no lock needed. Still **never widen its
+  scope to the editing path** (the flag must only be set around the cchess read).
 - **Test source path is hard-coded** to `D:\Elton\TestArea\chess-book\` in
   `tests/test_roundtrip.py`. If the source library moves, update `SRC_ROOT`.
 - **AI 自動走棋靠 `go movetime`，不是新後端。** `/api/engine/analyze` 早就吃
