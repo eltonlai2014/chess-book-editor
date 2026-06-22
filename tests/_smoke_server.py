@@ -20,16 +20,21 @@ def main() -> None:
     sys.path.insert(0, repo_root)
 
     from backend import app as a
+    from backend import config as cfg
     from backend import chessdb_service as cdb
 
-    # Redirect everything stateful to the temp sandbox (globals are read per
-    # request: get_xqf_root() reads DEFAULT_XQF_ROOT, _read_prefs() reads
-    # PREFS_PATH, the chessdb route reads CHESSDB_CACHE_PATH, eval reads
-    # DEFAULT_EVAL_DB) — so these overrides fully isolate the run.
-    a.DEFAULT_XQF_ROOT = Path(xqf_root)
-    a.PREFS_PATH = Path(prefs_path)
+    # Redirect everything stateful to the temp sandbox. Since T2-2 the path/pref
+    # resolution lives in backend/config.py — get_xqf_root() reads
+    # cfg.DEFAULT_XQF_ROOT, _read_prefs() reads cfg.PREFS_PATH, _get_eval_db()
+    # reads cfg.DEFAULT_EVAL_DB — so those overrides go on `cfg`. The chessdb
+    # route reads CHESSDB_CACHE_PATH off the `app` module (imported there), so
+    # override it on both to be safe.
+    no_eval = Path(prefs_path).parent / "no_positions.db"   # absent -> eval degrades
+    cfg.DEFAULT_XQF_ROOT = Path(xqf_root)
+    cfg.PREFS_PATH = Path(prefs_path)
+    cfg.DEFAULT_EVAL_DB = no_eval
+    cfg.CHESSDB_CACHE_PATH = Path(cache_path)
     a.CHESSDB_CACHE_PATH = Path(cache_path)
-    a.DEFAULT_EVAL_DB = Path(prefs_path).parent / "no_positions.db"   # absent -> eval degrades
 
     # Neutralise the ONLY outbound network call: navigation fires a cache-first
     # chessdb lookup, and on a miss it would hit chessdb.cn. Stub it to "unknown"

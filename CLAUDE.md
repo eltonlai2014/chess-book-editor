@@ -366,8 +366,8 @@ source, let each user run it on their own machine with their own engine + data.*
   **Frozen path-split is load-bearing**: `_MEIPASS` (read-only `frontend/`) vs
   exe-adjacent dir (writable `preferences.json`/`output/`, AND the staged
   `samples\`/`engine\`) — see `_resource_base`/`_data_base` + the frozen-aware
-  `DEFAULT_XQF_ROOT`/`DEFAULT_PIKAFISH` block in `backend/app.py`; never let
-  prefs land in temp `_MEIPASS`. `package.ps1` drops `$ErrorActionPreference` to
+  `DEFAULT_XQF_ROOT`/`DEFAULT_PIKAFISH` block in `backend/config.py` (since T2-2;
+  was `backend/app.py`); never let prefs land in temp `_MEIPASS`. `package.ps1` drops `$ErrorActionPreference` to
   Continue around the PyInstaller call (it logs INFO to stderr → PS would treat
   each line as a terminating NativeCommandError under Stop) and gates on the real
   exit code. Before shipping: code-sign (else SmartScreen/AV may flag the
@@ -376,8 +376,9 @@ source, let each user run it on their own machine with their own engine + data.*
   tried first but REMOVED 2026-06-09; pythonnet's `Python.Runtime.dll` failed to
   load from an MOTW'd zone on other machines, so the plain-Flask server replaced
   it. Don't reintroduce an embedded webview without solving that.)
-- **Folder/file pickers split by frozen-ness (`backend/app.py` `_pick_folder`/
-  `_pick_file` → `_subprocess_pick`).** tkinter's mainloop needs the main thread,
+- **Folder/file pickers split by frozen-ness (`backend/picker_service.py`
+  `_pick_folder`/`_pick_file` → `_subprocess_pick`; since T2-2, was `app.py`).**
+  tkinter's mainloop needs the main thread,
   so a picker always runs in a SHORT-LIVED subprocess, never inline. The catch:
   `[sys.executable, "-c", …]` only runs python in a SOURCE run. In the frozen exe
   `sys.executable` is the bootloader — `-c …` would re-launch the whole app. So

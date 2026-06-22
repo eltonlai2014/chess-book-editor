@@ -20,7 +20,10 @@
   └─ editor.js  編輯器全部邏輯（狀態機 EDITOR + 走子樹 + 即時分析 + 演示）
         │  fetch / EventSource(SSE)
         ▼
-Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON/SSE API
+Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 Response）
+  ├─ config.py  路徑/偏好解析（frozen-vs-source、DEFAULT_*、prefs 讀寫、三個 path getter）
+  ├─ picker_service.py  原生資料夾/檔案選取（tkinter 子行程；dev `-c` vs frozen `--pick`）
+  ├─ engine_service.py  Pikafish 子行程＋UCI 解析＋兩支串流產生器（共用 _spawn/_engine_fen）
   ├─ xqf_service.py   XQF book ⇄ JSON、中文著法、PV 轉譜、合法著點
   ├─ vendor/io_xqf_patched.py  PatchedXQFWriter（XQF 寫檔，修上游 3 bug）
   ├─ eval_service.py  唯讀讀取 chess-book-ai 的 positions.db（評估/雲庫勝率）
@@ -42,21 +45,21 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 | 原則 | 細節 | 強制點 |
 |---|---|---|
 | **廣度 vs 深度分工** | 批量掃庫找問題＝chess-book-ai；鑽研單一盤面（輸入＋深算＋註解）＝本 repo。別在此重建批量管線。 | CLAUDE.md |
-| **即時分析純暫態** | SSE execs pikafish，逐層 stream，斷線即 kill，**任何結果都不落地**（對比 positions.db）。 | app.py `engine_analyze` |
-| **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。 | app.py `analyze_line`；memory `project-ai-line-depth` |
+| **即時分析純暫態** | SSE execs pikafish，逐層 stream，斷線即 kill，**任何結果都不落地**（對比 positions.db）。 | app.py `engine_analyze` → engine_service.py `analyze_stream`（`_shutdown` kill） |
+| **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。 | app.py `analyze_line` → engine_service.py `analyze_line_stream`；memory `project-ai-line-depth` |
 | **App shell 用 flex** | body flex column＋header 自動高＋main `flex:1`＋`overflow:hidden`；**勿寫死 header 高度**（曾因 `calc(100vh-52px)` 比實際矮而溢出產生捲軸）。 | editor.css `body`/`header`/`main` |
 | **positions.db 唯讀** | `?mode=ro` 開啟，永不 INSERT/UPDATE，檔案歸 AI repo 管。 | eval_service.py `_open_ro`（驗證候選檔，短命）／`db_pool.get_ro`（熱路徑、池化、不 close） |
 | **DB 連線池化** | 熱路徑（`lookup_batch`／雲庫查）reuse 程序級連線，**不逐查 connect/close、不 `.close()` 池內連線**；read-only 序列化、單人工具無寫鎖爭用；路徑變動（換評估庫）→新連線、舊的閒置到退出。`db_info` 驗證任意候選檔仍用短命連線。 | db_pool.py；eval_service.py `lookup_batch`／chessdb_service.py |
 | **雲庫 cache-first＋自有快取** | 即時查 chessdb.cn 前先讀唯讀 positions.db→再讀 editor 自有 `output/editor_chessdb_cache.db`（**唯一可寫**的雲庫快取）→miss 才打網路並寫回。**禁寫 positions.db、禁碰 AI repo 的 chessdb_cache.json**。逐局面查（非整檔 batch）以守 chessdb 速率禮貌。 | chessdb_service.py `lookup`；CHESSDB_CLOUD_QUERY.md |
 | **著法字形** | 紅方：馬→傌 士→仕 象→相 車→俥 將→帥；**砲不換**（保留砲）。黑方：砲→包。 | xqf_service.py `_apply_side_glyphs` / board.js `PIECE_CHAR`(紅 C=砲) |
-| **FEN 兩段式** | 編輯器用 `<board> <w\|b>`，無回合計數。餵 pikafish 才補 ` - - 0 1` 成六段。漂移會讓 DB 命中率掉到 ~0%。 | xqf_service / app.py 分析前拼接 |
-| **分數＝紅方 POV cp** | cp 是行棋方 POV；紅方分＝cp×flip（黑行棋 flip=-1）。WDL 黑行棋時 W/L 互換。cp **不乘 100**（已驗證）。 | app.py `_parse_info_line` |
+| **FEN 兩段式** | 編輯器用 `<board> <w\|b>`，無回合計數。餵 pikafish 才補 ` - - 0 1` 成六段。漂移會讓 DB 命中率掉到 ~0%。 | engine_service.py `_engine_fen`（分析前拼六段＋flip）；前端 `fenSide` |
+| **分數＝紅方 POV cp** | cp 是行棋方 POV；紅方分＝cp×flip（黑行棋 flip=-1）。WDL 黑行棋時 W/L 互換。cp **不乘 100**（已驗證）。 | engine_service.py `_parse_info_line` |
 | **chessdb 必勝局＝±30000 編碼** | chessdb 對 forced mate/win 回 `score≈±30000`（**無 winrate 欄**），`30000−\|score\|＝步數`。前端 `mateFromCdbScore` 把它轉成皮卡魚式 `#+N`/`#-N`（紅 POV），雲格與雲庫 tab 都優先顯示 mate 而非數字/winrate。閾值 25000 遠高於任何真實 cp。 | editor.js `mateFromCdbScore` |
 | **UI 不顯示 ICCS** | 評估列、走法選擇器、導航列著法資訊都只給中文著法，不露代碼。 | editor.js `renderEvalLine`/`renderVarPicker`/`moveInfo` |
 | **icon 統一** | 全系統按鈕用 Lucide 線性 SVG（本機字串、`currentColor`、跟主題同色）。新增按鈕一律走 `ICON` map + `iconLabel()`，**禁用 emoji**。 | editor.js `ICON`(1512)/`iconLabel`(1532) |
 | **版面所有權** | 區塊標題一律 `.panelHead`；面板寬高用 splitter 拖 `flex-basis`（非 width/height），尺寸存 PREFS。靠左對齊優先，別過度設計格線。 | editor.js `setupSplitters`(1925) |
-| **偏好 key-value** | 一切設定（路徑、主題、splitter 尺寸）存 `preferences.json`，前端 `savePreference(key,value)`。 | app.py `_read_prefs`/`_write_prefs` |
-| **原生路徑選擇** | 本機工具用 tkinter subprocess 開系統檔案/資料夾對話框，不用網頁文字框。 | app.py `pick_*_dialog` |
+| **偏好 key-value** | 一切設定（路徑、主題、splitter 尺寸）存 `preferences.json`，前端 `savePreference(key,value)`。 | config.py `_read_prefs`/`_write_prefs` |
+| **原生路徑選擇** | 本機工具用 tkinter subprocess 開系統檔案/資料夾對話框，不用網頁文字框。 | app.py `pick_*_dialog` → picker_service.py |
 | **cchess 逐 venv** | 別全域 `pip install --upgrade cchess`；AI repo 用舊版（read_xqf.py），本 repo 用新版（io_xqf）＋patched writer。 | CLAUDE.md |
 | **cchess 走 vendored wheel** | 安裝來源是 `vendor/wheels/` 的內附 wheel（非 `git+@master`），離線可裝、不怕上游消失。`requirements.txt` 用直接路徑引用。升級＝重建 wheel→`test_roundtrip` 全綠才換。GPLv3。 | CLAUDE.md *Distribution* |
 | **散布版 debug 預設關** | `app.run` 的 debug 由 `FLASK_DEBUG` 控制，預設 False（Werkzeug debugger＝互動式 RCE，不可隨散布版開著）。 | app.py `__main__` |
@@ -71,28 +74,28 @@ Flask (backend/app.py, threaded=True) —— 同時 serve 前端靜態檔 + JSON
 
 | 路由 | 函式:行 | 作用 |
 |---|---|---|
-| `GET /` | `index`:100 | 出 index.html（`_no_store` 包，前端不快取） |
-| `GET /assets/<f>` | `assets`:105 | 靜態檔（`_no_store`：`Cache-Control: no-store`，改 CSS/JS 一般重整就生效；VSCode 內建 Simple Browser 仍會吃舊快取，UI 驗證用外部 Edge） |
-| `GET/POST /api/preferences` | `get_preferences`:131 / `set_preferences`:136 | preferences.json 讀寫 |
-| `GET /api/xqf/list` | `list_xqf` | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf`/`.cbr`/`.cbl` 的目錄（如 png/）剪掉不顯示。`.cbr` 當葉、`.cbl` 當可展開 dir（`cbl:true`、children 空＝懶載入） |
-| `GET /api/xqf/cbl-children?path=` | `cbl_children` | 懶載入：列某 `.cbl` 內每盤（`list_cbl_games`），回 `[{rel:"lib.cbl#i", name, type:file}]`。左樹首次展開才打 |
-| `GET /api/xqf/root` | `get_root`:204 | 目前根目錄（`get_xqf_root`:82） |
-| `POST /api/xqf/pick-root` | `pick_root_dialog`:209 | tkinter 資料夾對話框 |
-| `POST /api/xqf/root` | `set_root`:254 | 設根目錄 |
-| `GET /api/xqf/load` | `load`:278 | 載入→JSON。依 `parse_cb_rel` 分派：`.cbl#N`/`.cbr` 走 `cb_service.load_cb`，否則 `load_xqf`；皆經 `book_to_json` |
-| `POST /api/xqf/legal-targets` | `legal_targets`:295 | 某子合法著點（`compute_legal_targets`） |
-| `POST /api/xqf/move-info` | `move_info`:312 | 單步中文著法（`compute_move_info`） |
-| `POST /api/xqf/move-info-batch` | `move_info_batch` | 同一 fen 多著法一次翻中文（`compute_move_infos_batch`）；雲庫清單用，把 N 發併 1 發 |
-| `POST /api/xqf/new` | `new_xqf`:332 | 新建空棋譜（`create_xqf`） |
-| `GET /api/eval/info` | `eval_info`:385 | DB 狀態（`db_info`） |
-| `POST /api/eval/pick-db` `/db` | `pick_eval_db_dialog`:395 / `set_eval_db`:440 | 選/設評估 DB |
-| `POST /api/eval/batch` | `eval_batch`:740 | 批量查 FEN 評估（`lookup_batch`） |
-| `GET /api/chessdb?fen=` | `chessdb_query` | 即時雲庫查（cache-first；`fresh=1` 跳快取重查）。回傳同 `cdb` 形狀＋`source` |
-| `GET /api/engine/info` | `engine_info`:517 | pikafish 設定 chip（`_get_pikafish`/`_pikafish_info`） |
-| `POST /api/engine/pick` `/path` | `pick_engine_dialog`:523 / `set_engine_path`:567 | 選/設引擎執行檔 |
-| `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:733 | 單局面即時分析串流；逐行解析 `_parse_info_line` |
-| `POST /api/engine/analyze-line` | `analyze_line`:661 | 整條線逐局面掃描，NDJSON 串流（走勢圖）；`_parse_score`:648。**共用 TT 不清空** |
-| `POST /api/xqf/save` | `save`:~850 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
+| `GET /` | `index`:102 | 出 index.html（`_no_store` 包，前端不快取） |
+| `GET /assets/<f>` | `assets`:107 | 靜態檔（`_no_store`：`Cache-Control: no-store`，改 CSS/JS 一般重整就生效；VSCode 內建 Simple Browser 仍會吃舊快取，UI 驗證用外部 Edge） |
+| `GET/POST /api/preferences` | `get_preferences`:116 / `set_preferences`:121 | preferences.json 讀寫（儲存層 `config._read_prefs`/`_write_prefs`） |
+| `GET /api/xqf/list` | `list_xqf`:199 | 棋譜檔案樹（`_tree`）；root 不存在回 200＋`needsRoot`（不 500）；子樹無 `.xqf`/`.cbr`/`.cbl` 的目錄（如 png/）剪掉不顯示。`.cbr` 當葉、`.cbl` 當可展開 dir（`cbl:true`、children 空＝懶載入） |
+| `GET /api/xqf/cbl-children?path=` | `cbl_children`:264 | 懶載入：列某 `.cbl` 內每盤（`list_cbl_games`），回 `[{rel:"lib.cbl#i", name, type:file}]`。左樹首次展開才打 |
+| `GET /api/xqf/root` | `get_root`:223 | 目前根目錄（`config.get_xqf_root`） |
+| `POST /api/xqf/pick-root` | `pick_root_dialog`:228 | tkinter 資料夾對話框（`picker_service._pick_folder`） |
+| `POST /api/xqf/root` | `set_root`:240 | 設根目錄 |
+| `GET /api/xqf/load` | `load`:288 | 載入→JSON。依 `parse_cb_rel` 分派：`.cbl#N`/`.cbr` 走 `cb_service.load_cb`，否則 `load_xqf`；皆經 `book_to_json` |
+| `POST /api/xqf/legal-targets` | `legal_targets`:310 | 某子合法著點（`compute_legal_targets`） |
+| `POST /api/xqf/move-info` | `move_info`:327 | 單步中文著法（`compute_move_info`） |
+| `POST /api/xqf/move-info-batch` | `move_info_batch`:347 | 同一 fen 多著法一次翻中文（`compute_move_infos_batch`）；雲庫清單用，把 N 發併 1 發 |
+| `POST /api/xqf/new` | `new_xqf`:368 | 新建空棋譜（`create_xqf`） |
+| `GET /api/eval/info` | `eval_info`:412 | DB 狀態（`db_info`） |
+| `POST /api/eval/pick-db` `/db` | `pick_eval_db_dialog`:422 / `set_eval_db`:441 | 選/設評估 DB（路徑解析 `config._get_eval_db`） |
+| `POST /api/eval/batch` | `eval_batch`:577 | 批量查 FEN 評估（`eval_service.lookup_batch`） |
+| `GET /api/chessdb?fen=` | `chessdb_query`:602 | 即時雲庫查（cache-first；`fresh=1` 跳快取重查）。回傳同 `cdb` 形狀＋`source` |
+| `GET /api/engine/info` | `engine_info`:477 | pikafish 設定 chip（`config._get_pikafish`/`engine_service.pikafish_info`） |
+| `POST /api/engine/pick` `/path` | `pick_engine_dialog`:483 / `set_engine_path`:502 | 選/設引擎執行檔 |
+| `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:552 | 單局面即時分析串流→`engine_service.analyze_stream`（逐行 `_parse_info_line`、共用 `_spawn`/`_engine_fen`） |
+| `POST /api/engine/analyze-line` | `analyze_line`:528 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空** |
+| `POST /api/xqf/save` | `save`:629 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
 
 ### CBL/CBR 編輯整合（backend/cb_service.py）
 
@@ -248,7 +251,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 **AI 分析 —— 整條線走勢圖（AI分析 tab）**
 | 功能 | 函式:行 |
 |---|---|
-| 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**）；給 `depth2` 時單次深算同時擷取兩層分數 | `analyze_line`(app.py):661 / `_parse_score`:648 ｜ `POST /api/engine/analyze-line {fens,depth,depth2?}` |
+| 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**）；給 `depth2` 時單次深算同時擷取兩層分數 | `analyze_line`(app.py):528 → `engine_service.analyze_line_stream` / `_parse_score` ｜ `POST /api/engine/analyze-line {fens,depth,depth2?}` |
 | 取層數(預設12)/組局面清單 | `aiDepth`:2027（pref `aiAnalysisDepth`）/ `aiLinePositions`:2068 |
 | **雙深度比對**：第二層數(預設20)/開關/門檻(預設200)/深淺差值+旗標 | `aiDepth2`:2035 / `aiDualEnabled`:2039 / `aiDiffThreshold`:2042 / `aiPointDiff`:2055（pref `aiAnalysisDepth2`/`aiDualDepth`/`aiDiffThreshold`）|
 | **漏著偵測（即時、全盤適用、不靠 positions.db）**：相鄰兩點分數即時算「著法損失」（紅POV分換算成走子方POV的下降，mate 折成 ±(30000−\|m\|)）做門檻判定；損失 ≥ 門檻(預設200)即在走勢圖標**亮黃 `✖` 記號**（粗體重十字 U+2716，`--eval-blunder` token：暗 `#ffd60a`／淺 `#b8860b`，深色描邊 outline 跨紅藍區/明暗主題皆清晰；不用紅色/三角因與紅勢區同色不顯）。讀數**單行**（`.aiReadCard` flex row）且**左右分組**：左＝「步名＋該步紅方分」綁一組（走的＋結果），右＝「✖ 最佳著＋該決策點紅方分」（`margin-left:auto` 推到右；該走的＋結果），避免分數被推離步名又與漏著黏在一起。漏著段**全紅方 POV**。過窄時步名 ellipsis、裁切不換行——決策點分＝最佳走法能守住的紅方分，與主行的走子後紅方分一比即見此步讓出多少（刻意不顯示走子方 POV 的損失數，避免與紅方分混 POV）。最佳著＝該決策點引擎 best（UCI→中文，掃描後對少數漏著點批量翻譯） | `aiPlyLoss`／`aiCpRed`／`aiBlunderThreshold`（pref `aiBlunderThreshold`）／`fillAiBlunderBest`（drawAiChart 標記偵測＋renderAiReadout 紅POV 顯示共用） |
@@ -360,11 +363,11 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 ## 4. 改功能時的起手式
 
 - **加按鈕** → `ICON` map(1723) 加圖示 → boot 段(2284–2437) 綁 `.onclick` + `innerHTML=iconLabel(...)`。禁 emoji。
-- **加 API** → app.py 加 `@app.get/post` → 邏輯放 xqf_service / eval_service，路由只做 IO+驗證。
+- **加 API** → app.py 加 `@app.get/post`（薄路由，只做 IO+驗證）→ 邏輯放對應 service：資料 `xqf_service`/`eval_service`，引擎 `engine_service`，路徑/偏好 `config`，原生對話框 `picker_service`。
 - **改著法顯示** → 一律經 `_apply_side_glyphs`(xqf_service:267)；UI 端不要再拼字形。
 - **改面板尺寸/版面** → splitter `data-pref` + `setupSplitters`；尺寸自動進 PREFS。
-- **動分析串流** → 後端 `_parse_info_line` 解析、`engine_analyze` 串流；前端 `startAnalysis`/`renderEngineHistory` 消費。改欄位兩邊都要動。
-- **動分數/WDL 約定** → 改 `_parse_info_line` 的 flip/WDL 互換，前端 `fmtEngineScore`/`fmtWdlHtml` 同步。
+- **動分析串流** → 後端 `engine_service._parse_info_line` 解析、`analyze_stream` 串流（route `engine_analyze`）；前端 `startAnalysis`/`renderEngineHistory` 消費。改欄位兩邊都要動。
+- **動分數/WDL 約定** → 改 `engine_service._parse_info_line` 的 flip/WDL 互換，前端 `fmtEngineScore`/`fmtWdlHtml` 同步。
 - **改棋盤箭頭（色/寬/編號位置）** → 全在 `updateBoardArrows`/`boardArrow`/`boardArrowBadge`；色盤 `ARROW_THEMES` 一主題一行。SVG 無 z-index，疊放靠文件順序——編號最後畫才壓得住線。
 - **加棋盤主題** → board.js `BOARD_STYLES` 加一筆 + editor.js `ARROW_THEMES` 補對應箭頭色 + `EDITOR_THEME_COLORS` 補選取/落點色 + `ensureBoardThemeOptions` 加選項。
 - **動 AI 走勢圖（量程/點線/查詢）** → 全在 `drawAiChart`/`drawAiBusy`/`renderAiReadout`/`aiRange`；後端逐局面在 `analyze_line`。Y 軸動態、點按走子方分色、共用 TT（要嚴格獨立才加 `ucinewgame`）。

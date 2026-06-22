@@ -12,7 +12,7 @@
 |---|---|---|
 | `frontend/assets/editor.js` | ~4372 | 整個編輯器前端（單檔） |
 | `frontend/assets/editor.css` | ~3048 | UI 樣式（唯一被 index.html 載入的） |
-| `backend/app.py` | ~1064 | Flask 路由 + 路徑解析 + picker + 兩支引擎 SSE |
+| `backend/app.py` | ~564 | Flask **薄路由**（T2-2 已拆出 `config.py`/`picker_service.py`/`engine_service.py`） |
 | `frontend/assets/board.js` | ~1722 | 盤面繪製（自 chess-book-ai 複製，接受漂移） |
 | ~~`frontend/assets/style.css`~~ | ~~1589~~ | **已刪除**（死碼，T1-1，2026-06-22） |
 | `backend/xqf_service.py` | ~574 | XQF 讀寫、`fast_parse_book` monkeypatch |
@@ -49,7 +49,7 @@
 | ID | 項目 | 證據 | 修法方向 / 取捨 | 狀態 |
 |---|---|---|---|---|
 | T2-1 | **拆 `editor.js` god-file** | ~4372 行單檔 + `EDITOR` 48 欄全域物件（[editor.js:15](../frontend/assets/editor.js#L15)） | 切 demo / engine / chessdb / auto-play / tree-ops 模組。**取捨**：純 vanilla、無打包工具，拆 ES module 要先定載入方式 | TODO |
-| T2-2 | **拆 `app.py` god-module** | ~1064 行混路由 + 路徑解析 + picker + 兩支 SSE | 抽 `engine_service`（兩支 SSE 合一）、`picker_service`、`config`（frozen/source 路徑） | TODO |
+| T2-2 | **拆 `app.py` god-module** | ~1064 行混路由 + 路徑解析 + picker + 兩支 SSE | ✅ 抽 `config.py`（路徑/prefs/DEFAULT_*）、`picker_service.py`（tkinter 對話框）、`engine_service.py`（Pikafish 子行程＋UCI 解析＋兩支串流，共用 `_spawn`/`_engine_fen`/`_shutdown`）。app.py 1064→564，只剩薄路由。route+SSE+smoke 全綠（smoke isolation seam 改 patch `config`） | **DONE**（2026-06-22） |
 | T2-3 | **DB 連線 per-request churn** | `eval_service`（read-only positions.db）、`chessdb_service` 每次查詢開新連線 | ✅ `backend/db_pool.py`：程序級連線池（`get_ro`/`get_rw`，path-keyed、序列化、不 close）。`lookup_batch`＋雲庫 `_read_positions_db`/`_ensure_cache` 改用池；`db_info` 仍短命（要驗證任意候選檔）。route + eval-integration + trap-spotcheck 全綠 | **DONE**（2026-06-22） |
 | T2-4 | **導覽時全樹走訪 + 全盤重繪** | `refreshActive`（[editor.js:1895](../frontend/assets/editor.js#L1895)）每次重畫整個 SVG + 重裝 overlay | `path→fen` 快取 + 箭頭層增量更新。**取捨**：小檔無感、無 profiling 證據前不提前優化（codex 亦持此見）；只有大棋譜/深樹才值得 | TODO |
 | T2-5 | **`deriveCdbLine` 與 `fetchCdbLive` 各自解析 `/api/chessdb`** | `fetchCdbLive`（[editor.js:1405](../frontend/assets/editor.js#L1405)）cache-first＋寫回 `evalsByFen`＋stale 保護；`deriveCdbLine`（[editor.js:1621](../frontend/assets/editor.js#L1621)）自組 fetch 迴圈、**不讀不寫**快取 | 抽共用 `fetchCdb()/parseCdbResponse()`、並讓演繹**回填 `evalsByFen` 快取**（演繹過的局面導覽時免重查）。**注意**：那條獨立節流迴圈是 CLAUDE.md 授權的「唯一多次查詢」，**刻意分流、非 bug**——只收斂 response 解析與快取共用，別合併迴圈 | TODO（codex NEW-1，已查證降級） |
@@ -73,7 +73,8 @@
 2. ~~鋪 route 契約測試~~ ✅ **T3-1a 已做**（`tests/test_routes.py`，25 checks 全綠）。
 3. ~~Playwright 煙霧測試~~ ✅ **T3-1b 已做**（`tests/test_smoke_ui.py`，8 checks 全綠）。
 4. ~~T1-2 SSE helper~~ ✅、~~T1-3 FEN side 收斂~~ ✅（安全網就位後做，smoke+routes 全綠）。
-5. **NEXT → T2 拆檔（editor.js / app.py）、T2-5（fetchCdb 共用＋回填）、其餘 T3。**
+5. ~~T2-3 連線池~~ ✅、~~T2-2 拆 app.py~~ ✅、~~引擎 SSE 自動測試（取代手動驗證）~~ ✅（2026-06-22）。
+6. **NEXT → T2-1 拆 editor.js（需先定載入方式）、T2-5（fetchCdb 共用＋回填）、其餘 T3。**
 
 > **觀察（非 bug，已定案）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
 > `ok:true side:black`（輪次由 UI 控管）。**主人裁示（2026-06-22）：後端先不擋**，維持現狀；
@@ -104,9 +105,9 @@
   board-render / tree-ops / engine-SSE（`openAnalyzeStream`+`startAnalysis`…）/ chessdb
   （`ensureCdbLive`/`deriveCdbLine`）/ auto-play / demo / eval-line。**先決定載入方式**：多
   `<script>` 依序載入（沿用現狀、零建置）vs 改 `type=module` ESM。取捨：純 vanilla、無打包工具。
-- **T2-2 拆 `app.py`（~1064 行）**：抽 `engine_service`（兩支 SSE 合一）、`picker_service`、
-  `config`（frozen/source 路徑 + `DEFAULT_*`）。`test_routes` 已涵蓋 move-info/eval/chessdb，
-  拆完重跑當回歸。
+- ~~**T2-2 拆 `app.py`（~1064 行）**~~ ✅ **DONE**（2026-06-22）：抽 `config.py`／`picker_service.py`／
+  `engine_service.py`（兩支串流共用 `_spawn`/`_engine_fen`/`_shutdown`）。app.py 1064→564 薄路由。
+  route+`test_engine_sse`+smoke 全綠。
 - ~~**T2-3 DB 連線 singleton**~~ ✅ **DONE**（2026-06-22）：`backend/db_pool.py` 程序級連線池；
   `lookup_batch`／雲庫讀寫改用池，`db_info` 維持短命（驗證任意候選檔）。
 - **T2-4 `refreshActive` 全盤重繪**：**無 profiling 證據前不提前優化**（保留觀察，非待辦）。
