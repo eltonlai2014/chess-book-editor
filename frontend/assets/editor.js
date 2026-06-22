@@ -1,50 +1,58 @@
 "use strict";
-/* XQF editor — uses board.js's full theme renderer.
+/* XQF editor — uses board.js's theme renderer + FEN/ICCS primitives.
  *
  * board.js is loaded as a sibling non-module script BEFORE this file. Its
- * top-level function declarations (drawBoard, parseFen, applyIccs,
- * iccsToCoord) and module-scoped `let`s (CURRENT_REDP, BOARD_STYLES) are
- * visible here via the shared script lexical environment.
+ * top-level function declarations (drawBoard, parseFen, applyIccs, iccsToCoord,
+ * makeFloatingPiece, deltaSignClass) and module-scoped `let`s (CURRENT_REDP,
+ * BOARD_STYLES) are visible here via the shared script lexical environment.
  *
- * board.js's full UI bootstrap (initGamePage) is NOT invoked — we only use
- * its renderer + helpers. REDP_BOX is wired via the hidden checkbox in
- * index.html so isRedPerspective() returns a real value. */
+ * board.js used to carry a whole static-site UI bootstrap (initGamePage, STATE,
+ * the score chart, demo player); all of it was dead in the editor and was
+ * removed in T3-3 A1 (2026-06-22). isRedPerspective() now reads the hidden,
+ * permanently-checked #redPerspective in index.html directly — the REDP_BOX
+ * module var is gone. */
 
 // ---------- editor state ----------
 
+// Single mutable singleton = the editor's whole UI state. This declaration is
+// the ownership map: each field's `[owner: …]` tag names the module that
+// writes/drives that field's live state (T3-3 B2). editor.js declares them all
+// and resets them on file load; untagged fields are editor.js-core. For the
+// call coupling between modules see ARCHITECTURE.md「跨模組全域函式 API」.
 const EDITOR = {
-  currentPath: null,
-  data: null,
-  activePath: [],     // index path into roots[][.children]... — [] = init position
-  selectedSquare: null,  // "h2" when user has selected a from-square via click
-  legalTargets: [],   // list of dest iccs ("e2",...) for currently selected piece
-  floatEl: null,      // <g> of the carried piece following the cursor (or null)
-  boardPtr: null,     // last cursor position in board viewBox coords {x,y}
+  currentPath: null,  // [owner: editor.js] rel of the open file
+  data: null,         // [owner: editor.js] book JSON (roots/info/init_annote/…); the /xqf/save payload
+  activePath: [],     // [owner: editor.js] index path into roots[][.children]... — [] = init position
+  selectedSquare: null,  // [owner: editor.js] "h2" when user has selected a from-square via click
+  legalTargets: [],   // [owner: editor.js] list of dest iccs ("e2",...) for currently selected piece
+  floatEl: null,      // [owner: editor.js] <g> of the carried piece following the cursor (or null)
+  boardPtr: null,     // [owner: editor.js] last cursor position in board viewBox coords {x,y}
+  // [owner: editor.js fetchEvalsForFile; read by editor-cdb/-aichart + eval line]
   // Read-only eval data from chess-book-ai's positions.db. Loaded by
   // fetchEvalsForFile() after each selectFile. {fen -> {d12?,d22?,d28?,d32?,cdb?}}.
   // Empty object when the DB is missing or the file's FENs aren't in it.
   evalsByFen: {},
-  // Live chessdb.cn cloud-library lookup state. positions.db only covers the
-  // AI library; the editor queries chessdb.cn on navigation for whatever the
-  // user has on the board, merging results into evalsByFen[fen].cdb.
+  // [owner: editor-cdb] Live chessdb.cn cloud-library lookup state. positions.db
+  // only covers the AI library; the editor queries chessdb.cn on navigation for
+  // whatever the user has on the board, merging results into evalsByFen[fen].cdb.
   cdbLive: { fen: null, timer: null, loading: false, error: null, endgame: false },
-  cdbScope: "prev",   // 雲庫分頁查哪個局面："prev"=當前步(前一步決策點)／"next"=下一步(走完本步後)
-  evalDbInfo: null,   // result of GET /api/eval/info — drives UI gating
-  engineInfo: null,   // result of GET /api/engine/info — Pikafish config chip
-  engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // live SSE analysis
-  aiAnalysis: { running: false, points: [], queryIdx: null },  // depth-limited whole-line sweep → trend chart (queryIdx = hovered point)
-  cdbLine: { running: false, steps: [], startFen: null, startPath: [], endReason: "" },  // 雲庫演繹: forward chessdb principal variation
-  demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // 演示 playback state
-  // AI 自動走棋: pikafish drives one or both sides; per-side think-time (步時),
-  // bestmove at time-out. `recording` is snapshotted at start (true = write into
-  // the tree; false = ephemeral sandbox line that never touches EDITOR.data and
-  // is discarded — board restored to `startPath` — on stop). `waitingHuman` is
-  // the 人機輪替 pause: only one side is AI, so we idle until the human moves.
+  cdbScope: "prev",   // [owner: editor-cdb] 雲庫分頁查哪個局面："prev"=當前步(前一步決策點)／"next"=下一步(走完本步後)
+  evalDbInfo: null,   // [owner: editor.js] result of GET /api/eval/info — drives UI gating
+  engineInfo: null,   // [owner: editor.js] result of GET /api/engine/info — Pikafish config chip
+  engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // [owner: editor-engine] live SSE analysis
+  aiAnalysis: { running: false, points: [], queryIdx: null },  // [owner: editor-aichart] depth-limited whole-line sweep → trend chart (queryIdx = hovered point)
+  cdbLine: { running: false, steps: [], startFen: null, startPath: [], endReason: "" },  // [owner: editor-cdb] 雲庫演繹: forward chessdb principal variation
+  demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // [owner: editor-demo] 演示 playback state
+  // [owner: editor-autoplay] AI 自動走棋: pikafish drives one or both sides; per-side
+  // think-time (步時), bestmove at time-out. `recording` is snapshotted at start
+  // (true = write into the tree; false = ephemeral sandbox line that never touches
+  // EDITOR.data and is discarded — board restored to `startPath` — on stop).
+  // `waitingHuman` is the 人機輪替 pause: only one side is AI, idle until human moves.
   autoPlay: { running: false, recording: true, waitingHuman: false, es: null, startPath: null, sandboxBaseFen: null, sandboxLine: [], history: [] },
-  rootOk: true,       // false when the configured library root is missing (drives LS recovery)
-  treeSig: "",        // JSON sig of the last-rendered /api/xqf/list — focus auto-rescan only repaints on change
-  rootPath: "",       // last root reported by the server (valid or not)
-  dirty: false,       // 目前棋譜有未存檔的編輯 → 切檔前提示存/棄（見 maybeSaveBeforeLeaving）
+  rootOk: true,       // [owner: editor.js] false when the configured library root is missing (drives LS recovery)
+  treeSig: "",        // [owner: editor.js] JSON sig of the last-rendered /api/xqf/list — focus auto-rescan only repaints on change
+  rootPath: "",       // [owner: editor.js] last root reported by the server (valid or not)
+  dirty: false,       // [owner: editor.js] 目前棋譜有未存檔的編輯 → 切檔前提示存/棄（見 maybeSaveBeforeLeaving）
 };
 
 // 任何會改動 EDITOR.data 的編輯都呼叫這個；切換棋譜前用 EDITOR.dirty 判斷是否提示。

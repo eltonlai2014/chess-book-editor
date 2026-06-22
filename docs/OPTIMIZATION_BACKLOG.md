@@ -13,7 +13,7 @@
 | `frontend/assets/editor.js` | ~2950 | 編輯器核心（T2-1 已拆出 cdb/engine/autoplay/aichart/demo 為同層 classic script） |
 | `frontend/assets/editor.css` | ~3048 | UI 樣式（唯一被 index.html 載入的） |
 | `backend/app.py` | ~564 | Flask **薄路由**（T2-2 已拆出 `config.py`/`picker_service.py`/`engine_service.py`） |
-| `frontend/assets/board.js` | ~1722 | 盤面繪製（自 chess-book-ai 複製，接受漂移） |
+| `frontend/assets/board.js` | ~762 | 純盤面 renderer + FEN/ICCS helper（T3-3 A1 切掉靜態站死碼 1722→762；自 chess-book-ai 複製，接受漂移） |
 | ~~`frontend/assets/style.css`~~ | ~~1589~~ | **已刪除**（死碼，T1-1，2026-06-22） |
 | `backend/xqf_service.py` | ~574 | XQF 讀寫、`fast_parse_book` monkeypatch |
 | `backend/cb_service.py` | ~410 | CBL/CBR 讀寫、byte-splice 存檔 |
@@ -32,6 +32,15 @@
   是**全域** patch，A 執行緒 parse 的 ~3 秒內 B 分頁走子驗證會看到被改成 `False` 的版本
   （`threaded=True`）。已改 thread-local 旗標 `_suppress_check` 閘控——只在當前執行緒
   解析時回 False，跨執行緒不再洩漏；可重入、免 lock。詳見 T3-4。
+
+> **✅ smoke 偽陰性已查清並修掉（2026-06-22，T3-3 A1 基準時發現）**：
+> `tests\test_smoke_ui.py`「reload: annote persisted to file」曾確定性 FAIL（存檔回報「已儲存」、
+> fresh-server 重載後 `#annoteBox` 空）。**實證非 app bug**：存檔後磁碟 XQF 30671→30695 bytes 確含
+> `SMOKE-TEST-ANNOTE`、重載後 `EDITOR.data.roots[0].annote` = MARK（存檔/讀回完全正常，與主人實機一致）。
+> **真因＝測試競態**：commit `3c7893b` 把重載改 fresh server 後，session1 存的 `lastFile` 讓 session2
+> 開機**自動開檔**，與測試顯式 `_open_sample` 的二次開檔互搶——晚到的 auto-open 重繪把單次 `navNext`
+> 點擊重置回 `[]`，於是讀到初始局面空註解（直接呼叫 `navNext()` 則正常到 `[0]`）。**修法（非改 app）**：
+> 重載階段改「輪詢點 `navNext` 直到 `activePath===[0]`」消解競態；修後連跑 2 次 8/8 全綠。
 
 ---
 
@@ -60,7 +69,7 @@
 | T3-1a | **route 契約測試** | 原本唯一安全網是 persistence round-trip；SSE/chessdb/route 全裸奔 | ✅ `tests/test_routes.py`：Flask `test_client`，25 checks 覆蓋 `/api/xqf/move-info`、`/api/eval/batch`、`/api/chessdb`（含 400/500/降級契約）。網路 seam `query_chessdb` + DB seam monkeypatch，**不碰 chessdb.cn、不依賴 positions.db** | **DONE**（2026-06-22） |
 | T3-1b | **瀏覽器煙霧測試** | route 已覆蓋，但前端 state machine / UI 流程仍無測試 | ✅ `tests/test_smoke_ui.py`（+ `tests/_smoke_server.py` 隔離 launcher）：Chromium 跑「boot→開檔→盤面→導覽→改 annote→存→**重載驗證落地**」。隔離沙盒（暫存 prefs/庫/cache，stub `query_chessdb`），**不碰真實設定、不打網路**；缺 Playwright/Chromium/sample 則 SKIP（CI 安全）。零生產碼改動（launcher 覆寫模組全域） | **DONE**（2026-06-22） |
 | T3-2 | **trap 門檻常數與 chess-book-ai 手抄同步** | editor.js 的 `SKIP_OPENING_PLIES`/`TRAP_*`/`BRILLIANT_*` 必須與 `chess-book-ai/site_builder/render_site.py` 一致 | ✅ `eval_service.TRAP_THRESHOLDS` 為唯一來源；`GET /api/eval/thresholds` 吐值，前端 `fetchThresholds`（boot batch，consts 降級為 fallback mirror），`test_trap_spotcheck` 改 import。repo 內 3 份手抄→1 份（仍需對 render_site.py，但只剩一處）。route 測試＋trap spotcheck（同結果）全綠 | **DONE**（2026-06-22） |
-| T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | **主要成本是測試/抽模組的前置阻力**（要測 board.js 得先 mock 全域），其次才是與兄弟 repo 漂移（codex 重定性）。擋住 `xiangqi-board-lib` 抽取 TODO；非急 | TODO |
+| T3-3 | **board.js ↔ editor.js 全域耦合** | board.js 讀 `window.POSITIONS` 等全域（[board.js:111](../frontend/assets/board.js#L111)） | **計畫見 [docs/T3-3_DECOUPLE_PLAN.md](T3-3_DECOUPLE_PLAN.md)**（前提：解耦只在「對 AI 有幫助」才做）。A `POSITIONS`／board.js 切死碼（**做**：移除偽裝成 live 的靜態站平行狀態機，1722→~750；二次掃描訂正＝`deltaSignClass` **必留**(editor-cdb 在用)、`injectBoardPicker` 是死碼)。B `EDITOR` 全域 295 處：**B2 縮編**（宣告本身已是 ownership map，只補 owner 註解＋跨模組函式 API，非快照表）、**B3 砍**（重寫狀態機、AI 非急需） | **A1+B2 DONE**（2026-06-22，board.js 1722→762 純 renderer；B3 不做） |
 | T3-4 | **monkeypatch `is_checking` 全域窗口** | 見上「查證後的修正」 | ✅ 改 thread-local 旗標 `_suppress_check`：`is_checking` 永久包一層閘，只在「當前執行緒正在 `fast_parse_book`」時回 False。跨執行緒不洩漏、可重入、免 lock（移除 `_parse_lock`）。round-trip 逐字節仍相同 | **DONE**（2026-06-22） |
 | T3-5 | **引擎 SSE 無 per-request 逾時** | `finally: proc.kill()` 已有；缺的是上限 | ✅ `engine_service._start_stall_watchdog`：守護執行緒，引擎 `_STALL_TIMEOUT`(30s) 無輸出即 kill（解開 reader 的阻塞 readline）。是「無進展」而非時長上限——`go infinite`/長搜尋持續吐 info 不誤殺；兩支串流都接。`test_engine_sse` happy path 不受影響 | **DONE**（2026-06-22） |
 
@@ -75,8 +84,9 @@
 5. ~~T2-3 連線池~~ ✅、~~T2-2 拆 app.py~~ ✅、~~引擎 SSE 自動測試（取代手動驗證）~~ ✅（2026-06-22）。
 6. ~~T3-2 門檻單一來源~~ ✅、~~T3-5 SSE watchdog~~ ✅、~~T3-4 monkeypatch thread-local~~ ✅、
    ~~T2-5 fetchCdb 共用~~ ✅、~~T2-1 拆 editor.js（多 script）~~ ✅（2026-06-22）。
-7. **剩餘：T3-3 board.js `window.POSITIONS` 解耦（＋`EDITOR` 全域物件，與此一起想）；
-   T2-4 `refreshActive` 全盤重繪（無 profiling 證據前不動）。editor.js 續拆核心模組為選配。**
+7. ~~T3-3 A1 board.js 切死碼（1722→762 純 renderer）~~ ✅、~~T3-3 B2 owner 註解＋跨模組函式 API~~ ✅
+   （2026-06-22；**B3 不做**，定案）。**剩餘：T2-4 `refreshActive` 全盤重繪（無 profiling 證據前不動）；
+   editor.js 續拆核心模組為選配。**
 
 > **觀察（非 bug，已定案）**：`compute_move_info` 不強制輪次——紅方該走時丟黑子著法仍回
 > `ok:true side:black`（輪次由 UI 控管）。**主人裁示（2026-06-22）：後端先不擋**，維持現狀；
@@ -121,7 +131,12 @@
 - ~~**T3-2 trap 門檻單一來源**~~ ✅ **DONE**（2026-06-22）：`eval_service.TRAP_THRESHOLDS`
   唯一來源，`GET /api/eval/thresholds` 吐值、前端 `fetchThresholds`，`test_trap_spotcheck`
   改 import。（仍需與 `render_site.py` 對齊，但 repo 內只剩這一份。）
-- **T3-3 `board.js` `window.POSITIONS` 解耦**：測試/抽模組前置阻力，與 T2-1 一起想。
+- ~~**T3-3 `board.js` `window.POSITIONS` 解耦**~~ ✅ **A1+B2 DONE**（2026-06-22）：A1 移除整套偽裝成
+  live 的靜態站死碼（`getEntry`/`window.POSITIONS`/`STATE`/`drawChart`/demo/`injectBoardPicker`），
+  board.js **1722→762** 純 renderer；保留 `deltaSignClass`（雲庫著色）、`isRedPerspective` 改直讀隱藏
+  `#redPerspective`；`board.js?v=36`。B2 補 `EDITOR` 逐欄 `[owner:]` 註解＋ARCHITECTURE「跨模組全域函式
+  API」清單。**B3 不做**（重寫狀態機、回歸面 > 收益）。`node --check`＋smoke 零回歸。計畫檔
+  [docs/T3-3_DECOUPLE_PLAN.md](T3-3_DECOUPLE_PLAN.md) 任務完成、可刪。
 - ~~**T3-4 monkeypatch `is_checking` 全域窗口**~~ ✅ **DONE**（2026-06-22）：thread-local 旗標
   `_suppress_check` 閘控，跨執行緒不洩漏；移除 `_parse_lock`。round-trip 逐字節相同。
 - ~~**T3-5 引擎 SSE per-request 逾時**~~ ✅ **DONE**（2026-06-22）：`engine_service._start_stall_watchdog`

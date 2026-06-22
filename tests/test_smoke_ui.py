@@ -170,8 +170,18 @@ def main() -> int:
                 page = browser.new_page(viewport={"width": 1600, "height": 1000})
                 page.goto(base, wait_until="load", timeout=20000)
                 _open_sample(page, base, rel)
-                page.click("#navNext")
-                page.wait_for_timeout(300)
+                # The fresh server ALSO auto-opens lastFile (the edit session
+                # persisted it to prefs), so _open_sample's explicit re-open races
+                # the boot auto-open: a late auto-open re-render can reset
+                # activePath right after a single navNext click, leaving us on the
+                # init position (empty annote) — a TEST-ONLY flake, not a save bug
+                # (the edited node is on disk; reopened EDITOR.data.roots[0].annote
+                # already holds MARK). Poll-click navNext until the first move
+                # actually activates, defeating the race deterministically.
+                page.wait_for_function(
+                    "() => { if (JSON.stringify(EDITOR.activePath) === '[0]') return true;"
+                    "  const b = document.querySelector('#navNext'); if (b) b.click();"
+                    "  return false; }", timeout=8000)
                 annote_val = page.input_value("#annoteBox")
                 check("reload: annote persisted to file", MARK in (annote_val or ""),
                       f"got {annote_val!r}")

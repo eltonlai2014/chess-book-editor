@@ -158,18 +158,23 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 
 | 功能 | 函式:行 |
 |---|---|
-| 渲染整盤（任意 SVG、用全域主題/視角；SVG viewBox 540×600 固定，顯示尺寸由 CSS `#board{width:100%}` 控制→可縮放）。第 5 參 `liftIccs`＝把某格的子「拿起」不畫（編輯器拖子用） | `drawBoard`:487 |
-| 畫單顆子（disk＋字）於絕對座標（從 drawBoard 迴圈抽出，供浮動子複用） | `drawPieceAt` |
-| 建浮動「拿起的子」`<g class="floatPiece">`（同盤外觀、local 原點、`pointer-events:none`、靠 transform 定位）；漸層/陰影 defs 來自同 svg 的 drawBoard | `makeFloatingPiece` |
+| 渲染整盤（任意 SVG、用全域主題/視角；SVG viewBox 540×600 固定，顯示尺寸由 CSS `#board{width:100%}` 控制→可縮放）。第 5 參 `liftIccs`＝把某格的子「拿起」不畫（編輯器拖子用） | `drawBoard`:415 |
+| 畫單顆子（disk＋字）於絕對座標（從 drawBoard 迴圈抽出，供浮動子複用） | `drawPieceAt`:665 |
+| 建浮動「拿起的子」`<g class="floatPiece">`（同盤外觀、local 原點、`pointer-events:none`、靠 transform 定位）；漸層/陰影 defs 來自同 svg 的 drawBoard | `makeFloatingPiece`:744 |
 | 河界「楚河漢界」置中（`text-anchor:middle`＋`letter-spacing` 在 Chromium 會多算末字距→x 右補半個 letter-spacing 才視覺置中） | `drawBoard` river text |
-| FEN 解析 / 走一步並翻邊 | `parseFen`:44 / `applyIccs`:70 |
-| ICCS↔座標、螢幕座標 | `iccsToCoord`:35 / `screenX`:25 / `screenY`:29 |
-| 棋子字形（紅 C=砲） | `PIECE_CHAR`:7 / `PIECE_CHARS_SUBSET`:237 |
-| 主題樣式表 / 回紋邊框 | `BOARD_STYLES`:272 / `drawMeanderFrame`:405 |
-| 字型載入 | `ensurePieceFontLoaded`:262 |
+| FEN 解析 / 走一步並翻邊 | `parseFen`:55 / `applyIccs`:81 |
+| ICCS↔座標、螢幕座標 | `iccsToCoord`:46 / `screenX`:36 / `screenY`:40 |
+| 棋子字形（紅 C=砲） | `PIECE_CHAR`:18 / `PIECE_CHARS_SUBSET`:142 |
+| 主題樣式表 / 回紋邊框 | `BOARD_STYLES`:189 / `drawMeanderFrame`:336 |
+| 字型載入 / 視角鎖 | `ensurePieceFontLoaded`:179 / `isRedPerspective`:751（drawBoard latch `CURRENT_REDP`） |
+| 雲庫分數著色 class（cp→`delta-pos/neg-strong/mild`；board.js 唯一倖存的 eval helper，editor-cdb 用） | `deltaSignClass`:124 |
 
-> board.js 也含一套獨立的 game-page bootstrap（STATE:896 起、`initGamePage` 等）——
-> 那是 chess-book-ai 的瀏覽 UI，editor **不呼叫**，只借渲染器與 helper。改 editor 別動那段。
+> **T3-3 A1（2026-06-22）**：board.js 原本夾帶整套 chess-book-ai 靜態站 game-page 狀態機
+> （`STATE`/`activatePly`/`selectVariation`、`getEntry`+`window.POSITIONS`、eval-delta 族、走勢圖
+> `drawChart`、demo 播放、主題 picker 注入器 `injectBoardPicker`）。editor **從不呼叫**它、且它只
+> 讀一個 editor 從不寫入的 `window.POSITIONS`（恆 null）——確認死碼後**整套移除**（1722→762 行，
+> `node --check`＋smoke 零回歸）。board.js 現為純 renderer：上表的渲染原語＋FEN/ICCS helper＋一個
+> `deltaSignClass`。**改 editor 的盤面/著色就改這裡**（不再有「editor 別動的死碼區」）。
 
 ### 前端 — 編輯器邏輯（frontend/assets/editor*.js）
 
@@ -181,6 +186,25 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 > **加新模組要逐一抽、每步跑 smoke**（曾因一次抽多個用過時行號壞切而回歸）。
 > 模組：`-cdb`（雲庫 client/UI）、`-engine`（引擎分頁＋`openAnalyzeStream`）、
 > `-autoplay`（AI 走棋沙盒）、`-aichart`（走勢圖）、`-demo`（PV 演示彈窗）。
+
+> **T3-3 B2 — 跨模組全域函式 API（2026-06-22，自動算出）**：模組共享全域 scope，真正的耦合面
+> 不是 `EDITOR` state（其 owner 已逐欄標在 editor.js `EDITOR` 宣告的 `[owner: …]` 註解），而是
+> 「誰跨檔呼叫誰的函式」。**改某函式簽名前先查它在不在此清單**（在＝有別檔依賴、要同步）。
+>
+> - **editor.js core → 各模組共用 API**（最重的耦合方向）：`setStatus`(全模組)、
+>   `fenSide`(cdb/engine/aichart/demo)、`currentFen`(cdb/engine/autoplay)、`currentLine`(aichart/gifexport)、
+>   `navigateTo`/`clearSelection`(autoplay/demo)、`nodeAt`(cdb/demo)、`insertMoveAt`(cdb/autoplay)、
+>   `iconLabel`(engine/autoplay/demo)、`switchRpTab`(engine/autoplay)、`refreshActive`/`installBoardOverlay`/
+>   `boardFen`/`openSettingsModal`(autoplay)、`updateBoardArrows`/`fenAndLastIccsFor`(engine)、
+>   `isEndgameFen`/`cdbTabFen`/`fillCdbNotations`/`mateFromCdbScore`/`renderEvalLine`/`notationFor`(cdb)、
+>   `notationsForBatch`/`cssVar`/`hexToRgba`(aichart)、`setDemoStatus`/`showConfirmDialog`(demo)。
+> - **各模組 → editor.js（boot/導覽回呼，wiring 在 editor.js 末）**：cdb `ensureCdbLive`/`fetchCdbLive`/
+>   `renderCdbTab`/`renderCdbLineView`/`clearCdbLine`／engine `startAnalysis`/`stopAnalysis`/`engineModeClick`/
+>   `analysisFen`／autoplay `stopAutoPlay`/`maybeResumeAutoPlay`/`updateAutoPlayBtn`/`auto*`／aichart
+>   `renderAiView`/`clearAiAnalysis`/`ai*`／demo `openDemo`/`closeDemo`/`demoGo`/`addPvLine`。
+> - **跨 feature（不經 editor.js）**：autoplay·demo → engine `openAnalyzeStream`/`startAnalysis`；
+>   cdb·autoplay → engine `fmtEngineScore`、cdb → engine `fenSideName`；autoplay·demo → aichart `aiDepth`；
+>   autoplay → cdb `cdbLineDepth`/`cdbLineEntry`；gifexport → cdb `gifFrameDelaySec` + editor.js `currentLine`/`setStatus`。
 
 **狀態 / 樹導航**（以下函式名仍有效，行號為拆分前舊值、僅供概念定位——拆分後散落各 editor-*.js）
 | 功能 | 函式:行 |
