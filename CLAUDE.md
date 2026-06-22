@@ -159,7 +159,13 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   by being **button-triggered (never auto on navigation)**, cache-first, and
   sleeping 250ms **only on live misses**. It also self-terminates the moment
   chessdb has no row (out of book), so it rarely runs the full depth. Keep those
-  three guards if you touch it.
+  three guards if you touch it. **T2-5**: it shares the fetch+parse helper
+  (`fetchCdb`/`parseCdbResponse`) with `fetchCdbLive` and now **back-fills**
+  `evalsByFen[fen].cdb` for each derived position (`cacheCdb`) so navigating onto
+  one later skips a re-query — but its **own throttled loop is NOT merged** with
+  the navigation path (only the response parsing + cache write are shared). It
+  still doesn't *read* the cache mid-loop (each step fetches; the loop must stay
+  the single deliberate multi-query path).
 - **No cloud query once the position is an endgame.** chessdb only covers
   opening+midgame, so a sparse endgame just returns 查無. `isEndgameFen(fen)`
   (editor.js, near `cdbTabFen`) gates BOTH the live lookup (`ensureCdbLive` →

@@ -51,7 +51,7 @@
 | T2-2 | **拆 `app.py` god-module** | ~1064 行混路由 + 路徑解析 + picker + 兩支 SSE | ✅ 抽 `config.py`（路徑/prefs/DEFAULT_*）、`picker_service.py`（tkinter 對話框）、`engine_service.py`（Pikafish 子行程＋UCI 解析＋兩支串流，共用 `_spawn`/`_engine_fen`/`_shutdown`）。app.py 1064→564，只剩薄路由。route+SSE+smoke 全綠（smoke isolation seam 改 patch `config`） | **DONE**（2026-06-22） |
 | T2-3 | **DB 連線 per-request churn** | `eval_service`（read-only positions.db）、`chessdb_service` 每次查詢開新連線 | ✅ `backend/db_pool.py`：程序級連線池（`get_ro`/`get_rw`，path-keyed、序列化、不 close）。`lookup_batch`＋雲庫 `_read_positions_db`/`_ensure_cache` 改用池；`db_info` 仍短命（要驗證任意候選檔）。route + eval-integration + trap-spotcheck 全綠 | **DONE**（2026-06-22） |
 | T2-4 | **導覽時全樹走訪 + 全盤重繪** | `refreshActive`（[editor.js:1895](../frontend/assets/editor.js#L1895)）每次重畫整個 SVG + 重裝 overlay | `path→fen` 快取 + 箭頭層增量更新。**取捨**：小檔無感、無 profiling 證據前不提前優化（codex 亦持此見）；只有大棋譜/深樹才值得 | TODO |
-| T2-5 | **`deriveCdbLine` 與 `fetchCdbLive` 各自解析 `/api/chessdb`** | `fetchCdbLive`（[editor.js:1405](../frontend/assets/editor.js#L1405)）cache-first＋寫回 `evalsByFen`＋stale 保護；`deriveCdbLine`（[editor.js:1621](../frontend/assets/editor.js#L1621)）自組 fetch 迴圈、**不讀不寫**快取 | 抽共用 `fetchCdb()/parseCdbResponse()`、並讓演繹**回填 `evalsByFen` 快取**（演繹過的局面導覽時免重查）。**注意**：那條獨立節流迴圈是 CLAUDE.md 授權的「唯一多次查詢」，**刻意分流、非 bug**——只收斂 response 解析與快取共用，別合併迴圈 | TODO（codex NEW-1，已查證降級） |
+| T2-5 | **`deriveCdbLine` 與 `fetchCdbLive` 各自解析 `/api/chessdb`** | 兩處各自 fetch+parse；`deriveCdbLine` 原本不讀不寫快取 | ✅ 抽 `fetchCdb`/`parseCdbResponse`/`cacheCdb`（editor.js）；兩處共用 fetch+parse；`deriveCdbLine` **回填** `evalsByFen[fen].cdb`（含 unknown）→ 導覽到演繹過的局面免重查。**獨立節流迴圈未合併**（CLAUDE.md 授權的唯一多次查詢，刻意分流）。smoke 全綠 | **DONE**（2026-06-22，codex NEW-1） |
 
 ## Tier 3｜風險缺口（不是效能，是安全網）
 
@@ -110,10 +110,8 @@
 - ~~**T2-3 DB 連線 singleton**~~ ✅ **DONE**（2026-06-22）：`backend/db_pool.py` 程序級連線池；
   `lookup_batch`／雲庫讀寫改用池，`db_info` 維持短命（驗證任意候選檔）。
 - **T2-4 `refreshActive` 全盤重繪**：**無 profiling 證據前不提前優化**（保留觀察，非待辦）。
-- **T2-5 `fetchCdb` 共用 + 回填快取**：`deriveCdbLine` 與 `fetchCdbLive` 各自解析
-  `/api/chessdb`；抽共用 `fetchCdb()/parseCdbResponse()` 並讓演繹**回填 `evalsByFen`**。
-  **注意**：那條獨立節流迴圈是 CLAUDE.md 授權的「唯一多次查詢」，刻意分流——只收斂 response
-  解析與快取共用，**別合併迴圈**。
+- ~~**T2-5 `fetchCdb` 共用 + 回填快取**~~ ✅ **DONE**（2026-06-22）：抽
+  `fetchCdb`/`parseCdbResponse`/`cacheCdb`；`deriveCdbLine` 回填 `evalsByFen`（迴圈未合併）。
 
 ### T3 — 其餘風險缺口
 - ~~**T3-2 trap 門檻單一來源**~~ ✅ **DONE**（2026-06-22）：`eval_service.TRAP_THRESHOLDS`

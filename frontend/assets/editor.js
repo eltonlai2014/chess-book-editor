@@ -1410,6 +1410,43 @@ function ensureCdbLive(fen) {
   EDITOR.cdbLive.timer = setTimeout(() => fetchCdbLive(fen, false), 220);
 }
 
+// ---------- shared /api/chessdb client (T2-5) ----------
+// One place to fetch + normalise + cache the cloud-library response, shared by
+// the navigation live-query (fetchCdbLive) and the 雲庫演繹 loop (deriveCdbLine).
+// NOTE: only the response parsing + cache are shared — deriveCdbLine keeps its
+// OWN throttled loop (the CLAUDE.md-sanctioned "唯一多次查詢"); do NOT merge it.
+
+// Normalise a /api/chessdb body to the cdb shape the UI renders. Throws on the
+// documented error envelopes (status:'error', or a bare {error}) so callers
+// handle failures uniformly.
+function parseCdbResponse(body) {
+  if (!body) throw new Error("空回應");
+  if (body.status === "error") throw new Error(body.error || "查詢失敗");
+  if (body.error && !body.status) throw new Error(body.error);
+  return {
+    status: body.status,
+    moves: body.moves || [],
+    best: body.best || null,
+    source: body.source,
+  };
+}
+
+// Fetch one position from the cache-first cloud route. fresh=1 skips server
+// caches and re-queries chessdb.cn. Returns the normalised cdb (or throws).
+async function fetchCdb(fen, fresh) {
+  const r = await fetch(
+    "/api/chessdb?fen=" + encodeURIComponent(fen) + (fresh ? "&fresh=1" : ""));
+  return parseCdbResponse(await r.json());
+}
+
+// Merge a cdb result into the per-fen cache so later navigation reuses it
+// (ensureCdbLive's fast path serves entry.cdb without a re-query).
+function cacheCdb(fen, cdb) {
+  if (!fen || !cdb) return;
+  if (!EDITOR.evalsByFen[fen]) EDITOR.evalsByFen[fen] = {};
+  EDITOR.evalsByFen[fen].cdb = cdb;
+}
+
 async function fetchCdbLive(fen, fresh) {
   if (!fen) return;
   EDITOR.cdbLive.fen = fen;
@@ -1417,18 +1454,7 @@ async function fetchCdbLive(fen, fresh) {
   EDITOR.cdbLive.error = null;
   renderCdbTab();
   try {
-    const r = await fetch(
-      "/api/chessdb?fen=" + encodeURIComponent(fen) + (fresh ? "&fresh=1" : ""));
-    const body = await r.json();
-    if (body.status === "error") throw new Error(body.error || "查詢失敗");
-    if (body.error && !body.status) throw new Error(body.error);
-    if (!EDITOR.evalsByFen[fen]) EDITOR.evalsByFen[fen] = {};
-    EDITOR.evalsByFen[fen].cdb = {
-      status: body.status,
-      moves: body.moves || [],
-      best: body.best || null,
-      source: body.source,
-    };
+    cacheCdb(fen, await fetchCdb(fen, fresh));
   } catch (e) {
     // Don't cache transient failures into evalsByFen — leave it absent so the
     // next visit (or 重查) retries instead of sticking on "查詢失敗".
@@ -1647,13 +1673,16 @@ async function deriveCdbLine() {
       }
       let cdb;
       try {
-        const r = await fetch(`/api/chessdb?fen=${encodeURIComponent(fen)}`);
-        cdb = await r.json();
+        cdb = await fetchCdb(fen, false);   // shared fetch+parse (T2-5)
       } catch (_) {
         s.endReason = "查詢失敗（網路）";
         break;
       }
-      if (!cdb || cdb.status !== "ok" || !cdb.best || !cdb.best.iccs) {
+      // Backfill the per-fen cache so navigating onto a derived position later
+      // reuses this result instead of re-querying (T2-5). Caches "unknown" too
+      // (a confirmed out-of-book answer is worth not re-asking).
+      cacheCdb(fen, cdb);
+      if (cdb.status !== "ok" || !cdb.best || !cdb.best.iccs) {
         s.endReason = i === 0 ? "雲庫無此局面" : "雲庫到此無資料";
         break;
       }
