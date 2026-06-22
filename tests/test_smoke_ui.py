@@ -63,6 +63,23 @@ def _wait_server(base: str, proc: subprocess.Popen, timeout: float = 25) -> None
     raise RuntimeError("server did not come up in time")
 
 
+def _serve(lib, prefs, cache):
+    """Start a fresh sandbox server on a free port and wait for it. Returns
+    (proc, base). The reload-verify phase uses a SECOND fresh server rather than
+    re-hitting the first: the werkzeug dev server intermittently wedges on a 2nd
+    full page-load against the same instance after the edit session's keep-alive
+    burst (handlers complete but responses stall). A fresh server mirrors a real
+    app restart and still verifies disk persistence + auto-open render."""
+    port = _free_port()
+    base = f"http://127.0.0.1:{port}"
+    proc = subprocess.Popen(
+        [sys.executable, str(LAUNCHER), str(port), str(lib), str(prefs), str(cache), str(ROOT)],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+    )
+    _wait_server(base, proc)
+    return proc, base
+
+
 def _open_sample(page, base, rel):
     """(Re)open the sample file and wait until the board has rendered pieces."""
     page.wait_for_selector("#fileTree", timeout=15000)
@@ -91,16 +108,10 @@ def main() -> int:
     prefs.write_text("{}", encoding="utf-8")
     cache = work / "cache.db"
     rel = SAMPLE.name
-    port = _free_port()
-    base = f"http://127.0.0.1:{port}"
 
-    proc = subprocess.Popen(
-        [sys.executable, str(LAUNCHER), str(port), str(lib), str(prefs), str(cache), str(ROOT)],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
-    )
+    proc, base = _serve(lib, prefs, cache)
     browser = None
     try:
-        _wait_server(base, proc)
         with sync_playwright() as pw:
             try:
                 browser = pw.chromium.launch()
@@ -112,7 +123,12 @@ def main() -> int:
             page.on("pageerror", lambda e: page_errors.append(str(e)))
 
             # --- boot ---
-            page.goto(base, wait_until="networkidle", timeout=20000)
+            # wait_until="load" (not "networkidle"): the app loads several
+            # classic scripts + lazy fonts + a second wave of API calls on
+            # auto-open, so the network rarely goes 500ms-idle within the
+            # timeout (Playwright discourages networkidle for exactly this).
+            # "load" + the explicit element waits below are the robust check.
+            page.goto(base, wait_until="load", timeout=20000)
             page.wait_for_selector("#fileTree", timeout=15000)
             check("boot: no uncaught page errors", not page_errors, str(page_errors[:3]))
 
@@ -144,8 +160,15 @@ def main() -> int:
                     " return s && s.textContent.includes('已儲存'); }", timeout=15000)
                 check("save: status shows 已儲存", True)
 
-                # --- reload + verify persistence to disk ---
-                page.goto(base, wait_until="networkidle", timeout=20000)
+                # --- reload (fresh server) + verify persistence to disk ---
+                # Fresh server avoids the same-instance reload wedge (see _serve);
+                # reopening reads the just-saved file from disk, so finding MARK
+                # confirms it persisted.
+                page.close()
+                proc.terminate()
+                proc, base = _serve(lib, prefs, cache)
+                page = browser.new_page(viewport={"width": 1600, "height": 1000})
+                page.goto(base, wait_until="load", timeout=20000)
                 _open_sample(page, base, rel)
                 page.click("#navNext")
                 page.wait_for_timeout(300)

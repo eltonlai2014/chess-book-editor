@@ -29,10 +29,17 @@ def main() -> None:
     # reads cfg.DEFAULT_EVAL_DB — so those overrides go on `cfg`. The chessdb
     # route reads CHESSDB_CACHE_PATH off the `app` module (imported there), so
     # override it on both to be safe.
-    no_eval = Path(prefs_path).parent / "no_positions.db"   # absent -> eval degrades
+    sandbox = Path(prefs_path).parent
     cfg.DEFAULT_XQF_ROOT = Path(xqf_root)
     cfg.PREFS_PATH = Path(prefs_path)
-    cfg.DEFAULT_EVAL_DB = no_eval
+    cfg.DEFAULT_EVAL_DB = sandbox / "no_positions.db"   # absent -> eval degrades
+    # Stub the engine too: /api/engine/info would otherwise EXEC the real Pikafish
+    # (UCI handshake, slow NNUE load) — not what this frontend test exercises, and
+    # a real binary may be absent in CI. Pointing at a missing path makes
+    # engine/info return {exists:false} instantly (engine UI degrades gracefully),
+    # keeping the boot/reload deterministic and offline. (test_engine_sse covers
+    # the real engine separately and SKIPs without one.)
+    cfg.DEFAULT_PIKAFISH = sandbox / "no_engine.exe"
     cfg.CHESSDB_CACHE_PATH = Path(cache_path)
     a.CHESSDB_CACHE_PATH = Path(cache_path)
 
