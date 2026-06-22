@@ -16,9 +16,17 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 import time
 
 from backend.xqf_service import pv_to_chinese
+
+# Per-request stall guard (T3-5). A wedged engine that emits NOTHING for this
+# long is killed so it can't pin a Flask worker thread on a blocking readline
+# forever. This is a STALL timeout, not a duration cap: a productive search —
+# including `go infinite` for the live tab — streams `info` lines continuously,
+# bumping the progress clock, so it never trips. Only true silence does.
+_STALL_TIMEOUT = 30.0
 
 
 def _safe_int(v, default: int = 0) -> int:
@@ -72,6 +80,31 @@ def _shutdown(proc, send) -> None:
         proc.kill()
     except Exception:
         pass
+
+
+def _start_stall_watchdog(proc):
+    """Kill ``proc`` if it produces no output for ``_STALL_TIMEOUT`` seconds.
+
+    Returns a one-element list ``last`` holding the monotonic time of the last
+    output — the reader loop must set ``last[0] = time.monotonic()`` on every
+    line so a live/long-but-productive search never trips. The daemon thread
+    exits on its own once the process dies (normal completion kills it via
+    ``_shutdown``). Killing the engine makes the reader's blocking
+    ``for line in proc.stdout`` hit EOF, so the generator unwinds cleanly."""
+    last = [time.monotonic()]
+
+    def watch():
+        while proc.poll() is None:
+            if time.monotonic() - last[0] > _STALL_TIMEOUT:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                return
+            time.sleep(1.0)
+
+    threading.Thread(target=watch, daemon=True).start()
+    return last
 
 
 def _parse_info_line(line: str, flip: int, fen: str) -> dict | None:
@@ -173,6 +206,7 @@ def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int):
     the two to flag positions where shallow and deep search disagree."""
     go_depth = max(depth, depth2) if depth2 else depth
     proc, send = _spawn(engine_path)
+    last = _start_stall_watchdog(proc)
     try:
         send("uci")
         send("setoption name Threads value 4")
@@ -180,6 +214,8 @@ def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int):
         send("isready")
         total = len(fens)
         for idx, fen in enumerate(fens):
+            if proc.poll() is not None:
+                break   # watchdog killed a wedged engine — stop cleanly
             full_fen, flip = _engine_fen(fen)
             send(f"position fen {full_fen}")
             send(f"go depth {go_depth}")
@@ -189,6 +225,7 @@ def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int):
             cap = {}   # iteration-depth -> {"cp": x} | {"mate": x}
             best = None
             for line in proc.stdout:
+                last[0] = time.monotonic()
                 line = line.strip()
                 if line.startswith("bestmove"):
                     bits = line.split()
@@ -239,6 +276,7 @@ def analyze_stream(engine_path, fen: str, depth: int, movetime: int):
     arrives."""
     full_fen, flip = _engine_fen(fen)
     proc, send = _spawn(engine_path)
+    last = _start_stall_watchdog(proc)
     try:
         send("uci")
         send("setoption name Threads value 4")
@@ -255,6 +293,7 @@ def analyze_stream(engine_path, fen: str, depth: int, movetime: int):
         last_emit = 0.0
         last_depth = -1
         for line in proc.stdout:
+            last[0] = time.monotonic()
             line = line.strip()
             if line.startswith("bestmove"):
                 bits = line.split()

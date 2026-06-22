@@ -45,7 +45,7 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 | 原則 | 細節 | 強制點 |
 |---|---|---|
 | **廣度 vs 深度分工** | 批量掃庫找問題＝chess-book-ai；鑽研單一盤面（輸入＋深算＋註解）＝本 repo。別在此重建批量管線。 | CLAUDE.md |
-| **即時分析純暫態** | SSE execs pikafish，逐層 stream，斷線即 kill，**任何結果都不落地**（對比 positions.db）。 | app.py `engine_analyze` → engine_service.py `analyze_stream`（`_shutdown` kill） |
+| **即時分析純暫態** | SSE execs pikafish，逐層 stream，斷線即 kill，**任何結果都不落地**（對比 positions.db）。另有 stall watchdog（T3-5）：引擎 `_STALL_TIMEOUT`(30s) 無輸出即 kill（防卡死進程釘住 worker thread）——是「無進展」而非時長上限，故 `go infinite`/長搜尋持續吐 info 不會誤殺。 | app.py `engine_analyze` → engine_service.py `analyze_stream`（`_shutdown`/`_start_stall_watchdog`） |
 | **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。 | app.py `analyze_line` → engine_service.py `analyze_line_stream`；memory `project-ai-line-depth` |
 | **App shell 用 flex** | body flex column＋header 自動高＋main `flex:1`＋`overflow:hidden`；**勿寫死 header 高度**（曾因 `calc(100vh-52px)` 比實際矮而溢出產生捲軸）。 | editor.css `body`/`header`/`main` |
 | **positions.db 唯讀** | `?mode=ro` 開啟，永不 INSERT/UPDATE，檔案歸 AI repo 管。 | eval_service.py `_open_ro`（驗證候選檔，短命）／`db_pool.get_ro`（熱路徑、池化、不 close） |
