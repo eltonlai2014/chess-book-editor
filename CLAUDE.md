@@ -179,12 +179,19 @@ gap with a **cache-first live lookup** of chessdb.cn, exposed as
   `currentFen()`, answering "how does this position stand, and what's the best
   reply" — matching the AI trend chart (which also scores each move's post-move
   position). (Was the 前一步 decision point until 2026-06-18; master flipped it to
-  the post-move framing so the eval line agrees with the trend chart.) **Trade-off
-  (master's call): the LAST ply's post-leaf position isn't in positions.db, so the
-  final move shows no 深N — deliberately NOT patched** (the live engine / trend
-  chart already carries that number if needed). Depth data comes from the
-  `fetchEvalsForFile` batch (`collectAllFens` already includes every node's
-  post-move FEN) — no per-navigation network call.
+  the post-move framing so the eval line agrees with the trend chart.) **The LAST
+  ply's terminal (post-move) position is now scored AT SOURCE** (chess-book-ai
+  commit `86c4c16`, 2026-06-23): each ply stores its *pre*-move FEN, so the leaf's
+  post-move board was once the one position nobody evaluated → the final move
+  briefly showed no 深N (that 2026-06-18 trade-off is now OBSOLETE — was
+  "deliberately not patched"). `build_data.py` now emits the terminal FEN (→ d12,
+  incl. 將死/困斃 `mate=0` shown as #0) and `enrich_decisive.py` adds it to the d22
+  candidate set. After positions.db is re-migrated, **d12 covers the leaf
+  immediately and d22 fills in via the nightly sweep** — so the final move shows
+  深12 right away and 深22 once the sweep reaches that terminal FEN. **Editor needs
+  ZERO code change** (read-only DB; `renderEvalLine` just picks up the new rows).
+  Depth data comes from the `fetchEvalsForFile` batch (`collectAllFens` already
+  includes every node's post-move FEN) — no per-navigation network call.
 - **Cloud list defaults to the branch's alternatives; a toggle adds "下一步".**
   The 雲庫 tab has a `當前步`／`下一步` toggle (`EDITOR.cdbScope`, `cdbTabFen()`).
   - `當前步` (DEFAULT, prev): the decision point (`analysisFen`) — lists the

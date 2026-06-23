@@ -271,7 +271,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 點列加入棋譜（依 scope）：`當前步`＝在**分支點**加同層變化（前一步、`activePath.slice(0,-1)`）／`下一步`＝加**當前著的子著**（`activePath`）；已存在則切換過去 | `addCdbMove`→`insertMoveAt(branchPath,…)` |
 | 「重查」按鈕（`fresh=1` 跳快取重打 `cdbTabFen()`，配合目前 scope） | boot 段綁 `#cdbRefreshBtn` |
 
-> **整條評估列都看「走完本步後」(`currentFen`)**：深N分數、建議、雲全部 key 在 `currentFen()`，回答「走完這步後局面如何、最佳應手是什麼」，與 AI 走勢圖同框架（走勢圖每點也是走完後）。**取捨（主人 2026-06-18 拍板，由前一步決策點改來）**：最後一步走完的局面（post-leaf）不在 positions.db，故末步無深N分數——**刻意不補**（即時引擎／走勢圖已有該分）。深度分數來自 `fetchEvalsForFile` 的 batch（`collectAllFens` 已含每個節點走完後的 FEN），不需逐步打網路。
+> **整條評估列都看「走完本步後」(`currentFen`)**：深N分數、建議、雲全部 key 在 `currentFen()`，回答「走完這步後局面如何、最佳應手是什麼」，與 AI 走勢圖同框架（走勢圖每點也是走完後）。**末步終端局面已自源頭補分（chess-book-ai commit `86c4c16`，2026-06-23）**：每個 ply 存的是「走子前」FEN，故每條線「走完末手」的終端盤面曾是全庫唯一沒人評的，末步一度無深N（2026-06-18 改 post-move 框架的已知取捨，**現已失效**）。`build_data.py` 吐終端 FEN（→d12，含將死/困斃 `mate=0`→顯示 #0）、`enrich_decisive.py` 納入 d22 候選；positions.db 重產後 **d12 立即涵蓋末步、d22 隨夜間 sweep 滾動補完**——故末步先有深12，深22 待 sweep 跑到該終端 FEN 後出現。**editor 端零改 code**（唯讀 DB，`renderEvalLine` 自動撈新列）。深度分數來自 `fetchEvalsForFile` 的 batch（`collectAllFens` 已含每個節點走完後的 FEN），不需逐步打網路。
 > **導航 live 查對齊評估列（`currentFen`）**：導航時 `ensureCdbLive(currentFen())`，所以評估列「雲」格在 positions.db 漏查時由即時 chessdb.cn 補上——而雲庫漏查很常見：positions.db 的 `chessdb` 表只收 AI 管線的第 10–25 手（`PLY_RANGE`），前段／後段多半無（深N 的 `evals` 表無此窗口，故不受影響）。雲庫 tab 自身的 `cdbTabFen`（預設 `當前步`＝`analysisFen`）則在**切到雲庫 tab／切 scope**時才 live 查（`cdbLive` 單槽，導航只能查一個局面，常駐的評估列優先）。`fetchCdbLive` 收尾按 `fen===currentFen()`／`fen===cdbTabFen()` 分別回繪評估列／tab，避免晚到的回應蓋掉新局面。
 > 雲庫資料形狀＝後端 `cdb`（`{status,moves,best,source}`），與 `/api/eval/batch` 一致，故 batch 命中與即時查可共用 `renderEvalLine`/`renderCdbTab`。分數是行棋方 POV cp，顯示時 ×flip 轉紅方視角（同 `_parse_info_line` 慣例）。
 

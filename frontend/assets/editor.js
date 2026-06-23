@@ -1304,10 +1304,12 @@ async function renderEvalLine() {
   // The whole eval line describes the position AFTER the active move
   // (currentFen): 深N / 建議 / 雲 judge "how does this position stand, and what's
   // the best reply", aligning with the AI trend chart (which also scores each
-  // move's post-move position). Trade-off (master's call 2026-06-18): the LAST
-  // ply's post-leaf position isn't in positions.db, so the final move shows no
-  // depth scores — accepted, NOT patched (the live engine / trend chart already
-  // carries that number if it's ever needed).
+  // move's post-move position). The LAST ply's terminal (post-move) position is
+  // now scored at source (chess-book-ai commit 86c4c16, 2026-06-23): d12 covers
+  // it immediately, d22 fills via the nightly sweep — so the final move shows
+  // 深12 right away and 深22 once the sweep reaches that FEN. (Was an accepted gap
+  // until 2026-06-23; no editor code change — read-only DB, this fn just reads
+  // the new rows.)
   const fen = currentFen();
   const entry = (fen && EDITOR.evalsByFen[fen]) || {};
 
