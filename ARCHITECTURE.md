@@ -161,6 +161,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 渲染整盤（任意 SVG、用全域主題/視角；SVG viewBox 540×600 固定，顯示尺寸由 CSS `#board{width:100%}` 控制→可縮放）。第 5 參 `liftIccs`＝把某格的子「拿起」不畫（編輯器拖子用） | `drawBoard`:415 |
 | 畫單顆子（disk＋字）於絕對座標（從 drawBoard 迴圈抽出，供浮動子複用） | `drawPieceAt`:665 |
 | 建浮動「拿起的子」`<g class="floatPiece">`（同盤外觀、local 原點、`pointer-events:none`、靠 transform 定位）；漸層/陰影 defs 來自同 svg 的 drawBoard | `makeFloatingPiece`:744 |
+| **走子動畫**：把移動的子從來源滑到目標格（overshoot settle＋微浮起）＋吃子淡縮。用 SVG transform **屬性**(user-unit)＋手動 `requestAnimationFrame` 內插（避開 CSS px/user-unit 歧義，與「拿起的子」同款）。呼叫前 `refreshActive` 已用 `liftIccs=dest` 重畫（目標子先不畫），動畫結束才 `drawPieceAt` 落子；被新動畫接管時只清理**不補畫**（防殘影）。**只單步前進才觸發**（editor.js `animatableMove`）。開關 `html[data-board-anim]`（缺＝開；尊重 `prefers-reduced-motion`） | `animateBoardMove` / `boardAnimEnabled` |
+| **走子/吃子音效**：WebAudio 合成木質敲擊（**無音檔**：三角波 thock＋高通雜訊 tick；落子單敲、吃子較低＋雙敲）。AudioContext 懶建、靠觸發走子的手勢 `resume`。開關 `html[data-board-sound]` | `playPieceSound` |
 | 河界「楚河漢界」置中（`text-anchor:middle`＋`letter-spacing` 在 Chromium 會多算末字距→x 右補半個 letter-spacing 才視覺置中） | `drawBoard` river text |
 | FEN 解析 / 走一步並翻邊 | `parseFen`:55 / `applyIccs`:81 |
 | ICCS↔座標、螢幕座標 | `iccsToCoord`:46 / `screenX`:36 / `screenY`:40 |
@@ -379,7 +381,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 棋盤 pane + 導航列 + 評估列 | `#board`、`#navBar`、`#evalLine` | **可拖縮放**：boardPane 右側 splitter（`data-pref="splitBoardW"`）拖 flex-basis，`#board{width:100%}`＋viewBox 不變→整盤含點擊層等比縮放；`#boardPane` min/max-width 夾住。導航列隨欄寬自適應：`#navBranch` 純圖示（`ICON.branch`，提示在 title）、按鈕 `flex:1 1 0`＋max-width 封頂、`#moveInfo` 高 flex 權重吃剩餘寬＋ellipsis；走法無前綴符號，窄時 `@container navbar` 隱藏 `.miPly`（「第N步：」前綴）只留著法（如 傌二進三）。**紅黑視角＝`#perspectiveBtn` 在此列末端**（一顆按鈕，顯示目前視角＋flip 圖示、點擊翻面；`togglePerspective`/`updatePerspectiveBtn`，真實來源仍是隱藏 `#redPerspective`；`#moveInfo` flex:3 把它頂到最右） |
 | 右欄：棋譜 ｜ (注解/AI分析) ｜ (走法/☁雲庫/☁雲庫演繹/引擎分析) | 兩組 `.rpTabs`：`#rpAnnote`＝注解+AI分析（`#aiBar` 在頁籤列、僅 AI 時顯示；`#aiChart`+`#aiReadout`）；`#rpVars`＝走法+雲庫(`#rpCdbBody`)+雲庫演繹(`#rpCdbLineBody`：`#cdbLineRunBtn`/`#cdbLineDemoBtn`/`#cdbLineAddBtn`+`#cdbLineList`)+引擎分析+🤖AI走棋(`#rpAutoBody`：控制列 `#autoStartBtn`(start/stop)/`#autoClearBtn`/`#autoState`+歷程 `#autoHistory`) |
 | dialogs | confirm / meta / new / demo / settings；**demo/settings 標題列含 `.modalClose` ✕** |
-| settings 分區（兩欄瀑布流 `.settingsForm{column-count:2}`，`break-inside:avoid`） | 資料來源 / 引擎分析 / 雲庫演繹 / **AI 自動走棋**（`#autoAiRedChk`/`#autoAiBlackChk`/`#autoRedSecsInput`/`#autoBlackSecsInput`/`#autoMaxPliesInput`；**加入棋譜 `#autoRecordChk` 已移到 🤖AI走棋 分頁**）/ 匯出動畫 |
+| settings 分區（兩欄瀑布流 `.settingsForm{column-count:2}`，`break-inside:avoid`） | 資料來源 / 引擎分析 / 雲庫演繹 / **AI 自動走棋**（`#autoAiRedChk`/`#autoAiBlackChk`/`#autoRedSecsInput`/`#autoBlackSecsInput`/`#autoMaxPliesInput`；**加入棋譜 `#autoRecordChk` 已移到 🤖AI走棋 分頁**）/ **棋盤動效**（`#boardAnimChk` 走子動畫／`#boardSoundChk` 走子音效；change 即存 pref＋更新 `html[data-board-anim]`/`[data-board-sound]`，boot `applyBoardFxPrefs` 同步）/ 匯出動畫 |
 
 ### 持久層（已驗證全庫 round-trip）
 
@@ -407,5 +409,6 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 - **動分數/WDL 約定** → 改 `engine_service._parse_info_line` 的 flip/WDL 互換，前端 `fmtEngineScore`/`fmtWdlHtml` 同步。
 - **改棋盤箭頭（色/寬/編號位置）** → 全在 `updateBoardArrows`/`boardArrow`/`boardArrowBadge`；色盤 `ARROW_THEMES` 一主題一行。SVG 無 z-index，疊放靠文件順序——編號最後畫才壓得住線。
 - **加棋盤主題** → board.js `BOARD_STYLES` 加一筆 + editor.js `ARROW_THEMES` 補對應箭頭色 + `EDITOR_THEME_COLORS` 補選取/落點色 + `ensureBoardThemeOptions` 加選項。
+- **改走子動畫/音效** → 全在 board.js `animateBoardMove`/`playPieceSound`；觸發判定（只單步前進）在 editor.js `animatableMove`，掛在 `refreshActive`（動畫時 `liftIccs=dest` 先不畫目標子）。開關走 `html[data-board-anim]`/`[data-board-sound]` dataset hook（boot `applyBoardFxPrefs` 從 PREFS 同步、設定 toggle change 即更新）。動畫用 SVG transform **屬性** user-unit，別改成 CSS px transform（單位歧義）。
 - **動 AI 走勢圖（量程/點線/查詢）** → 全在 `drawAiChart`/`drawAiBusy`/`renderAiReadout`/`aiRange`；後端逐局面在 `analyze_line`。Y 軸動態、點按走子方分色、共用 TT（要嚴格獨立才加 `ucinewgame`）。
 - **加頁籤** → 同一 `.rpTabs`/`.rpTabBody` 結構 + 專屬 `switchXxxTab`（查詢限定容器）；隱藏靠 `.rpTabBody[hidden]{display:none !important}`，body 自己的 `display:flex` 不會蓋掉。

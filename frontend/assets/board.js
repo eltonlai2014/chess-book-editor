@@ -10,6 +10,8 @@
 //   • primitives  — el, screenX/Y, iccsToCoord, parseFen, applyIccs
 //   • board draw  — drawBoard, drawPieceAt, makeFloatingPiece, drawMeanderFrame, mixHex
 //   • theme       — BOARD_STYLES, currentBoardStyle, PIECE_FONTS, ensurePieceFontLoaded
+//   • move fx     — animateBoardMove (slide+capture-fade), playPieceSound (WebAudio
+//                   wood clack); editor polish, opt-in via data-board-anim / -sound
 //   • one eval helper — deltaSignClass (cp→colour class), used by editor-cdb.js
 // Perspective is latched per-redraw into the module-level CURRENT_REDP by drawBoard.
 
@@ -755,7 +757,140 @@ function isRedPerspective() {
   return box ? box.checked : true;
 }
 
+// ---------- move animation + sound (editor polish) ----------
+// Opt-in via dataset hooks the editor sets from PREFS (same pattern as the
+// data-board-bg / data-piece-font extension hooks in drawBoard):
+//   html[data-board-anim]  = "off"  → disable the slide animation
+//   html[data-board-sound] = "off"  → disable the move / capture sound
+// Absent attr = ON. The slide also yields to prefers-reduced-motion.
+//
+// animateBoardMove() is called by editor.js refreshActive() AFTER drawBoard()
+// has redrawn the board at the NEW fen with the destination square LIFTED
+// (liftIccs = dest) — so the moved piece is not yet painted there. We slide a
+// floating copy from source → dest (overshoot settle), fade out any captured
+// piece, then drop the real piece at dest on completion. It uses the SVG
+// transform ATTRIBUTE in user units (matching the editor's carried-piece float)
+// driven by a manual rAF tween, so there is no CSS px-vs-user-unit ambiguity.
+
+let BOARD_ANIM_CLEANUP = null;   // settle() of the in-flight #board animation
+
+function boardAnimEnabled() {
+  if (document.documentElement.dataset.boardAnim === "off") return false;
+  return !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+function animateBoardMove(svg, newFen, prevFen, iccs, duration) {
+  if (!svg || !boardAnimEnabled()) return false;
+  const c = iccsToCoord(iccs);
+  if (!c) return false;
+  // Retire any in-flight animation first (fast navigation). The caller already
+  // ran drawBoard() for the NEW position, which wiped the old floats, so retire
+  // WITHOUT drawing — drawing the prior move's piece now would stamp a stale one.
+  if (BOARD_ANIM_CLEANUP) { const f = BOARD_ANIM_CLEANUP; BOARD_ANIM_CLEANUP = null; f(false); }
+
+  CURRENT_REDP = isRedPerspective();
+  const S = currentBoardStyle();
+  const fromX = screenX(c.from.col), fromY = screenY(c.from.row);
+  const toX = screenX(c.to.col), toY = screenY(c.to.row);
+
+  const after = parseFen(newFen);
+  const movedPiece = after && after.rows[c.to.row] ? after.rows[c.to.row][c.to.col] : null;
+  if (!movedPiece) return false;
+  const before = prevFen ? parseFen(prevFen) : null;
+  const captured = before && before.rows[c.to.row] ? before.rows[c.to.row][c.to.col] : null;
+
+  const dur = Math.max(60, duration || 175);
+  // Fading captured piece (drawn first → sits under the slider).
+  const capG = captured ? makeFloatingPiece(svg, captured) : null;
+  if (capG) capG.setAttribute("transform", `translate(${toX},${toY})`);
+  // Sliding moved piece.
+  const g = makeFloatingPiece(svg, movedPiece);
+  g.setAttribute("transform", `translate(${fromX},${fromY})`);
+
+  let done = false;
+  const finish = (draw) => {
+    if (done) return; done = true;
+    if (BOARD_ANIM_CLEANUP === finish) BOARD_ANIM_CLEANUP = null;
+    if (g.parentNode) g.parentNode.removeChild(g);
+    if (capG && capG.parentNode) capG.parentNode.removeChild(capG);
+    // Drop the real piece ONLY on a true completion. When superseded, drawBoard()
+    // has already repainted the board, so drawing here would stamp a stale piece.
+    if (draw) drawPieceAt(svg, movedPiece, toX, toY, S);   // board was drawn with dest lifted
+  };
+  BOARD_ANIM_CLEANUP = finish;
+
+  // Overshoot ease-out (back) — sells the weight of the piece dropping.
+  const ease = (t) => { const s = 1.45, p = t - 1; return 1 + (s + 1) * p * p * p + s * p * p; };
+  const start = performance.now();
+  const frame = (now) => {
+    if (done) return;
+    let t = (now - start) / dur; if (t > 1) t = 1;
+    const e = ease(t);
+    const x = fromX + (toX - fromX) * e, y = fromY + (toY - fromY) * e;
+    const lift = 1 + 0.06 * (1 - t);                       // slight in-flight lift settling to 1.0
+    g.setAttribute("transform", `translate(${x},${y}) scale(${lift})`);
+    if (capG) {
+      capG.setAttribute("opacity", String(Math.max(0, 1 - t * 1.4)));
+      capG.setAttribute("transform", `translate(${toX},${toY}) scale(${1 - 0.35 * t})`);
+    }
+    if (t < 1) requestAnimationFrame(frame); else finish(true);
+  };
+  requestAnimationFrame(frame);
+  // Fallback for when rAF is paused (tab hidden mid-slide): force completion so
+  // the destination hole never lingers. No-op if already finished/superseded.
+  setTimeout(() => finish(true), dur + 250);
+
+  playPieceSound(captured ? "capture" : "move");
+  return true;
+}
+
+// Synthesised wood "clack" via WebAudio — no asset files. Move = a single soft
+// knock; capture = louder + lower with a second tap. Lazy AudioContext, resumed
+// on the user gesture that triggered the move (click / key).
+let _boardAudioCtx = null;
+function playPieceSound(type) {
+  if (document.documentElement.dataset.boardSound === "off") return;
+  let ac = _boardAudioCtx;
+  if (!ac) {
+    try { ac = _boardAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (_) { return; }
+  }
+  if (!ac) return;
+  if (ac.state === "suspended") { try { ac.resume(); } catch (_) { } }
+  const t0 = ac.currentTime;
+  // Low triangle "thock" with a fast pitch drop + percussive decay.
+  const knock = (t, freq, gain, dur) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(freq, t);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.6, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  };
+  // Short high-passed noise burst — the wood-on-wood "click".
+  const tick = (t, gain, dur) => {
+    const n = Math.max(1, Math.floor(ac.sampleRate * dur));
+    const buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1600;
+    const g = ac.createGain(); g.gain.value = gain;
+    src.connect(hp); hp.connect(g); g.connect(ac.destination); src.start(t);
+  };
+  if (type === "capture") {
+    knock(t0, 210, 0.16, 0.13); tick(t0, 0.09, 0.05);
+    knock(t0 + 0.05, 170, 0.11, 0.12);
+  } else {
+    knock(t0, 300, 0.12, 0.10); tick(t0, 0.06, 0.035);
+  }
+}
+
 window.drawBoard = drawBoard;
+window.animateBoardMove = animateBoardMove;
 window.parseFen = parseFen;
 window.applyIccs = applyIccs;
 window.iccsToCoord = iccsToCoord;

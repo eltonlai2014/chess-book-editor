@@ -1581,14 +1581,42 @@ function navigateTo(path) {
   refreshActive();
 }
 
+// ---- board move animation gate ----
+// Sync the board.js dataset hooks (data-board-anim / data-board-sound) from
+// PREFS. Both default ON; only "off" disables. Call on boot + on toggle change.
+function applyBoardFxPrefs() {
+  document.documentElement.dataset.boardAnim = (PREFS.boardAnim === false) ? "off" : "on";
+  document.documentElement.dataset.boardSound = (PREFS.boardSound === false) ? "off" : "on";
+}
+function fenBoard(f) { return f ? f.split(/\s+/)[0] : f; }
+// Return the move iccs to animate, or null. We animate ONLY a true single-ply
+// advance: applying lastIccs to the previously-rendered position reproduces the
+// new board. That excludes back-nav, jumps, file switches, perspective/theme
+// re-renders (prev === current there), and mid-carry redraws.
+function animatableMove(newFen, lastIccs) {
+  if (!lastIccs || lastIccs.length < 4) return null;
+  if (EDITOR.selectedSquare) return null;            // carrying a piece — don't animate
+  const prev = EDITOR.prevBoardFen;
+  if (!prev) return null;
+  if (fenBoard(applyIccs(prev, lastIccs)) !== fenBoard(newFen)) return null;
+  return lastIccs;
+}
+
 function refreshActive() {
   const path = EDITOR.activePath;
   const { fen, lastIccs } = fenAndLastIccsFor(path);
   // board.js drawBoard signature: drawBoard(svg, fen, bookMove, engineMove, liftIccs)
   // liftIccs lifts the selected piece off its square so it can float at the cursor.
-  drawBoard($("#board"), fen, lastIccs, null, EDITOR.selectedSquare);
+  // Animate ONLY a genuine single-ply advance (play / step-forward); back / jump /
+  // file-switch redraw instantly. When animating, lift the destination piece so
+  // drawBoard doesn't paint it before the slide lands (animateBoardMove drops it).
+  const animIccs = animatableMove(fen, lastIccs);
+  const lift = animIccs ? animIccs.slice(2, 4) : EDITOR.selectedSquare;
+  drawBoard($("#board"), fen, lastIccs, null, lift);
   installBoardOverlay($("#board"));   // click rects + selection halo + carried piece
   updateBoardArrows();                // branch hints + live engine best-move
+  if (animIccs) animateBoardMove($("#board"), fen, EDITOR.prevBoardFen, animIccs);
+  EDITOR.prevBoardFen = fen;
 
   renderMoveList();
 
@@ -2567,6 +2595,17 @@ const aiDualChk = $("#aiDualChk");
 if (aiDualChk) {
   aiDualChk.addEventListener("change", () => savePreference("aiDualDepth", aiDualChk.checked));
 }
+// 棋盤動效 — persist + update the board.js dataset hook live (no reload needed).
+const boardAnimChk = $("#boardAnimChk");
+if (boardAnimChk) boardAnimChk.addEventListener("change", () => {
+  savePreference("boardAnim", boardAnimChk.checked);
+  document.documentElement.dataset.boardAnim = boardAnimChk.checked ? "on" : "off";
+});
+const boardSoundChk = $("#boardSoundChk");
+if (boardSoundChk) boardSoundChk.addEventListener("change", () => {
+  savePreference("boardSound", boardSoundChk.checked);
+  document.documentElement.dataset.boardSound = boardSoundChk.checked ? "on" : "off";
+});
 // AI 自動走棋 settings — persisted to prefs; read live by the auto-play loop.
 const autoAiRedChk = $("#autoAiRedChk");
 if (autoAiRedChk) autoAiRedChk.addEventListener("change", () => savePreference("autoAiRed", autoAiRedChk.checked));
@@ -2908,6 +2947,7 @@ async function recoverSettingsFromLocalStorage() {
 // Order: PREFS -> theme -> splitters -> file tree -> auto-open last file.
 (async function boot() {
   await loadPreferences();
+  applyBoardFxPrefs();   // sync data-board-anim / data-board-sound hooks for board.js
   const savedTheme = PREFS.boardTheme;
   if (savedTheme && ["traditional", "stone", "gilded", "copperwood", "celadon"].includes(savedTheme)) {
     themeSel.value = savedTheme;
@@ -2937,6 +2977,8 @@ async function recoverSettingsFromLocalStorage() {
   updateCdbScopeBtns();
   const gifDelayEl = $("#gifDelayInput");
   if (gifDelayEl) gifDelayEl.value = gifFrameDelaySec();
+  if ($("#boardAnimChk")) $("#boardAnimChk").checked = PREFS.boardAnim !== false;   // default ON
+  if ($("#boardSoundChk")) $("#boardSoundChk").checked = PREFS.boardSound !== false; // default ON
   // AI 自動走棋 settings reflect persisted prefs on open.
   if ($("#autoAiRedChk")) $("#autoAiRedChk").checked = autoAiRed();
   if ($("#autoAiBlackChk")) $("#autoAiBlackChk").checked = autoAiBlack();
