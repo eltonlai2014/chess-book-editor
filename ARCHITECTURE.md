@@ -337,7 +337,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | **字型內嵌**（離屏光柵化時頁面 `<link>` webfont 不生效）：讀 `PIECE_FONTS[style].localUrl`（本地子集化 woff2）→ base64 組成 `@font-face`（family=`localFamily`）→ 注入每格 SVG `<defs><style>`；無 localUrl 才退回舊 `googleUrl` CDN 路徑；抓失敗退回系統 CJK 字型，不擋匯出。抓一次快取 | `loadEmbeddedFontCss` / `injectFontStyle` |
 | SVG→canvas 走 Blob URL（字型 base64 太大，免每格 encodeURIComponent）／字幕條／每手停留 ms（末格 ×2.5） | `svgToImage` / `paintCaption` / `frameDelayMs` |
 | 編碼器：vendored `gifenc`（無相依、無 worker、不走 runtime CDN），IIFE 包成 `window.gifenc`（GIFEncoder/quantize/applyPalette） | frontend/assets/gifenc.global.js |
-| 觸發鈕在棋譜列標頭 `#exportGifBtn`（Lucide `ICON.film`，editor.js boot 注入取代 HTML 的 🎬 fallback；純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |
+| 觸發鈕在棋譜列標頭 `#exportGifBtn`（Lucide `ICON.download`，editor.js boot 注入取代 HTML 的 🎬 fallback；純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |
 
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |

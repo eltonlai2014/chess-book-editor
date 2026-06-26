@@ -2461,6 +2461,8 @@ const ICON = {
   cloud: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 9.5 4 4 0 0 0 7 17.5"/></svg>',
   bot: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
   film: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>',
+  download: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>',
+  x: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   // 🐟 引擎 (Pikafish), 📚 棋庫 (CBL library folder), 📋 賽事資訊 (trophy).
   fish: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/><path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4"/><path d="m16.01 17.93-.23 1.4A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98"/></svg>',
   library: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>',
@@ -2772,7 +2774,7 @@ if ($("#cdbRefreshBtn")) $("#cdbRefreshBtn").innerHTML = iconLabel("refresh", "�
 if ($("#cdbLineRunBtn")) $("#cdbLineRunBtn").innerHTML = iconLabel("play", "演繹");
 if ($("#cdbLineDemoBtn")) $("#cdbLineDemoBtn").innerHTML = iconLabel("demo", "演示");
 if ($("#cdbLineAddBtn")) $("#cdbLineAddBtn").innerHTML = iconLabel("plus", "加入");
-if ($("#exportGifBtn")) $("#exportGifBtn").innerHTML = ICON.film;   // 🎬 emoji → Lucide film
+if ($("#exportGifBtn")) $("#exportGifBtn").innerHTML = ICON.download;   // 匯出 GIF → Lucide download（強調「匯出存檔」）
 // 雲庫 tab: 重查 forces a fresh chessdb.cn query (skips both caches) of the
 // position the tab is currently showing (當前步/下一步), matching the list.
 $("#cdbRefreshBtn").onclick = () => { const f = cdbTabFen(); if (f) fetchCdbLive(f, true); };
@@ -2801,7 +2803,7 @@ $("#saveBtn").innerHTML = iconLabel("save", "儲存");
 $("#newXqfBtn").innerHTML = iconLabel("plus", "新增");
 $("#rescanBtn").innerHTML = iconLabel("refresh", "重掃");
 $("#settingsBtn").innerHTML = ICON.settings;
-$("#navDelete").innerHTML = ICON.trash;
+$("#navDelete").innerHTML = ICON.x;   // 刪除走法 → Lucide x（簡潔叉號）
 if ($("#undoBtn")) $("#undoBtn").innerHTML = ICON.undo;
 if ($("#redoBtn")) $("#redoBtn").innerHTML = ICON.redo;
 updateUndoButtons();   // start disabled (empty stacks)
