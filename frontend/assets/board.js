@@ -10,8 +10,8 @@
 //   • primitives  — el, screenX/Y, iccsToCoord, parseFen, applyIccs
 //   • board draw  — drawBoard, drawPieceAt, makeFloatingPiece, drawMeanderFrame, mixHex
 //   • theme       — BOARD_STYLES, currentBoardStyle, PIECE_FONTS, ensurePieceFontLoaded
-//   • move fx     — animateBoardMove (slide+capture-fade), playPieceSound (WebAudio
-//                   wood clack); editor polish, opt-in via data-board-anim / -sound
+//   • move fx     — animateBoardMove (fade/pop/slide/flash styles), playPieceSound
+//                   (WebAudio wood clack); editor polish, via data-board-anim / -sound
 //   • one eval helper — deltaSignClass (cp→colour class), used by editor-cdb.js
 // Perspective is latched per-redraw into the module-level CURRENT_REDP by drawBoard.
 
@@ -760,32 +760,35 @@ function isRedPerspective() {
 // ---------- move animation + sound (editor polish) ----------
 // Opt-in via dataset hooks the editor sets from PREFS (same pattern as the
 // data-board-bg / data-piece-font extension hooks in drawBoard):
-//   html[data-board-anim]  = "off"  → disable the slide animation
+//   html[data-board-anim]  = "off" | "fade" | "pop" | "slide" | "flash"
 //   html[data-board-sound] = "off"  → disable the move / capture sound
-// Absent attr = ON. The slide also yields to prefers-reduced-motion.
+// Absent / unknown anim attr = "fade". We do NOT auto-disable on
+// prefers-reduced-motion: the explicit picker is the single source of truth (some
+// OS setups, e.g. Windows "show animations" off, report reduce-motion and would
+// silently defeat the feature the master chose).
 //
 // animateBoardMove() is called by editor.js refreshActive() AFTER drawBoard()
 // has redrawn the board at the NEW fen with the destination square LIFTED
-// (liftIccs = dest) — so the moved piece is not yet painted there. We slide a
-// floating copy from source → dest (overshoot settle), fade out any captured
-// piece, then drop the real piece at dest on completion. It uses the SVG
-// transform ATTRIBUTE in user units (matching the editor's carried-piece float)
-// driven by a manual rAF tween, so there is no CSS px-vs-user-unit ambiguity.
+// (liftIccs = dest) — so the moved piece is not yet painted there. Each style
+// shares the SAME contract: animate floating copies, then finish(true) drops the
+// real piece at dest on completion (finish(false) when superseded). Styles:
+//   fade  — moved piece dissolves out at source + in at dest (no travel/scale)
+//   pop   — piece appears at dest with a quick scale-in bounce (no travel)
+//   slide — short LINEAR glide source→dest (no overshoot/lift; the toned-down slide)
+//   flash — piece appears at once + a ring pulses at the dest square
 
 let BOARD_ANIM_CLEANUP = null;   // settle() of the in-flight #board animation
 
-function boardAnimEnabled() {
-  // The explicit toggle is the single source of truth. We do NOT auto-disable on
-  // prefers-reduced-motion: the master asked for this animation, and several OS
-  // setups (e.g. Windows "show animations" off) report reduce-motion, which would
-  // silently defeat the feature AND (because refreshActive lifts the destination
-  // piece only when it will animate) is gated together with the lift so the two
-  // never disagree.
-  return document.documentElement.dataset.boardAnim !== "off";
+function boardAnimStyle() {
+  const v = document.documentElement.dataset.boardAnim;
+  if (v === "off") return null;
+  return (v === "fade" || v === "pop" || v === "slide" || v === "flash") ? v : "fade";
 }
+function boardAnimEnabled() { return boardAnimStyle() !== null; }
 
 function animateBoardMove(svg, newFen, prevFen, iccs, duration) {
-  if (!svg || !boardAnimEnabled()) return false;
+  const style = boardAnimStyle();
+  if (!svg || !style) return false;
   const c = iccsToCoord(iccs);
   if (!c) return false;
   // Retire any in-flight animation first (fast navigation). The caller already
@@ -804,40 +807,80 @@ function animateBoardMove(svg, newFen, prevFen, iccs, duration) {
   const before = prevFen ? parseFen(prevFen) : null;
   const captured = before && before.rows[c.to.row] ? before.rows[c.to.row][c.to.col] : null;
 
-  const dur = Math.max(60, duration || 175);
-  // Fading captured piece (drawn first → sits under the slider).
-  const capG = captured ? makeFloatingPiece(svg, captured) : null;
-  if (capG) capG.setAttribute("transform", `translate(${toX},${toY})`);
-  // Sliding moved piece.
-  const g = makeFloatingPiece(svg, movedPiece);
-  g.setAttribute("transform", `translate(${fromX},${fromY})`);
+  // Floating helpers, all removed on finish(). mk = a piece copy positioned at a
+  // square; ring = a stroked pulse circle (flash style).
+  const els = [];
+  const mk = (p, x, y) => {
+    const g = makeFloatingPiece(svg, p);
+    g.setAttribute("transform", `translate(${x},${y})`);
+    els.push(g); return g;
+  };
+  const ring = (x, y) => {
+    const r = el("circle", { cx: x, cy: y, r: 24, fill: "none",
+      stroke: (S.suggest && S.suggest.color) || "#3a8", "stroke-width": 3 }, svg);
+    r.style.pointerEvents = "none"; els.push(r); return r;
+  };
+
+  // Per-style: pick a duration and a step(t) that drives the floating helpers.
+  let dur, step;
+  if (style === "pop") {
+    dur = duration || 130;
+    const dstG = mk(movedPiece, toX, toY);
+    const capG = captured ? mk(captured, toX, toY) : null;
+    const back = (t) => { const s = 1.7, p = t - 1; return 1 + (s + 1) * p * p * p + s * p * p; };
+    step = (t) => {
+      dstG.setAttribute("opacity", String(Math.min(1, t * 2)));
+      dstG.setAttribute("transform", `translate(${toX},${toY}) scale(${0.85 + 0.15 * back(t)})`);
+      if (capG) { capG.setAttribute("opacity", String(1 - t)); capG.setAttribute("transform", `translate(${toX},${toY}) scale(${1 - 0.3 * t})`); }
+    };
+  } else if (style === "slide") {
+    dur = duration || 110;
+    const g = mk(movedPiece, fromX, fromY);
+    const capG = captured ? mk(captured, toX, toY) : null;
+    step = (t) => {   // LINEAR glide, no overshoot / no lift — the toned-down slide
+      g.setAttribute("transform", `translate(${fromX + (toX - fromX) * t},${fromY + (toY - fromY) * t})`);
+      if (capG) capG.setAttribute("opacity", String(1 - t));
+    };
+  } else if (style === "flash") {
+    dur = duration || 260;
+    mk(movedPiece, toX, toY);                              // piece appears at once
+    const capG = captured ? mk(captured, toX, toY) : null;
+    const rg = ring(toX, toY);
+    step = (t) => {
+      rg.setAttribute("r", String(20 + 16 * t));
+      rg.setAttribute("opacity", String(1 - t));
+      rg.setAttribute("stroke-width", String(3 * (1 - t) + 0.5));
+      if (capG) capG.setAttribute("opacity", String(Math.max(0, 1 - t * 2)));
+    };
+  } else {   // "fade" (default): cross-dissolve out at source, in at dest
+    dur = duration || 150;
+    const srcG = mk(movedPiece, fromX, fromY);
+    const dstG = mk(movedPiece, toX, toY); dstG.setAttribute("opacity", "0");
+    const capG = captured ? mk(captured, toX, toY) : null;
+    step = (t) => {
+      srcG.setAttribute("opacity", String(1 - t));
+      dstG.setAttribute("opacity", String(t));
+      if (capG) capG.setAttribute("opacity", String(1 - t));
+    };
+  }
+  dur = Math.max(60, dur);
 
   let done = false;
   const finish = (draw) => {
     if (done) return; done = true;
     if (BOARD_ANIM_CLEANUP === finish) BOARD_ANIM_CLEANUP = null;
-    if (g.parentNode) g.parentNode.removeChild(g);
-    if (capG && capG.parentNode) capG.parentNode.removeChild(capG);
+    for (const g of els) if (g && g.parentNode) g.parentNode.removeChild(g);
     // Drop the real piece ONLY on a true completion. When superseded, drawBoard()
     // has already repainted the board, so drawing here would stamp a stale piece.
     if (draw) drawPieceAt(svg, movedPiece, toX, toY, S);   // board was drawn with dest lifted
   };
   BOARD_ANIM_CLEANUP = finish;
 
-  // Overshoot ease-out (back) — sells the weight of the piece dropping.
-  const ease = (t) => { const s = 1.45, p = t - 1; return 1 + (s + 1) * p * p * p + s * p * p; };
   const start = performance.now();
   const frame = (now) => {
     if (done) return;
     let t = (now - start) / dur; if (t > 1) t = 1;
-    const e = ease(t);
-    const x = fromX + (toX - fromX) * e, y = fromY + (toY - fromY) * e;
-    const lift = 1 + 0.06 * (1 - t);                       // slight in-flight lift settling to 1.0
-    g.setAttribute("transform", `translate(${x},${y}) scale(${lift})`);
-    if (capG) {
-      capG.setAttribute("opacity", String(Math.max(0, 1 - t * 1.4)));
-      capG.setAttribute("transform", `translate(${toX},${toY}) scale(${1 - 0.35 * t})`);
-    }
+    step(t);
     if (t < 1) requestAnimationFrame(frame); else finish(true);
   };
   requestAnimationFrame(frame);

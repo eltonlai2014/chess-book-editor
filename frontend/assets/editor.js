@@ -1582,10 +1582,18 @@ function navigateTo(path) {
 }
 
 // ---- board move animation gate ----
-// Sync the board.js dataset hooks (data-board-anim / data-board-sound) from
-// PREFS. Both default ON; only "off" disables. Call on boot + on toggle change.
+// Resolve the persisted animation style. Default "fade"; legacy boolean true (the
+// first version's on/off toggle) maps to "fade", false/"off" → "off".
+function boardAnimPref() {
+  const v = PREFS.boardAnim;
+  if (v === false || v === "off") return "off";
+  if (v === "fade" || v === "pop" || v === "slide" || v === "flash") return v;
+  return "fade";   // default (covers undefined + legacy `true`)
+}
+// Sync the board.js dataset hooks (data-board-anim / data-board-sound) from PREFS.
+// Call on boot + whenever a control changes.
 function applyBoardFxPrefs() {
-  document.documentElement.dataset.boardAnim = (PREFS.boardAnim === false) ? "off" : "on";
+  document.documentElement.dataset.boardAnim = boardAnimPref();
   document.documentElement.dataset.boardSound = (PREFS.boardSound === false) ? "off" : "on";
 }
 function fenBoard(f) { return f ? f.split(/\s+/)[0] : f; }
@@ -2610,10 +2618,10 @@ if (aiDualChk) {
   aiDualChk.addEventListener("change", () => savePreference("aiDualDepth", aiDualChk.checked));
 }
 // 棋盤動效 — persist + update the board.js dataset hook live (no reload needed).
-const boardAnimChk = $("#boardAnimChk");
-if (boardAnimChk) boardAnimChk.addEventListener("change", () => {
-  savePreference("boardAnim", boardAnimChk.checked);
-  document.documentElement.dataset.boardAnim = boardAnimChk.checked ? "on" : "off";
+const boardAnimSel = $("#boardAnimSel");
+if (boardAnimSel) boardAnimSel.addEventListener("change", () => {
+  savePreference("boardAnim", boardAnimSel.value);
+  document.documentElement.dataset.boardAnim = boardAnimSel.value;
 });
 const boardSoundChk = $("#boardSoundChk");
 if (boardSoundChk) boardSoundChk.addEventListener("change", () => {
@@ -2991,7 +2999,7 @@ async function recoverSettingsFromLocalStorage() {
   updateCdbScopeBtns();
   const gifDelayEl = $("#gifDelayInput");
   if (gifDelayEl) gifDelayEl.value = gifFrameDelaySec();
-  if ($("#boardAnimChk")) $("#boardAnimChk").checked = PREFS.boardAnim !== false;   // default ON
+  if ($("#boardAnimSel")) $("#boardAnimSel").value = boardAnimPref();                // style picker
   if ($("#boardSoundChk")) $("#boardSoundChk").checked = PREFS.boardSound !== false; // default ON
   // AI 自動走棋 settings reflect persisted prefs on open.
   if ($("#autoAiRedChk")) $("#autoAiRedChk").checked = autoAiRed();

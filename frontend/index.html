@@ -356,9 +356,14 @@
           <h4 class="settingsGroupTitle">棋盤動效</h4>
           <div class="settingGrid">
             <div class="settingRow">
-              <label title="走子時棋子滑動到目標格、吃子淡出（只在單步前進時動畫；回退/跳轉/換檔不動畫）">走子動畫</label>
-              <input id="boardAnimChk" type="checkbox"
-                title="走子時棋子滑動到目標格、吃子淡出（只在單步前進時動畫）">
+              <label title="走子時的動畫方式（只在單步前進時觸發；回退/跳轉/換檔不動畫）">走子動畫</label>
+              <select id="boardAnimSel" title="走子時的動畫方式">
+                <option value="fade">淡入淡出</option>
+                <option value="pop">彈入</option>
+                <option value="slide">微滑</option>
+                <option value="flash">閃高亮</option>
+                <option value="off">關閉</option>
+              </select>
             </div>
             <div class="settingRow">
               <label title="落子與吃子時播放木質敲擊音效（合成、無音檔）">走子音效</label>
@@ -384,7 +389,7 @@
       </div>
     </div>
   </div>
-  <script src="/assets/board.js?v=38"></script>
+  <script src="/assets/board.js?v=39"></script>
   <!-- editor.js split into ordered classic scripts (T2-1); all share global
        scope, so load order only needs to precede editor.js (boot lives there). -->
   <script src="/assets/editor-cdb.js?v=1"></script>
@@ -392,7 +397,7 @@
   <script src="/assets/editor-autoplay.js?v=1"></script>
   <script src="/assets/editor-aichart.js?v=1"></script>
   <script src="/assets/editor-demo.js?v=1"></script>
-  <script src="/assets/editor.js?v=52"></script>
+  <script src="/assets/editor.js?v=53"></script>
   <script src="/assets/gifenc.global.js"></script>
   <script src="/assets/gifexport.js?v=1"></script>
 </body>
