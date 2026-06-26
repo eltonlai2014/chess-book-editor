@@ -55,6 +55,8 @@ const EDITOR = {
   dirty: false,       // [owner: editor.js] 目前棋譜有未存檔的編輯 → 切檔前提示存/棄（見 maybeSaveBeforeLeaving）
   undoStack: [],      // [owner: editor.js] 復原史：每次改 EDITOR.data 前壓入 {data,path} 整樹深拷貝快照
   redoStack: [],      // [owner: editor.js] 重做史：新編輯即清空；換檔/換盤兩堆全清（clearUndo）
+  prevBoardFen: null, // [owner: editor.js refreshActive] 上次畫在 #board 的 fen — 判定「單步前進」以觸發走子動畫
+  skipMoveAnim: false,// [owner: editor.js] 一次性：跳過下一次走子動畫（tryAddMove 設定——手動落子棋子已隨游標到位，不必重播）
 };
 
 // 任何會改動 EDITOR.data 的編輯都呼叫這個；切換棋譜前用 EDITOR.dirty 判斷是否提示。
@@ -647,6 +649,7 @@ async function tryAddMove(fromSq, toSq) {
       sandboxPush(iccs, resp.notation, resp.side);
       setStatus(`沙盒：${resp.notation}`, "ok");
     } else {
+      EDITOR.skipMoveAnim = true;   // manual placement: piece already at dest under the cursor → don't replay the move anim
       const outcome = await insertMoveAt(EDITOR.activePath, {
         iccs,
         notation: resp.notation,
@@ -1698,7 +1701,13 @@ function refreshActive() {
   // would vanish (drawBoard skips it but no slide would land it). animateBoardMove
   // drops the real piece on completion.
   const moveIccs = animatableMove(fen, lastIccs);
-  const willAnimate = !!moveIccs && boardAnimEnabled();
+  // Manual placement already carried the piece to the destination under the cursor,
+  // so replaying the move animation is redundant/jarring — skip it (one-shot flag
+  // from tryAddMove). Sound still plays. Navigation (navNext / move-list click) animates.
+  // Consume the flag ONLY on a real move render (moveIccs set): the manual flow fires
+  // an intermediate no-move redraw (clearSelection) first, which must NOT swallow it.
+  let willAnimate = !!moveIccs && boardAnimEnabled();
+  if (moveIccs && EDITOR.skipMoveAnim) { willAnimate = false; EDITOR.skipMoveAnim = false; }
   const lift = willAnimate ? moveIccs.slice(2, 4) : EDITOR.selectedSquare;
   drawBoard($("#board"), fen, lastIccs, null, lift);
   installBoardOverlay($("#board"));   // click rects + selection halo + carried piece
