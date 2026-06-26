@@ -150,7 +150,11 @@
     const frames = buildFrames();
     if (frames.length <= 1) { alert("目前沒有可匯出的著法。"); return; }
 
-    const title = ($("#fileTitle")?.textContent || "棋局").trim();
+    // #fileTitle 對 XQF/CBR 顯示的是「檔名含副檔名」（rel 尾段），剝掉尾端
+    // .xqf/.cbr/.cbl 再用 → GIF 字幕條＋下載檔名都不會出現 .XQF。CBL 局用的是
+    // 無副檔名的顯示名，沒有可剝的尾巴、無害。
+    const title = ($("#fileTitle")?.textContent || "棋局").trim()
+      .replace(/\.(xqf|cbr|cbl)$/i, "");
     const { GIFEncoder, quantize, applyPalette } = window.gifenc;
 
     const svg = makeOffscreenSvg();
