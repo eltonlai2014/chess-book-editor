@@ -775,8 +775,13 @@ function isRedPerspective() {
 let BOARD_ANIM_CLEANUP = null;   // settle() of the in-flight #board animation
 
 function boardAnimEnabled() {
-  if (document.documentElement.dataset.boardAnim === "off") return false;
-  return !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  // The explicit toggle is the single source of truth. We do NOT auto-disable on
+  // prefers-reduced-motion: the master asked for this animation, and several OS
+  // setups (e.g. Windows "show animations" off) report reduce-motion, which would
+  // silently defeat the feature AND (because refreshActive lifts the destination
+  // piece only when it will animate) is gated together with the lift so the two
+  // never disagree.
+  return document.documentElement.dataset.boardAnim !== "off";
 }
 
 function animateBoardMove(svg, newFen, prevFen, iccs, duration) {
@@ -839,8 +844,9 @@ function animateBoardMove(svg, newFen, prevFen, iccs, duration) {
   // Fallback for when rAF is paused (tab hidden mid-slide): force completion so
   // the destination hole never lingers. No-op if already finished/superseded.
   setTimeout(() => finish(true), dur + 250);
-
-  playPieceSound(captured ? "capture" : "move");
+  // NB: the move/capture SOUND is played by the caller (editor refreshActive),
+  // independently of this animation, so it still chimes when animation is off but
+  // sound is on. Don't play it here too or it would double up.
   return true;
 }
 

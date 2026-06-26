@@ -1601,21 +1601,35 @@ function animatableMove(newFen, lastIccs) {
   if (fenBoard(applyIccs(prev, lastIccs)) !== fenBoard(newFen)) return null;
   return lastIccs;
 }
+// Did the move at `iccs` land on an occupied square in the pre-move position?
+function isCaptureMove(prevFen, iccs) {
+  if (!prevFen || !iccs || iccs.length < 4) return false;
+  const b = parseFen(prevFen);
+  const col = iccs.charCodeAt(2) - 97, row = parseInt(iccs[3], 10);
+  return !!(b && b.rows[row] && b.rows[row][col]);
+}
 
 function refreshActive() {
   const path = EDITOR.activePath;
   const { fen, lastIccs } = fenAndLastIccsFor(path);
   // board.js drawBoard signature: drawBoard(svg, fen, bookMove, engineMove, liftIccs)
-  // liftIccs lifts the selected piece off its square so it can float at the cursor.
-  // Animate ONLY a genuine single-ply advance (play / step-forward); back / jump /
-  // file-switch redraw instantly. When animating, lift the destination piece so
-  // drawBoard doesn't paint it before the slide lands (animateBoardMove drops it).
-  const animIccs = animatableMove(fen, lastIccs);
-  const lift = animIccs ? animIccs.slice(2, 4) : EDITOR.selectedSquare;
+  // liftIccs lifts a piece off its square so it can float (carried piece / slide).
+  // A genuine single-ply advance (play / step-forward) gets a sound + slide; back /
+  // jump / file-switch / perspective re-render get neither. Sound and animation are
+  // INDEPENDENT toggles → play the sound regardless, animate only when enabled.
+  // Lift the destination piece ONLY when we will actually animate — otherwise it
+  // would vanish (drawBoard skips it but no slide would land it). animateBoardMove
+  // drops the real piece on completion.
+  const moveIccs = animatableMove(fen, lastIccs);
+  const willAnimate = !!moveIccs && boardAnimEnabled();
+  const lift = willAnimate ? moveIccs.slice(2, 4) : EDITOR.selectedSquare;
   drawBoard($("#board"), fen, lastIccs, null, lift);
   installBoardOverlay($("#board"));   // click rects + selection halo + carried piece
   updateBoardArrows();                // branch hints + live engine best-move
-  if (animIccs) animateBoardMove($("#board"), fen, EDITOR.prevBoardFen, animIccs);
+  if (moveIccs) {
+    playPieceSound(isCaptureMove(EDITOR.prevBoardFen, moveIccs) ? "capture" : "move");
+    if (willAnimate) animateBoardMove($("#board"), fen, EDITOR.prevBoardFen, moveIccs);
+  }
   EDITOR.prevBoardFen = fen;
 
   renderMoveList();

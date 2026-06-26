@@ -161,8 +161,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 渲染整盤（任意 SVG、用全域主題/視角；SVG viewBox 540×600 固定，顯示尺寸由 CSS `#board{width:100%}` 控制→可縮放）。第 5 參 `liftIccs`＝把某格的子「拿起」不畫（編輯器拖子用） | `drawBoard`:415 |
 | 畫單顆子（disk＋字）於絕對座標（從 drawBoard 迴圈抽出，供浮動子複用） | `drawPieceAt`:665 |
 | 建浮動「拿起的子」`<g class="floatPiece">`（同盤外觀、local 原點、`pointer-events:none`、靠 transform 定位）；漸層/陰影 defs 來自同 svg 的 drawBoard | `makeFloatingPiece`:744 |
-| **走子動畫**：把移動的子從來源滑到目標格（overshoot settle＋微浮起）＋吃子淡縮。用 SVG transform **屬性**(user-unit)＋手動 `requestAnimationFrame` 內插（避開 CSS px/user-unit 歧義，與「拿起的子」同款）。呼叫前 `refreshActive` 已用 `liftIccs=dest` 重畫（目標子先不畫），動畫結束才 `drawPieceAt` 落子；被新動畫接管時只清理**不補畫**（防殘影）。**只單步前進才觸發**（editor.js `animatableMove`）。開關 `html[data-board-anim]`（缺＝開；尊重 `prefers-reduced-motion`） | `animateBoardMove` / `boardAnimEnabled` |
-| **走子/吃子音效**：WebAudio 合成木質敲擊（**無音檔**：三角波 thock＋高通雜訊 tick；落子單敲、吃子較低＋雙敲）。AudioContext 懶建、靠觸發走子的手勢 `resume`。開關 `html[data-board-sound]` | `playPieceSound` |
+| **走子動畫**：把移動的子從來源滑到目標格（overshoot settle＋微浮起）＋吃子淡縮。用 SVG transform **屬性**(user-unit)＋手動 `requestAnimationFrame` 內插（避開 CSS px/user-unit 歧義，與「拿起的子」同款）。**閘門統一在 editor `refreshActive`**：`willAnimate = 單步前進 && boardAnimEnabled()` 才 `liftIccs=dest` 重畫（目標子先不畫），動畫結束才 `drawPieceAt` 落子；被新動畫接管時只清理**不補畫**（防殘影）。**不拿起就不會消失**（兩者同一判定，永不脫鉤）。開關 `html[data-board-anim]`（缺＝開）；**不**因 `prefers-reduced-motion` 自動停用（顯式開關才是真相，否則「Windows 顯示動畫關閉」會默默吃掉此功能） | `animateBoardMove` / `boardAnimEnabled` |
+| **走子/吃子音效**：WebAudio 合成木質敲擊（**無音檔**：三角波 thock＋高通雜訊 tick；落子單敲、吃子較低＋雙敲）。AudioContext 懶建、靠觸發走子的手勢 `resume`。**由 `refreshActive` 直接呼叫、獨立於動畫**（動畫關／音效開仍會響），不寫在 `animateBoardMove` 內。開關 `html[data-board-sound]` | `playPieceSound`（type 由 editor `isCaptureMove` 判定） |
 | 河界「楚河漢界」置中（`text-anchor:middle`＋`letter-spacing` 在 Chromium 會多算末字距→x 右補半個 letter-spacing 才視覺置中） | `drawBoard` river text |
 | FEN 解析 / 走一步並翻邊 | `parseFen`:55 / `applyIccs`:81 |
 | ICCS↔座標、螢幕座標 | `iccsToCoord`:46 / `screenX`:36 / `screenY`:40 |
