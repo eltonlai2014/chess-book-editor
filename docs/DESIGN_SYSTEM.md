@@ -134,6 +134,16 @@ suggest 取對比強的藍/橘（灰綠環會融進綠灰盤）。
 合成假粗體＝糊邊。celadon 紅字（深紅落在淺盤、28px 細筆易顯洗白）用 `textStroke:0.7`；其餘
 主題不設＝不描邊。要更粗/更細調這個值即可。
 
+**棋子圓盤的立體感＝`drawPieceAt` 旋鈕**（不寫死）：`piece.shadow`＝`strong`（廣光暈＋接觸
+圈）／`soft`（單層柔影）／`contact`（貼地接觸影，rx 23<r 26 故**不外擴成盤面圈**）；`red`/
+`black` 的 `borderWidth`（描邊寬，預設 1.5）；`rim`／`innerRing`／`specular`／`engrave` 各自
+開關。**「棋子周圍看到一圈」的兩個來源**：①描邊或 rim/innerRing 的同心圈；②`strong`/`soft`
+投影外擴過 r=26、在盤面印一圈灰環（淺盤／紅子最明顯，深盤會吃掉它＝紅子看起來更怪的原因）。
+解法＝**A 收圈**（`borderWidth`≈0.8＋低對比描邊色＋關 `rim`/`innerRing`）＋**B 縮投影**
+（`shadow:"contact"`）。**五個主題現都採 A+B**：淺盤（傳統/赤銅/青瓷）關內環/內緣、暖色細框、
+保留紅字＋`textStroke` 扛紅方識別；深盤（雅石/鎏金）關鏡面亮點/內緣、保留壓印字。新增主題照這
+兩個旋鈕沿用即可（別再開 `innerRing`＋`strong`/`soft` 投影，會復活描邊圈與外擴光暈）。
+
 ## 2. 字型：等寬對齊
 
 - 介面正文用系統黑體（JhengHei…）；**資料區用 `--mono`** = `Sarasa Fixed TC`

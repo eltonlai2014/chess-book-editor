@@ -196,15 +196,18 @@ const BOARD_STYLES = {
     grid:   { stroke: "#4a3010", width: 1, outer: 3 },
     coord:  { color: "#5a3a1a", font: "serif" },
     river:  { color: "#5a3a1a", style: "italic" },
-    // Classic flat-ish wooden pieces — subtle gradient + drop shadow + inner
-    // ring, but NO glossy specular dot and NO engraved character (those made
-    // the discs look like glass beads instead of wood).
-    red:    { fill: "#fff5db", border: "#8b1a0e", innerRing: "#c0392b", text: "#c0392b",
+    // Classic flat-ish wooden pieces — subtle gradient + tight contact shadow.
+    // A+B (收圈+縮投影): the bright inner ring is OFF (it printed a double-circle
+    // 靶心 on the cream disc — the red side's worst offender) and the border is
+    // thinned to 0.8 + recoloured to a low-contrast warm tone so the disc edge
+    // stops reading as a hard ring; the red glyph carries 紅方 identity instead.
+    // Still NO glossy specular dot, NO engraved character.
+    red:    { fill: "#fff5db", border: "#c79a6e", borderWidth: 0.8, innerRing: "#c0392b", text: "#c0392b",
               textStroke: 0.6,
               grad: { from: "#fff5db", to: "#e8c889" } },
-    black:  { fill: "#222",    border: "#000",    innerRing: "#888",    text: "#f5f5f5",
+    black:  { fill: "#222",    border: "#181818", borderWidth: 0.8, innerRing: "#888",    text: "#f5f5f5",
               grad: { from: "#3a3a3a", to: "#101010" } },
-    piece:  { shadow: "soft", innerRing: true, gradient: true,
+    piece:  { shadow: "contact", innerRing: false, gradient: true,
               specular: false, engrave: false, rim: false },
     lastMove: { kind: "box",  color: "#2980b9" },
     suggest:  { kind: "ring", color: "#e67e22" },
@@ -232,13 +235,17 @@ const BOARD_STYLES = {
     river:  { color: "#5a3a1a", style: "normal" },
     // Both sides are coloured wooden discs with cream characters (matches the
     // "空城計"-style reference: red side a dark cherry-wood, black side a deep
-    // slate, neither washed out against the stone ground).
-    red:    { fill: "#9a2818", border: "#4a0c08", innerRing: null, text: "#fbe7c2",
-              grad: { from: "#c0392b", to: "#5a0c0a" } },
-    black:  { fill: "#2a2a2a", border: "#0c0c0c", innerRing: null, text: "#fbe7c2",
-              grad: { from: "#5a5a5a", to: "#0c0c0c" } },
-    piece:  { shadow: "strong", innerRing: false, gradient: true,
-              specular: true, engrave: true, rim: true },
+    // slate, neither washed out against the stone ground). A+B (收圈+縮投影):
+    // thin border (0.8) + softened gradient so the disc edge / specular bead stop
+    // reading as a glossy plastic button; ring/halo killed via contact shadow.
+    red:    { fill: "#9a2818", border: "#6a1a10", borderWidth: 0.8, innerRing: null, text: "#fbe7c2",
+              grad: { from: "#b5362a", to: "#5e0e0b" } },
+    black:  { fill: "#2a2a2a", border: "#1a1410", borderWidth: 0.8, innerRing: null, text: "#fbe7c2",
+              grad: { from: "#4e4e4e", to: "#141414" } },
+    // shadow contact + specular/rim OFF: matte wood disc instead of glossy bead;
+    // engrave kept (cream chars on dark discs still read as pressed-in).
+    piece:  { shadow: "contact", innerRing: false, gradient: true,
+              specular: false, engrave: true, rim: false },
     lastMove: { kind: "ring", color: "#d4a043" },
     suggest:  { kind: "ring", color: "#c0392b" },
   },
@@ -252,12 +259,15 @@ const BOARD_STYLES = {
     grid:   { stroke: "#c89244", width: 0.9, outer: 1.5, doubleFrame: true, frameColor: "#d4a043" },
     coord:  { color: "#c89244", font: "serif" },
     river:  { color: "#d4a043", style: "normal" },
-    red:    { fill: "#7a1818", border: "#3a0c0c", innerRing: null, text: "#fbeed1",
+    // A+B (收圈+縮投影): thin borders + specular/rim OFF + contact shadow → matte
+    // lacquer disc instead of a glossy plastic bead; engrave kept (cream chars on
+    // dark discs read as pressed-in).
+    red:    { fill: "#7a1818", border: "#3a0c0c", borderWidth: 0.8, innerRing: null, text: "#fbeed1",
               grad: { from: "#c0392b", to: "#5a0c0c" } },
-    black:  { fill: "#2a2a2a", border: "#0c0c0c", innerRing: null, text: "#fbeed1",
+    black:  { fill: "#2a2a2a", border: "#141414", borderWidth: 0.8, innerRing: null, text: "#fbeed1",
               grad: { from: "#7a7a7a", to: "#1a1a1a" } },
-    piece:  { shadow: "strong", innerRing: false, gradient: true,
-              specular: true, engrave: true, rim: true },
+    piece:  { shadow: "contact", innerRing: false, gradient: true,
+              specular: false, engrave: true, rim: false },
     lastMove: { kind: "ring", color: "#d4a043" },
     suggest:  { kind: "ring", color: "#e26054" },
   },
@@ -268,12 +278,13 @@ const BOARD_STYLES = {
     grid:   { stroke: "#5a3318", width: 1, outer: 3 },
     coord:  { color: "#6a4325", font: "serif" },
     river:  { color: "#714323", style: "italic" },
-    red:    { fill: "#f6e2cb", border: "#8e3d20", innerRing: "#b85b33", text: "#b14b29",
+    // A+B (收圈+縮投影): inner ring OFF, thin low-contrast warm border, contact shadow.
+    red:    { fill: "#f6e2cb", border: "#cda079", borderWidth: 0.8, innerRing: "#b85b33", text: "#b14b29",
               textStroke: 0.6,
               grad: { from: "#fff2df", to: "#deb187" } },
-    black:  { fill: "#2d221c", border: "#120d0a", innerRing: "#8b776a", text: "#f4eadf",
+    black:  { fill: "#2d221c", border: "#1c150f", borderWidth: 0.8, innerRing: "#8b776a", text: "#f4eadf",
               grad: { from: "#4a3a31", to: "#17110d" } },
-    piece:  { shadow: "soft", innerRing: true, gradient: true,
+    piece:  { shadow: "contact", innerRing: false, gradient: true,
               specular: false, engrave: false, rim: false },
     lastMove: { kind: "box", color: "#a95a2a" },
     suggest:  { kind: "ring", color: "#cf6a32" },
@@ -290,17 +301,21 @@ const BOARD_STYLES = {
     // gives a TRUE bold + fills the antialiased rim so the thin kaishu strokes
     // stop reading washed/blurry (see drawPieceAt — wenkai ships @700 only, so a
     // higher font-weight would only faux-bold/smear).
-    red:    { fill: "#efe4d7", border: "#87534d", innerRing: null, text: "#9e2414",
+    // A+B (收圈+縮投影), red side keeps the LIGHT disc (文房 feel — option A+B, not
+    // the saturated-red flip): border thinned to 0.8 and recoloured to a low-
+    // contrast warm tone (#bda393, between disc and ground) so the rose ring stops
+    // shouting; the dark-rose text + textStroke carry the "red piece" read instead.
+    red:    { fill: "#efe4d7", border: "#bda393", borderWidth: 0.8, innerRing: null, text: "#9e2414",
               textStroke: 0.7,
-              grad: { from: "#f9f1e8", to: "#d8c7b8" } },
-    black:  { fill: "#2f3a36", border: "#141917", innerRing: null, text: "#eef2ef",
-              grad: { from: "#4d5c56", to: "#1f2623" } },
-    // engrave OFF: the red side is a LIGHT disc with dark-rose text, so the
-    // engraved dark under-glyph (meant for dark discs + cream text like
-    // stone/gilded) shows as a doubled edge → 字暈開. Matches the other
-    // light-disc themes (傳統/赤銅古木), which keep engrave:false.
-    piece:  { shadow: "strong", innerRing: false, gradient: true,
-              specular: false, engrave: false, rim: true },
+              grad: { from: "#f9f1e8", to: "#dcccbd" } },
+    black:  { fill: "#2f3a36", border: "#283531", borderWidth: 0.8, innerRing: null, text: "#eef2ef",
+              grad: { from: "#46544e", to: "#1c231f" } },
+    // engrave OFF: light red disc + dark-rose text → an engraved dark under-glyph
+    // would double the edge (字暈開). rim OFF + shadow contact (was rim/strong):
+    // kills the inner-edge circle and the floating grey halo — the two rings the
+    // master flagged. Matches the other light-disc themes (傳統/赤銅古木).
+    piece:  { shadow: "contact", innerRing: false, gradient: true,
+              specular: false, engrave: false, rim: false },
     // last-move/suggest: vivid blue + clear orange so they pop off the green-grey
     // 青瓷 ground (the muted grey-green/terracotta were near-invisible on it).
     lastMove: { kind: "ring", color: "#1565c0" },
@@ -451,6 +466,15 @@ function drawBoard(svg, fen, bookMove, engineMove, liftIccs) {
     el("stop", { offset: "0%",   "stop-color": "rgba(0,0,0,0.55)" }, sg);
     el("stop", { offset: "65%",  "stop-color": "rgba(0,0,0,0.22)" }, sg);
     el("stop", { offset: "100%", "stop-color": "rgba(0,0,0,0)"    }, sg);
+    // Tight CONTACT shadow (shadow:"contact"): lighter + hugs the disc base so it
+    // reads as "the piece sits on the board", NOT a wide floating halo. The old
+    // strong/soft shadows extended past r=26 and printed a grey ring around every
+    // piece — most visible under light/red discs (dark discs hid it). See the
+    // shadow branch in drawPieceAt.
+    const scg = el("radialGradient", { id: "pshadowc", cx: "50%", cy: "50%", r: "50%" }, defs);
+    el("stop", { offset: "0%",   "stop-color": "rgba(0,0,0,0.34)" }, scg);
+    el("stop", { offset: "70%",  "stop-color": "rgba(0,0,0,0.14)" }, scg);
+    el("stop", { offset: "100%", "stop-color": "rgba(0,0,0,0)"    }, scg);
   }
 
   // Specular highlight — small white radial used as an overlay dot at the
@@ -677,15 +701,21 @@ function drawPieceAt(parent, p, cx, cy, S) {
     el("ellipse", { cx, cy: cy + 1.5, rx: 25, ry: 25, fill: "rgba(0,0,0,0.18)" }, parent);
   } else if (S.piece.shadow === "soft") {
     el("ellipse", { cx, cy: cy + 4, rx: 26, ry: 7, fill: "url(#pshadow)" }, parent);
+  } else if (S.piece.shadow === "contact") {
+    // Tight contact shadow (B 縮投影): smaller than the disc (rx 23 < r 26) so it
+    // stays UNDER the piece and never prints a ring on the board.
+    el("ellipse", { cx, cy: cy + 4, rx: 23, ry: 5.5, fill: "url(#pshadowc)" }, parent);
   } else if (S.piece.shadow) {
     el("circle", { cx: cx + 1.5, cy: cy + 1.5, r: 26, fill: "rgba(0,0,0,0.22)" }, parent);
   }
-  // Outer disk — gradient fill when style enables it
+  // Outer disk — gradient fill when style enables it. Border width is a per-side
+  // knob (PS.borderWidth, default 1.5): A 收圈 thins it to ~0.8 so the disc edge
+  // stops reading as a hard contrasting ring around the piece.
   el("circle", {
     cx, cy, r: 26,
     fill: (S.piece.gradient && PS.grad) ? `url(#pg-${isRed ? "red" : "black"})` : PS.fill,
     stroke: PS.border,
-    "stroke-width": 1.5,
+    "stroke-width": PS.borderWidth == null ? 1.5 : PS.borderWidth,
   }, parent);
   // Optional inner-rim shadow (dome bevel)
   if (S.piece.rim) {
