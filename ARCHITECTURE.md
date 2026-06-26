@@ -299,6 +299,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 繪圖：動態 Y 量程 + **紅藍漲跌面積圖**（0 線硬切換漸層）+ 中性壓頂線 + 小分色點 + Δ旗標 + 橙環 | `drawAiChart`:2264（量程 `aiRange`:2190/`aiNiceCeil`:2179、`AI_PAD`:2175） |
 | **終局將死 `mate 0` 正負號還原**：引擎對「行棋方已被將死」回 `score mate 0`，`0×flip` 把正負號吃掉→走勢圖會誤畫到最底。改由該局面 FEN 的行棋方（被將死者＝輸家）還原紅方視角正負（黑行棋＝紅勝→頂、紅行棋＝紅敗→底）。各點存 `fen` 供此用 | `mateSign`（`drawAiChart` val／`aiScoreNum`／`renderAiReadout` fmt 共用）|
 | 分析中圓角提示 / 單筆讀數（雙深度顯示 d1/d2/Δ） | `drawAiBusy`:2223 / `renderAiView`:2207 / `renderAiReadout`:2357 |
+| **逐手五級評價＋整局報告（掃描後才出現，全程重用掃描資料、零新後端／不查 positions.db）**：每手依 cp 失分（`aiPlyLoss`，與漏著同一份）分五級 优≤30／好≤80／中≤150／差≤350／劣>350（門檻可調，差/劣 ⊇ 漏著預設200）；`#aiReport`：頂列**評價統計 chips**（共N手＋五級 tally），下方 `.aiRepGrid`（label↔內容對齊）放**關鍵轉折**（單手最大失分，≥100 才標）＋**失準手數**（差/劣 清單，點擊經 `navigateTo` 跳手）；走勢圖 hover readout 另綴一顆評級 chip surface 逐手評價（不動左側乾淨棋譜清單）。**殺著去假分**：折算 mate 的損失是 ~30000 級假 cp（會印成「約失 29358 分」），偵測 `point.mate!=null`／`|loss|≥9000` 改印「走入殺局／殺」（`aiMateLoss`/`aiLossPhrase`/`aiLossTag`）。配色重用主題感知 `--delta` ramp（优綠…劣紅，無寫死 hex，dark/light 皆驗）。對標 xqpoint 報告但跑**本地引擎**＝無配額/免登入 | `AI_GRADE_BANDS`/`aiGrade`(editor-aichart.js:43/50) ／ `renderAiReport`＋`aiMateLoss`/`aiLossPhrase`/`aiLossTag`(editor-aichart.js，`renderAiView` 末呼叫) ／ readout chip 在 `renderAiReadout`；CSS `.aiGradeChip`/`.aiReport`/`.aiRepGrid`/`.g-*`(editor.css) |
 
 > 為何 d12 走勢圖就抓到即時分析 d21 才證出的殺：名目深度≠步數（seldepth/延伸/quiescence）＋掃描共用置換表。詳見 memory `project-ai-line-depth`，內含「是否每點 `ucinewgame` 嚴格獨立」的待決定。
 
@@ -361,7 +362,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 頁籤切換（依容器，兩組 tab 不互相干擾） | `switchTabsIn`:1753 / `switchRpTab`:1758（走法/引擎）/ `switchAnnoteTab`:1759（注解/AI，切 AI 時重畫圖） |
 | icon 字典 / 帶標籤 | `ICON`:1723 / `iconLabel`:1747 |
 | 棋盤主題 / 視角 / UI 主題（換主題→refreshActive→重畫箭頭+走勢圖） | `applyBoardTheme`:1642 / `applyBoardPerspective`:1648 / `applyUiTheme`:1656 |
-| splitter 拖曳（flex-basis） | `setupSplitters`:2438 |
+| splitter 拖曳（flex-basis）＋**收合/復原**：橫向 splitter 中央兩顆 ▴▾ 鈕（收合上方／下方面板到只剩 tab 列；再按同顆＝復原；雙擊整條＝回預設高度）。收合＝給對側 `.rp-collapsed`（隱 `.rpTabBody`）＋本側 `.rp-fill`(flex:1)；拖曳會自動解除收合；**點收合區的 tab 也會自動展開**（`SPLIT_CONTROLLERS` 註冊表＋`expandIfCollapsed`，在 `switchRpTab`/`switchAnnoteTab` 呼叫）| `setupSplitters`:2438（`applyCollapse`/`restoreSplit`/`resetSplit`/`expandIfCollapsed`；CSS `.splitterHandle`/`.splitterBtn`/`.rp-collapsed`/`.rp-fill`） |
 | 檔案樹渲染 / 檔案 li 工廠 | `renderDir`（`.cbl` 節點＝📚 可展開、懶載入）/ `makeFileLi` |
 | CBL 資料夾懶展開（首次展開打 `cbl-children`，塞盤目；失敗可重試；尚未開棋譜時盤面顯示「棋庫載入中」膠囊） | `toggleCblDir` |
 | **未存檔守門**（換盤/換檔/換目錄前提示存/棄；存檔失敗則留原棋譜） | `maybeSaveBeforeLeaving`（`EDITOR.dirty` 旗標、`markDirty`；`save` 成功清旗標） |

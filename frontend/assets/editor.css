@@ -947,6 +947,73 @@ section {
   opacity: 0.8;
 }
 
+/* Collapse/restore handle: two chevrons centred on the bar (▴ collapse上方,
+   ▾ collapse下方; click again復原). Doubles as the grip, so hide the ::after dash
+   on splitters that carry one. Subtle at rest, full on hover/focus. */
+.splitter.has-handle::after { display: none; }
+
+.splitterHandle {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+  opacity: 0.5;
+  transition: opacity 120ms ease;
+}
+
+.splitter:hover .splitterHandle,
+.splitterHandle:hover,
+.splitterHandle:focus-within { opacity: 1; }
+
+.splitterBtn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1;
+  width: 22px;
+  height: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.splitterBtn + .splitterBtn { border-left: 1px solid var(--line); }
+
+.splitterBtn:hover {
+  color: var(--accent-strong);
+  background: rgba(var(--accent-strong-rgb), 0.14);
+}
+
+.splitterBtn.active {
+  color: var(--accent-strong);
+  background: rgba(var(--accent-strong-rgb), 0.20);
+}
+
+/* A collapsed section shrinks to just its tab strip (bodies hidden). .rp-fill
+   lets the opposite section grow into the freed space. !important to beat the
+   per-id body display:flex + the section's own flex basis. */
+.rpSection.rp-collapsed {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  overflow: hidden;
+}
+
+.rpSection.rp-collapsed > .rpTabBody { display: none !important; }
+
+.rpSection.rp-fill { flex: 1 1 0 !important; }
+
 body.dragging {
   cursor: col-resize;
   user-select: none;
@@ -2438,6 +2505,110 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* ===== 5-level move grade + whole-game report (AI 分析分頁) =====
+   Colours reuse the theme-aware --delta ramp (single source): 优=green,
+   好=light-green, 中=neutral, 差=mild-red, 劣=strong-red — no hardcoded hex, so
+   the chips track both dark + 霜月白 themes. Same .g-* classes serve the hover
+   readout chip (.aiGradeChip) and the 失準 list links (.aiFlaw). */
+.aiGradeChip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  height: 18px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid currentColor;
+  background: rgba(127, 127, 127, 0.07);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.aiGradeChip.g-best,
+.aiFlaw.g-best { color: var(--delta-pos-strong); }
+.aiGradeChip.g-good { color: var(--delta-pos-mild); }
+.aiGradeChip.g-ok { color: var(--delta-neutral); }
+.aiGradeChip.g-poor,
+.aiFlaw.g-poor { color: var(--delta-neg-mild); }
+.aiGradeChip.g-blunder,
+.aiFlaw.g-blunder { color: var(--delta-neg-strong); }
+
+/* Report block: appears below the readout after a sweep; capped + scrollable so
+   the chart keeps priority. Collapses when empty (before analysis / mid-sweep). */
+.aiReport {
+  flex: 0 1 auto;
+  max-height: 50%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+}
+
+.aiReport:empty { display: none; }
+
+/* Header: total + the five grade tallies (wrap when tight). */
+.aiRepHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.aiRepTotal {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: 2px;
+}
+
+/* 關鍵轉折 / 失準手數 in an aligned label↔content grid (report-form look). */
+.aiRepGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 9px;
+  align-items: baseline;
+}
+
+.aiRepLbl {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.aiRepTurn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+}
+
+.aiRepMove,
+.aiFlaw {
+  cursor: pointer;
+  color: var(--text);
+  border-bottom: 1px dotted transparent;
+}
+
+.aiRepMove:hover,
+.aiFlaw:hover { border-bottom-color: currentColor; }
+
+.aiRepLoss {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.aiFlawList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 11px;
+}
+
+.aiFlaw { font-variant-numeric: tabular-nums; }
+
+.aiRepNone { color: var(--text-faint); }
 
 /* settings — numeric input (AI analysis depth) */
 .settingRow input[type="number"] {

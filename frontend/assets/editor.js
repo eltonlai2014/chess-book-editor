@@ -2482,6 +2482,7 @@ function switchTabsIn(container, tab) {
 }
 function switchRpTab(tab) {
   switchTabsIn($("#rpVars"), tab);
+  expandIfCollapsed($("#rpVars"));   // clicking a tab in a collapsed panel re-opens it
   // The 雲庫 list defers its Chinese-notation translation until visible — fill
   // it now that the tab is shown (batched; no-op if already cached).
   // Switching to 雲庫 tab: translate notations AND live-query the tab's own
@@ -2493,6 +2494,7 @@ function switchRpTab(tab) {
 }
 function switchAnnoteTab(tab) {
   switchTabsIn($("#rpAnnote"), tab);
+  expandIfCollapsed($("#rpAnnote"));   // clicking a tab in a collapsed panel re-opens it
   // The 分析本分支 trigger lives in the tab strip; only relevant on the AI tab.
   const bar = $("#aiBar");
   if (bar) bar.hidden = tab !== "ai";
@@ -2871,6 +2873,16 @@ if (typeof ensurePieceFontLoaded === "function") {
 }
 
 // ---------- splitters ----------
+// Registry of row-splitter collapse controllers so a tab click in a collapsed
+// section can auto-expand it (see expandIfCollapsed, called from the tab
+// switchers). Populated by setupSplitters.
+const SPLIT_CONTROLLERS = [];
+function expandIfCollapsed(sectionEl) {
+  if (!sectionEl || !sectionEl.classList.contains("rp-collapsed")) return;
+  const c = SPLIT_CONTROLLERS.find((x) => x.target === sectionEl || x.sibling === sectionEl);
+  if (c) c.restore();
+}
+
 // Each splitter element carries:
 //   data-resize    : id of target element whose flex-basis the splitter drives
 //   data-direction : "row" => vertical drag (resize height); default => horizontal
@@ -2899,8 +2911,71 @@ function setupSplitters() {
       }
     }
 
+    // ---- collapse / restore (handle buttons + double-click reset) ----
+    // The splitter drives `target`'s flex-basis; the section on its far side is
+    // `sibling`. A collapsed section shrinks to just its tab strip (CSS
+    // .rp-collapsed hides the bodies); collapsing the far side grows `target` to
+    // fill (.rp-fill). Either toggles back; double-clicking the bar resets to the
+    // CSS default height. Collapse buttons only on the stacked (row) splitters —
+    // those sections have a tab strip to collapse to.
+    const sibling = splitter.nextElementSibling;
+    let collapsed = null;          // null | "target" | "after"
+    let savedBasis = null;
+    let btnA = null, btnB = null;
+    function syncHandle() {
+      if (btnA) btnA.classList.toggle("active", collapsed === "target");
+      if (btnB) btnB.classList.toggle("active", collapsed === "after");
+    }
+    function restoreSplit() {
+      target.classList.remove("rp-collapsed", "rp-fill");
+      if (sibling) sibling.classList.remove("rp-collapsed");
+      if (savedBasis != null) { target.style.flexBasis = savedBasis || ""; savedBasis = null; }
+      collapsed = null;
+      syncHandle();
+    }
+    function applyCollapse(side) {
+      if (collapsed === side) { restoreSplit(); return; }   // toggle off → 復原
+      if (collapsed) restoreSplit();
+      savedBasis = target.style.flexBasis || "";
+      if (side === "target") {
+        target.classList.add("rp-collapsed");
+      } else if (sibling) {
+        sibling.classList.add("rp-collapsed");
+        target.classList.add("rp-fill");
+      }
+      collapsed = side;
+      syncHandle();
+    }
+    function resetSplit() {                                 // 雙擊復原到預設高度
+      restoreSplit();
+      target.style.flexBasis = "";
+      if (prefKey) savePreference(prefKey, isRow ? target.offsetHeight : target.offsetWidth);
+    }
+    if (isRow) {
+      const handle = document.createElement("div");
+      handle.className = "splitterHandle";
+      btnA = document.createElement("button");   // collapse the section before the bar
+      btnB = document.createElement("button");   // collapse the section after the bar
+      btnA.type = btnB.type = "button";
+      btnA.className = btnB.className = "splitterBtn";
+      btnA.textContent = "▴";   // ▴
+      btnB.textContent = "▾";   // ▾
+      btnA.title = "收合上方面板（再按復原）";
+      btnB.title = "收合下方面板（再按復原）";
+      for (const [btn, side] of [[btnA, "target"], [btnB, "after"]]) {
+        btn.addEventListener("mousedown", (e) => e.stopPropagation());   // never start a drag
+        btn.addEventListener("click", (e) => { e.stopPropagation(); applyCollapse(side); });
+        handle.appendChild(btn);
+      }
+      splitter.appendChild(handle);
+      splitter.classList.add("has-handle");
+      SPLIT_CONTROLLERS.push({ target, sibling, restore: restoreSplit });
+    }
+    splitter.addEventListener("dblclick", (e) => { e.preventDefault(); resetSplit(); });
+
     splitter.addEventListener("mousedown", (e) => {
       e.preventDefault();
+      if (collapsed) restoreSplit();          // dragging exits any collapsed state
       const rect = target.getBoundingClientRect();
       const startSize = isRow ? rect.height : rect.width;
       const startPos = isRow ? e.clientY : e.clientX;

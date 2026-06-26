@@ -45,6 +45,13 @@ UI **介面主題**與**棋盤風格**是兩個獨立下拉，可自由配對（
 巢狀 `var()`，故不能讀 `--eval-*`）。面積**深度**另抽 `--chart-area-alpha`（`:root` 0.42；
 霜月白調到 0.16 走素淨），讓淺色把優勢填色變淡而不動暗色。
 
+**逐手五級評價 chip（优/好/中/差/劣）重用 `--delta` ramp**：AI 分析分頁的整局報告與
+hover readout 評級膠囊（`.aiGradeChip`／失準清單 `.aiFlaw`）**不另定新色**，直接吃既有的
+`--delta-pos-strong`(优)／`--delta-pos-mild`(好)／`--delta-neutral`(中)／`--delta-neg-mild`(差)／
+`--delta-neg-strong`(劣)——這組本就「`:root` 暗色預設＋霜月白覆寫」雙主題感知（見上方狀態色），
+所以五級在 dark/light 都自動有對比。新增評級視覺請續用 `.g-best/good/ok/poor/blunder` 對到此
+ramp，別在元件寫死綠/紅 hex。CSS 在 [editor.css](../frontend/assets/editor.css) `.aiGradeChip`/`.aiReport`。
+
 棋盤箭頭（`ARROW_THEMES`）與選取框（`EDITOR_THEME_COLORS`）仍**隨棋盤**走（非介面主題），
 因為它們疊在棋盤上、要對棋盤底色。
 

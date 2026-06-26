@@ -34,6 +34,25 @@ function aiBlunderThreshold() {
   return Number.isFinite(t) && t >= 0 ? t : 200;
 }
 
+// 5-level move grade (优/好/中/差/劣) from the per-ply cp loss — the SAME metric
+// as the 漏著 ✖ markers (aiPlyLoss: mover-POV drop, positive = worse). A gain or
+// near-best move is 优; bands widen toward 劣. Coarse on purpose (a study-at-a-
+// glance read); tunable. Bands are independent of aiBlunderThreshold — 差/劣 ⊇
+// the moves the chart flags at the default 200 threshold. Colours: the report/
+// chip reuse the theme-aware --delta ramp (优=green … 劣=red), no hardcoded hex.
+const AI_GRADE_BANDS = [
+  { key: "best", label: "优", max: 30 },
+  { key: "good", label: "好", max: 80 },
+  { key: "ok", label: "中", max: 150 },
+  { key: "poor", label: "差", max: 350 },
+  { key: "blunder", label: "劣", max: Infinity },
+];
+function aiGrade(loss) {
+  if (loss == null) return null;
+  for (const b of AI_GRADE_BANDS) if (loss <= b.max) return b;
+  return AI_GRADE_BANDS[AI_GRADE_BANDS.length - 1];
+}
+
 // Red-POV sign of a mate score (+1 = red mating/winning, -1 = red being mated).
 // Non-zero mates already carry the sign (engine score × flip). `mate 0` is the
 // terminal checkmate: the side to move is mated NOW, but 0 is unsigned so the
@@ -264,12 +283,81 @@ function renderAiView() {
     if (svg) drawAiBusy(svg, "分析中…");
     const box = $("#aiReadout");
     if (box) box.innerHTML = `<div class="varEmpty">分析中…（皮卡魚 d${aiDepth()}）</div>`;
+    const rep = $("#aiReport");
+    if (rep) rep.innerHTML = "";          // collapse the report while sweeping
     return;
   }
   const idx = aiCursorIdx();
   if (svg) drawAiChart(svg, a.points, idx);
   renderAiReadout(idx);
+  renderAiReport();
 }
+
+// Whole-game review built entirely from the sweep — no extra engine work, no
+// positions.db: grade every scored move (aiGrade), then aggregate into 評價統計
+// + 關鍵轉折 (the single biggest-loss move) + 失準手數 (the 差/劣 list, each
+// clickable to jump there). Mirrors xqpoint's 報告 view but on the LOCAL engine
+// (no quota/login). Collapses (empty) until a sweep has scored ≥1 move.
+function renderAiReport() {
+  const box = $("#aiReport");
+  if (!box) return;
+  const a = EDITOR.aiAnalysis;
+  if (a.running || a.points.length < 2) { box.innerHTML = ""; return; }
+  const rows = [];
+  const counts = { best: 0, good: 0, ok: 0, poor: 0, blunder: 0 };
+  let worst = null;
+  for (let i = 1; i < a.points.length; i++) {
+    const loss = aiPlyLoss(a.points, i);
+    if (loss == null) continue;
+    const g = aiGrade(loss);
+    counts[g.key]++;
+    const r = { idx: i, loss, g, p: a.points[i] };
+    rows.push(r);
+    if (!worst || loss > worst.loss) worst = r;
+  }
+  if (!rows.length) { box.innerHTML = ""; return; }
+
+  // Header: total moves + the five grade tallies.
+  const head = `<div class="aiRepHead">`
+    + `<span class="aiRepTotal">共 ${rows.length} 手</span>`
+    + AI_GRADE_BANDS.map((b) => `<span class="aiGradeChip g-${b.key}">${b.label} ${counts[b.key]}</span>`).join("")
+    + `</div>`;
+
+  // 關鍵轉折: the most damaging single move. Only crowned when it's a real swing
+  // (≥100cp) — a clean game shows 平穩 instead of a trivial wobble.
+  const turnVal = (worst && worst.loss >= 100)
+    ? `<a class="aiRepMove" data-aiidx="${worst.idx}">${worst.p.label}</a>`
+        + `<span class="aiRepLoss">${aiLossPhrase(worst)}</span>`
+    : `<span class="aiRepNone">走勢平穩，無明顯轉折</span>`;
+
+  // 失準手數: the 差/劣 moves, coloured by grade, each click-to-navigate.
+  const flaws = rows.filter((r) => r.g.key === "poor" || r.g.key === "blunder");
+  const flawVal = flaws.length
+    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}" data-aiidx="${r.idx}">${r.p.label} ${aiLossTag(r)}</a>`).join("")
+    : `<span class="aiRepNone">無（皆中等以上）</span>`;
+
+  // 關鍵轉折 + 失準手數 in an aligned label↔content grid (report-form look).
+  box.innerHTML = head
+    + `<div class="aiRepGrid">`
+    + `<span class="aiRepLbl">關鍵轉折</span><span class="aiRepTurn">${turnVal}</span>`
+    + `<span class="aiRepLbl">失準手數</span><span class="aiFlawList">${flawVal}</span>`
+    + `</div>`;
+  // Click any move reference to navigate there (path carried by the sweep point).
+  box.querySelectorAll("[data-aiidx]").forEach((el) => {
+    el.onclick = () => {
+      const p = a.points[+el.dataset.aiidx];
+      if (p && p.path) navigateTo(p.path);
+    };
+  });
+}
+
+// Mate-aware loss phrasing. A folded-mate loss (~30000 cp scale) means the move
+// crossed the win/loss line — print 殺/走入殺局 instead of the meaningless huge
+// number (e.g. the old "約失 29358 分"). Detected by the resulting position being
+// a forced mate (point.mate) or the cp being in mate-fold territory.
+function aiMateLoss(r) { return r.p.mate != null || Math.abs(r.loss) >= 9000; }
+function aiLossPhrase(r) { return aiMateLoss(r) ? "走入殺局" : `約失 ${Math.round(r.loss)} 分`; }
+function aiLossTag(r) { return aiMateLoss(r) ? "殺" : "−" + Math.round(r.loss); }
 
 // Centred rounded "analysing" badge shown while the sweep runs.
 function drawAiBusy(svg, text) {
@@ -466,11 +554,17 @@ function renderAiReadout(idx) {
       + (best ? `<span class="aiBlunderBest">${best} <b>${bestEval}</b></span>` : "")
       + `</span>`;
   }
-  // One line: label (ellipsis when tight) + red-POV score + optional 漏著 info —
-  // constant height whether or not the point is flagged (no layout drift).
+  // Per-move 5-level grade chip from the incoming move's loss — surfaces 逐手
+  // 評價 inline as you scrub the chart. Absent on the start point / when the
+  // loss can't be measured. Sits next to the score; the 漏著 cluster stays right.
+  const g = aiGrade(aiPlyLoss(pts, idx));
+  const gradeHtml = g ? `<span class="aiGradeChip g-${g.key}">${g.label}</span>` : "";
+  // One line: label (ellipsis when tight) + red-POV score + grade + optional 漏著
+  // info — constant height whether or not the point is flagged (no layout drift).
   box.innerHTML = `<div class="aiReadCard${isActive ? " active" : ""}">`
     + `<span class="aiReadLabel">${p.label}</span>`
     + scoreHtml
+    + gradeHtml
     + blunderHtml
     + `</div>`;
 }
