@@ -977,10 +977,10 @@ section {
   background: transparent;
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1;
-  width: 22px;
-  height: 13px;
+  width: 38px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2540,7 +2540,7 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
    the chart keeps priority. Collapses when empty (before analysis / mid-sweep). */
 .aiReport {
   flex: 0 1 auto;
-  max-height: 50%;
+  max-height: 52%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -2609,6 +2609,28 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 .aiFlaw { font-variant-numeric: tabular-nums; }
 
 .aiRepNone { color: var(--text-faint); }
+
+/* 評級門檻 legend (appended when the panel is tall enough): the 5 grade chips
+   with their cp-loss ranges + a unit hint. */
+.aiThList {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+
+.aiThUnit {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* 建議走法 next to 轉折/失準 (全畫面): the engine's best alt. Kept NEUTRAL (muted,
+   not a 4th accent hue) so the report stays calm — grade red + chip colours are
+   the only accents; the 「→／建議」 label carries the meaning. */
+.aiRepSug {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 
 /* settings — numeric input (AI analysis depth) */
 .settingRow input[type="number"] {

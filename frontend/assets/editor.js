@@ -2958,8 +2958,8 @@ function setupSplitters() {
       btnB = document.createElement("button");   // collapse the section after the bar
       btnA.type = btnB.type = "button";
       btnA.className = btnB.className = "splitterBtn";
-      btnA.textContent = "▴";   // ▴
-      btnB.textContent = "▾";   // ▾
+      btnA.textContent = "▲";
+      btnB.textContent = "▼";
       btnA.title = "收合上方面板（再按復原）";
       btnB.title = "收合下方面板（再按復原）";
       for (const [btn, side] of [[btnA, "target"], [btnB, "after"]]) {

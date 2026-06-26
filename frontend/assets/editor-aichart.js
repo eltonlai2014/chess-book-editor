@@ -130,7 +130,12 @@ async function fillAiBlunderBest() {
   const thresh = aiBlunderThreshold();
   for (let i = 1; i < pts.length; i++) {
     const loss = aiPlyLoss(pts, i);
-    if (loss == null || loss < thresh) continue;
+    if (loss == null) continue;
+    // Translate the decision-point best for BOTH 漏著 chart markers (loss ≥
+    // threshold) AND report flaws (差/劣 grade), so the 全畫面 report can show
+    // 建議走法 next to 轉折/失準 even below the 漏著 threshold (151–200cp band).
+    const g = aiGrade(loss);
+    if (loss < thresh && !(g && (g.key === "poor" || g.key === "blunder"))) continue;
     const dp = pts[i - 1];
     if (dp && dp.best && dp.fen && dp.bestZh == null) {
       if (!byFen.has(dp.fen)) byFen.set(dp.fen, new Set());
@@ -323,25 +328,35 @@ function renderAiReport() {
     + AI_GRADE_BANDS.map((b) => `<span class="aiGradeChip g-${b.key}">${b.label} ${counts[b.key]}</span>`).join("")
     + `</div>`;
 
+  // When the AI panel is tall (展開 / 全畫面) we show more detail: the engine's
+  // 建議走法 next to 轉折/失準, plus the grade-threshold legend. Re-evaluated on
+  // resize via the chart's ResizeObserver → renderAiView; panel height is set by
+  // the splitter (stable) so this can't feedback-loop the decision.
+  const panel = document.getElementById("anBodyAi");
+  const roomy = !!(panel && panel.clientHeight >= 480);
+
   // 關鍵轉折: the most damaging single move. Only crowned when it's a real swing
   // (≥100cp) — a clean game shows 平穩 instead of a trivial wobble.
   const turnVal = (worst && worst.loss >= 100)
     ? `<a class="aiRepMove" data-aiidx="${worst.idx}">${worst.p.label}</a>`
         + `<span class="aiRepLoss">${aiLossPhrase(worst)}</span>`
+        + (roomy ? aiSuggestHtml(worst.idx, "建議 ") : "")
     : `<span class="aiRepNone">走勢平穩，無明顯轉折</span>`;
 
   // 失準手數: the 差/劣 moves, coloured by grade, each click-to-navigate.
   const flaws = rows.filter((r) => r.g.key === "poor" || r.g.key === "blunder");
   const flawVal = flaws.length
-    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}" data-aiidx="${r.idx}">${r.p.label} ${aiLossTag(r)}</a>`).join("")
+    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}" data-aiidx="${r.idx}">${r.p.label} ${aiLossTag(r)}${roomy ? aiSuggestHtml(r.idx, "→ ") : ""}</a>`).join("")
     : `<span class="aiRepNone">無（皆中等以上）</span>`;
 
   // 關鍵轉折 + 失準手數 in an aligned label↔content grid (report-form look).
-  box.innerHTML = head
+  let html = head
     + `<div class="aiRepGrid">`
     + `<span class="aiRepLbl">關鍵轉折</span><span class="aiRepTurn">${turnVal}</span>`
     + `<span class="aiRepLbl">失準手數</span><span class="aiFlawList">${flawVal}</span>`
     + `</div>`;
+  if (roomy) html += aiThresholdLegendHtml();
+  box.innerHTML = html;
   // Click any move reference to navigate there (path carried by the sweep point).
   box.querySelectorAll("[data-aiidx]").forEach((el) => {
     el.onclick = () => {
@@ -349,6 +364,29 @@ function renderAiReport() {
       if (p && p.path) navigateTo(p.path);
     };
   });
+}
+
+// The engine's best alternative at a flaw's DECISION POINT (the position before
+// the move = points[idx-1]), translated UCI→中文 by fillAiBlunderBest. Empty
+// until that async translation lands (fillAiBlunderBest re-renders when ready).
+// prefix labels it: "建議 " for 轉折, "→ " for the inline 失準 list.
+function aiSuggestHtml(idx, prefix) {
+  const sp = EDITOR.aiAnalysis.points[idx - 1];
+  const zh = sp && sp.bestZh;
+  return zh ? ` <span class="aiRepSug">${prefix}${zh}</span>` : "";
+}
+
+// The 5-level grade thresholds (per-move cp loss), derived from AI_GRADE_BANDS so
+// the legend tracks any threshold change. Shown only when the panel is tall.
+function aiThresholdLegendHtml() {
+  let prev = null;
+  const chips = AI_GRADE_BANDS.map((b, i) => {
+    const range = i === 0 ? `≤${b.max}` : (b.max === Infinity ? `>${prev}` : `${prev + 1}–${b.max}`);
+    prev = b.max;
+    return `<span class="aiGradeChip g-${b.key}">${b.label} ${range}</span>`;
+  }).join("");
+  return `<div class="aiRepGrid"><span class="aiRepLbl">評級門檻</span>`
+    + `<span class="aiThList">${chips}<span class="aiThUnit">每手失分 cp</span></span></div>`;
 }
 
 // Mate-aware loss phrasing. A folded-mate loss (~30000 cp scale) means the move
@@ -559,12 +597,13 @@ function renderAiReadout(idx) {
   // loss can't be measured. Sits next to the score; the 漏著 cluster stays right.
   const g = aiGrade(aiPlyLoss(pts, idx));
   const gradeHtml = g ? `<span class="aiGradeChip g-${g.key}">${g.label}</span>` : "";
-  // One line: label (ellipsis when tight) + red-POV score + grade + optional 漏著
-  // info — constant height whether or not the point is flagged (no layout drift).
+  // One line: label (ellipsis when tight) + grade chip + red-POV score + optional
+  // 漏著 info — constant height whether or not the point is flagged (no layout
+  // drift). Chip before score (膠囊在分數前) per master's preference.
   box.innerHTML = `<div class="aiReadCard${isActive ? " active" : ""}">`
     + `<span class="aiReadLabel">${p.label}</span>`
-    + scoreHtml
     + gradeHtml
+    + scoreHtml
     + blunderHtml
     + `</div>`;
 }
