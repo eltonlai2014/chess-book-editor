@@ -225,6 +225,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 選子/清選/嘗試走子 | `selectSquare`:361 / `clearSelection`:353 / `tryAddMove`:383 |
 | **拿起的子跟隨滑鼠**：選子後 `drawBoard(…,liftIccs)` 把原格子拿起、`installBoardOverlay` 在游標處畫浮動子（`makeFloatingPiece`），`#board` 的 `pointermove` 即時平移（不重畫）。座標換算 `boardPointFromEvent`（client→viewBox）、`floatTransform`（含 `FLOAT_SCALE`）。清選/換子/導航即移除（`clearSelection` 或下次重畫）。`EDITOR.floatEl`/`EDITOR.boardPtr` | `boardPointFromEvent` / `floatTransform` / `installBoardOverlay` 末段 / `#board pointermove`(boot) |
 | 插入/刪除 | `insertMoveAt`:512 / `deleteCurrentMove`:429 |
+| **逆向加對手變著（reviseMove）**：紅方待走時點**黑子**＝替黑方剛走的那一步改著。盤面**不動**（仍顯示走子後局面）；輸入驗證改吃「該步之前的決策點」`analysisFen`（`inputFen()` 把輸入 fen 從 `boardFen` 切走的唯一例外）。剛走的子顯示在 `lastTo`、實際從 `lastFrom` 起手→`reviseLogicalFrom` 映射（`selectedSquare`＝視覺格、`selectedFrom`＝邏輯起手格）。合法即經 `insertMoveAt(parentPath)` 加為**兄弟分支**（已有兄弟→自動跳「新增分支」確認視窗）。右鍵或點同格放下取消。導航/換檔即清。對紅黑對稱（對手＝盤面待走方的另一方） | `onSquareClick`/`enterReviseMove`/`grabReviseSquare`/`reviseLogicalFrom`/`canReviseLastMove`/`cancelInput`/`inputFen`（editor.js）；`EDITOR.reviseMove`/`selectedFrom`；右鍵 `#board contextmenu`(boot) |
 | 分支重排（splice 任意排序，非對調；index 0=主線）+ 索引重映射 | `moveVariation`:466 / `remapAfterMove`:487 / `moveActiveVariation`:495（Alt+↑/↓）|
 
 **棋譜列 / 注解 / 走法分支**

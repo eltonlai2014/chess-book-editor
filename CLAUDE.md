@@ -453,9 +453,11 @@ source, let each user run it on their own machine with their own engine + data.*
   (none)`＝終局即停。**別為此加後端端點。** **自動走棋一律沙盒**（`ap.recording`
   釘死 false，UI 開關已移除）：走子在 `EDITOR.autoPlay.sandboxLine`，**不碰走子樹**，
   停止即 `navigateTo(startPath)` 還原；要落地按 🤖AI走棋 分頁歷程**最新一步**的「加入」
-  （`addPvLine`）。換檔/換目錄走 `stopAutoPlay(null,false)` 只清狀態不還原。輸入/盤面分流的唯一開關是
-  `boardFen()`（沙盒回末筆 fen，否則 `currentFen()`）——新增會吃盤面 fen 的程式碼要用它而非
-  `currentFen()`。人機輪替（只勾一方）靠 `tryAddMove` 末的 `maybeResumeAutoPlay`。
+  （`addPvLine`）。換檔/換目錄走 `stopAutoPlay(null,false)` 只清狀態不還原。**盤面渲染**分流的開關是
+  `boardFen()`（沙盒回末筆 fen，否則 `currentFen()`）；**輸入驗證**另有 `inputFen()`——平時＝`boardFen()`，
+  唯獨 `reviseMove`（紅方待走時點黑子改黑的上一步）回**決策點** `analysisFen`，好讓盤面不動而輸入吃走子前局面。
+  新增會吃盤面 fen 的渲染碼用 `boardFen()`、吃輸入 fen 的（合法著點/著法驗證）用 `inputFen()`，別寫死 `currentFen()`。
+  人機輪替（只勾一方）靠 `tryAddMove` 末的 `maybeResumeAutoPlay`。
 
 ## Master's working style (carried over from chess-book-ai)
 

@@ -23,7 +23,14 @@ const EDITOR = {
   currentPath: null,  // [owner: editor.js] rel of the open file
   data: null,         // [owner: editor.js] book JSON (roots/info/init_annote/…); the /xqf/save payload
   activePath: [],     // [owner: editor.js] index path into roots[][.children]... — [] = init position
-  selectedSquare: null,  // [owner: editor.js] "h2" when user has selected a from-square via click
+  selectedSquare: null,  // [owner: editor.js] "h2" when user has selected a from-square via click (VISUAL square)
+  selectedFrom: null,    // [owner: editor.js] LOGICAL source square for validation — = selectedSquare normally; differs in reviseMove when the just-moved piece is grabbed at its post-move square
+  // [owner: editor.js] "revise the opponent's last move" mode: red-to-move + user
+  // grabs a black piece to give black a DIFFERENT last move (added as a sibling
+  // variation). Board stays on the current (post-move) position; input validates
+  // against the PRE-move decision point. null when not revising.
+  // { parentPath, parentFen, label, lastFrom, lastTo }
+  reviseMove: null,
   legalTargets: [],   // [owner: editor.js] list of dest iccs ("e2",...) for currently selected piece
   floatEl: null,      // [owner: editor.js] <g> of the carried piece following the cursor (or null)
   boardPtr: null,     // [owner: editor.js] last cursor position in board viewBox coords {x,y}
@@ -423,6 +430,14 @@ function boardFen() {
   }
   return currentFen();
 }
+// The FEN that INPUT (legal-targets + move-info) validates against. Usually the
+// same board the user sees (boardFen). EXCEPTION: in reviseMove the board shows
+// the post-move position but we're giving the OPPONENT a different last move, so
+// input keys off the pre-move decision point (parentFen) instead. Splitting this
+// from boardFen() is what lets the board stay put while black "re-moves".
+function inputFen() {
+  return (EDITOR.reviseMove && EDITOR.reviseMove.parentFen) || boardFen();
+}
 // Which position the 雲庫 TAB queries (selectable via the 當前步/下一步 toggle):
 //   "prev" 當前步 — the decision point (前一步 = analysisFen): the moves playable
 //          for THIS move (current move + siblings). DEFAULT.
@@ -451,9 +466,11 @@ function isEndgameFen(fen) {
   }
   return rooks === 0 || bigPieces <= 2;
 }
-function pieceAt(sq) {
+function pieceAt(sq, fen) {
   // Returns piece char (e.g. "R" / "k") or null if empty / no game loaded.
-  const fen = boardFen();
+  // `fen` defaults to the rendered board; pass an explicit one to read a piece
+  // from a different position (e.g. the reviseMove decision point).
+  fen = fen || boardFen();
   if (!fen) return null;
   const { rows } = parseFen(fen);   // board.js helper
   const { col, row } = parseSquare(sq);
@@ -565,10 +582,33 @@ function installBoardOverlay(svg) {
 
 function onSquareClick(sq) {
   if (!EDITOR.data) return;
-  const fen = boardFen();
-  if (!fen) return;
-  const sideToMove = parseFen(fen).side;
+  const renderFen = boardFen();
+  if (!renderFen) return;
   const piece = pieceAt(sq);
+
+  // ----- reviseMove: give the opponent a different last move -----
+  // Board stays on the post-move position; the mover here is the OPPONENT of the
+  // board's side-to-move (e.g. black, while it's red's turn). selectedFrom is the
+  // LOGICAL pre-move source. Clicking another mover-side piece re-grabs; clicking
+  // elsewhere attempts the alternative move (validated against parentFen).
+  const rm = EDITOR.reviseMove;
+  if (rm) {
+    const moverSide = parseFen(rm.parentFen).side;
+    // A click on a LEGAL TARGET always completes the move — even if that square
+    // looks occupied by a mover-side piece on the *current* board (it may be
+    // empty in the pre-move position, e.g. the just-moved piece's destination).
+    // This must win over the re-grab check below.
+    if (EDITOR.legalTargets.includes(sq)) { tryAddMove(EDITOR.selectedFrom, sq); return; }
+    if (EDITOR.selectedSquare !== sq && isFriendlyPiece(piece, moverSide)) {
+      grabReviseSquare(sq);
+      return;
+    }
+    if (EDITOR.selectedSquare === sq) { cancelInput(); return; }   // same square → drop
+    tryAddMove(EDITOR.selectedFrom, sq);
+    return;
+  }
+
+  const sideToMove = parseFen(renderFen).side;
 
   // Same square clicked → deselect
   if (EDITOR.selectedSquare === sq) {
@@ -576,9 +616,11 @@ function onSquareClick(sq) {
     redrawBoardView();
     return;
   }
-  // No selection yet: clicking own piece selects it; anything else is a no-op
+  // No selection yet: clicking own piece selects it. Clicking the OPPONENT's
+  // piece (= the side that just moved) starts revising that last move.
   if (!EDITOR.selectedSquare) {
-    if (isFriendlyPiece(piece, sideToMove)) selectSquare(sq);
+    if (isFriendlyPiece(piece, sideToMove)) { selectSquare(sq); return; }
+    if (piece && canReviseLastMove()) enterReviseMove(sq);
     return;
   }
   // Have a selection: clicking another own piece re-selects (handy when user
@@ -587,11 +629,61 @@ function onSquareClick(sq) {
     selectSquare(sq);
     return;
   }
-  tryAddMove(EDITOR.selectedSquare, sq);
+  tryAddMove(EDITOR.selectedFrom, sq);
+}
+
+// Can the just-played (opponent) move be revised? Only when there's a last move
+// to revise and we're not inside an auto-play session (which owns the board).
+function canReviseLastMove() {
+  if (!EDITOR.data || EDITOR.activePath.length === 0) return false;
+  if (EDITOR.autoPlay && EDITOR.autoPlay.running) return false;
+  return true;
+}
+
+// The just-moved piece is shown at its destination (lastTo) but, in the pre-move
+// position, sits at lastFrom — so a grab on lastTo logically sources from lastFrom.
+function reviseLogicalFrom(sq) {
+  const rm = EDITOR.reviseMove;
+  if (!rm) return sq;
+  return sq === rm.lastTo ? rm.lastFrom : sq;
+}
+
+// Enter reviseMove: the user grabbed `clickedSq` (an opponent piece) to give the
+// opponent a different last move. Sets up the decision-point context and selects.
+function enterReviseMove(clickedSq) {
+  const node = nodeAt(EDITOR.activePath);
+  if (!node || !node.iccs || node.iccs.length < 4) return;
+  const parentPath = EDITOR.activePath.slice(0, -1);
+  const parentFen = analysisFen();   // pre-move position; its side === the mover
+  const moverSide = parseFen(parentFen).side;
+  const lastFrom = node.iccs.slice(0, 2);
+  const lastTo = node.iccs.slice(2, 4);
+  const logicalFrom = clickedSq === lastTo ? lastFrom : clickedSq;
+  // Sanity: the pre-move position must actually have a mover piece to move there.
+  if (!isFriendlyPiece(pieceAt(logicalFrom, parentFen), moverSide)) return;
+  EDITOR.reviseMove = { parentPath, parentFen, label: node.notation || node.iccs, lastFrom, lastTo };
+  selectSquare(clickedSq, parentFen, logicalFrom);
+  setStatus(`替${moverSide === "b" ? "黑" : "紅"}方改著（原『${node.notation || node.iccs}』）：選擇落點，右鍵取消`);
+}
+
+// Re-grab a different mover-side piece while already in reviseMove.
+function grabReviseSquare(sq) {
+  selectSquare(sq, EDITOR.reviseMove.parentFen, reviseLogicalFrom(sq));
+}
+
+// Cancel a held/selected piece (and exit reviseMove). Bound to right-click and
+// to clicking the held square again. Board stays where it is.
+function cancelInput() {
+  const wasRevising = !!EDITOR.reviseMove;
+  EDITOR.reviseMove = null;
+  clearSelection();
+  redrawBoardView();
+  if (wasRevising) setStatus("已取消改著");
 }
 
 function clearSelection() {
   EDITOR.selectedSquare = null;
+  EDITOR.selectedFrom = null;
   EDITOR.legalTargets = [];
   // Drop the carried piece. The next redraw won't recreate it (no selection),
   // but remove it now in case a caller doesn't immediately redraw.
@@ -601,17 +693,22 @@ function clearSelection() {
 // Show selection immediately, then async-fetch legal destinations and redraw
 // when they arrive. Two refreshActive() calls so the halo doesn't visibly lag
 // the click — destination dots can pop in a frame later, which is fine.
-async function selectSquare(sq) {
+async function selectSquare(sq, fen, logicalFrom) {
+  // `sq` is the VISUAL square (where the float/halo render). `logicalFrom` is the
+  // square used for legality (= sq normally; differs in reviseMove). `fen` is the
+  // position to validate against (boardFen normally; parentFen in reviseMove).
+  fen = fen || boardFen();
+  logicalFrom = logicalFrom || sq;
   EDITOR.selectedSquare = sq;
+  EDITOR.selectedFrom = logicalFrom;
   EDITOR.legalTargets = [];
   redrawBoardView();
-  const fen = boardFen();
   const reqSquare = sq;   // capture for the race-check below
   try {
     const r = await fetch("/api/xqf/legal-targets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fen, from: sq }),
+      body: JSON.stringify({ fen, from: logicalFrom }),
     });
     const resp = await r.json();
     if (resp.error || !resp.targets) return;
@@ -625,7 +722,8 @@ async function selectSquare(sq) {
 
 async function tryAddMove(fromSq, toSq) {
   const iccs = fromSq + toSq;
-  const fen = boardFen();
+  const fen = inputFen();           // reviseMove → pre-move decision point; else board
+  const rm = EDITOR.reviseMove;     // captured before any await (cleared on success)
   try {
     const r = await fetch("/api/xqf/move-info", {
       method: "POST",
@@ -634,31 +732,37 @@ async function tryAddMove(fromSq, toSq) {
     });
     const resp = await r.json();
     if (resp.error) {
-      // Illegal move: silently drop the selection and put the carried piece back
-      // on its square (clearSelection removes the float; redraw un-lifts it). No
-      // status message — an illegal target just resets, nothing to announce.
-      setStatus("");
+      // Illegal move: drop the selection and put the carried piece back. In
+      // reviseMove we note it (the user explicitly asked to check a move); the
+      // normal path stays silent — an illegal target just resets.
+      setStatus(rm ? "此著不合法" : "", rm ? "err" : undefined);
+      EDITOR.reviseMove = null;
       clearSelection();
       redrawBoardView();
       return;
     }
     const ap = EDITOR.autoPlay;
-    if (ap.running && !ap.recording) {
+    if (ap.running && !ap.recording && !rm) {
       // Sandbox auto-play: the human's move joins the ephemeral line, never the
       // tree. (boardFen() already pointed move-info at the sandbox tip above.)
       sandboxPush(iccs, resp.notation, resp.side);
       setStatus(`沙盒：${resp.notation}`, "ok");
     } else {
       EDITOR.skipMoveAnim = true;   // manual placement: piece already at dest under the cursor → don't replay the move anim
-      const outcome = await insertMoveAt(EDITOR.activePath, {
+      // reviseMove inserts the alternative as a SIBLING of the opponent's last
+      // move (child of the decision point); else extend the active line. Either
+      // way insertMoveAt pops the 新增分支 confirm when siblings already exist.
+      const parentPath = rm ? rm.parentPath : EDITOR.activePath;
+      const outcome = await insertMoveAt(parentPath, {
         iccs,
         notation: resp.notation,
         side: resp.side,
-        ply: EDITOR.activePath.length + 1,
+        ply: parentPath.length + 1,
         annote: "",
         children: [],
       });
-      if (outcome === "added") setStatus(`已新增 ${resp.notation}`, "ok");
+      EDITOR.reviseMove = null;     // leave reviseMove regardless of outcome
+      if (outcome === "added") setStatus(`已新增變著 ${resp.notation}`, "ok");
       else if (outcome === "existing") setStatus(`已切換至 ${resp.notation}`, "ok");
       else { setStatus(""); return; }  // cancelled → don't hand control to the AI
     }
@@ -1642,6 +1746,7 @@ function renderPlyRow(item, verdict) {
 function navigateTo(path) {
   // Before navigating away, ensure any pending annote edit is committed.
   commitAnnoteEdit();
+  EDITOR.reviseMove = null;   // any pending "revise last move" is abandoned on navigation
   EDITOR.activePath = path;
   clearSelection();
   // Release the trend chart's transient inspect state (set by chart hover, or
@@ -2565,6 +2670,16 @@ $("#board").addEventListener("click", (e) => {
   const target = e.target.closest("[data-iccs]");
   if (!target) return;
   onSquareClick(target.getAttribute("data-iccs"));
+});
+
+// Right-click on the board cancels a held/selected piece (and exits reviseMove) —
+// "放下棋子". Only swallow the browser menu when there's actually something to
+// drop, so a right-click on an idle board still behaves normally.
+$("#board").addEventListener("contextmenu", (e) => {
+  if (EDITOR.selectedSquare || EDITOR.reviseMove) {
+    e.preventDefault();
+    cancelInput();
+  }
 });
 
 // Carry-the-piece: track the cursor in board (viewBox) coords so a selected
