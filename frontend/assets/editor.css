@@ -1897,7 +1897,7 @@ h2.panelHead>span {
 #moveList {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 12px 0 12px 12px;
+  padding: 12px 0 12px 8px;
   font-family: "LXGW WenKai TC", "Microsoft JhengHei", "PMingLiU", serif;
   font-size: 16px;
   line-height: 1.75;
@@ -1932,10 +1932,13 @@ h2.panelHead>span {
   /* 著手序號是資訊（第幾手）非裝飾 → muted 階，非 faint：light 主題下
      text-faint 在白色棋譜區只有 3.86:1（13px 小字 < AA 4.5），整排號碼發虛。 */
   color: var(--text-muted);
-  min-width: 38px;
+  /* 靠左對齊、收窄欄寬 → 號碼貼著清單左緣，吃掉舊「右對齊 38px」在號碼左側留下的
+     空白帶（主人圈選處）。min-width 30px 仍容得下「99.」＋6px 間距且各列等寬，
+     黑方列空號碼欄照樣對齊紅方著法。tabular-nums + mono 讓位數不抖。 */
+  min-width: 30px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
-  padding-right: 10px;
+  text-align: left;
+  padding-right: 6px;
   font-family: var(--mono);
   font-size: 13px;
   flex: 0 0 auto;
