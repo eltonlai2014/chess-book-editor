@@ -723,15 +723,38 @@ header h1 {
   color: var(--text-muted);
 }
 
-.boardThemePicker select {
-  background: var(--bg-3);
+/* ---------- <select>: themed capsule + custom chevron (app-wide) ----------
+   Native OS carets clashed with the dark theme on EVERY dropdown (header board
+   picker, settings, 賽事資訊 結果). This base rule gives all selects appearance:none
+   + a custom chevron + themed focus ring; the per-context rules below only tune
+   bg / size so each dropdown blends with its own form. TRAP: context rules must use
+   `background-color` (NOT the `background` shorthand) or they reset this chevron. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
   color: var(--text);
-  border: 1px solid var(--line-strong);
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
+  background-color: var(--bg-2);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.22);
+  border-radius: 8px;
+  font-family: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 120ms ease;
+  padding: 6px 30px 6px 11px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a8a094' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+select:hover { border-color: rgba(var(--accent-strong-rgb), 0.5); }
+select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18); }
+select option { background: var(--bg-2); color: var(--text); }
+
+/* Header board picker — compact, keeps its slightly-lighter --bg-3 + small radius. */
+.boardThemePicker select {
+  background-color: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  padding: 5px 26px 5px 10px;
+  border-radius: var(--radius-sm);
 }
 
 .boardThemePicker select:hover {
@@ -3074,13 +3097,19 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 
 .metaForm input,
 .metaForm select {
-  background: var(--bg-1);
+  background-color: var(--bg-1);   /* NOT `background:` — would wipe the select chevron */
   color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
   font-size: 13px;
   font-family: inherit;
+}
+
+/* 結果 dropdown: match the meta inputs (bg-1 / line-strong) but leave room for the
+   base chevron on the right. */
+.metaForm select {
+  padding-right: 28px;
 }
 
 .metaForm input:focus,
