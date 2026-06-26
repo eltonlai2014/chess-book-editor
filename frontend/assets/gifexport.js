@@ -206,7 +206,9 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      setStatus(`🎬 已匯出 ${safeTitle}.gif`);
+      // 完成訊息不 echo 檔名：下載本身已帶檔名，header #status 複述整串（含
+      // .XQF/「- 複製」等雜訊）即使省略號截斷仍佔掉一大塊、推擠標題列。短確認即可。
+      setStatus("🎬 已匯出 GIF");
     } catch (e) {
       console.error(e);
       setStatus("");
