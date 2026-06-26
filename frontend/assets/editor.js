@@ -53,10 +53,74 @@ const EDITOR = {
   treeSig: "",        // [owner: editor.js] JSON sig of the last-rendered /api/xqf/list — focus auto-rescan only repaints on change
   rootPath: "",       // [owner: editor.js] last root reported by the server (valid or not)
   dirty: false,       // [owner: editor.js] 目前棋譜有未存檔的編輯 → 切檔前提示存/棄（見 maybeSaveBeforeLeaving）
+  undoStack: [],      // [owner: editor.js] 復原史：每次改 EDITOR.data 前壓入 {data,path} 整樹深拷貝快照
+  redoStack: [],      // [owner: editor.js] 重做史：新編輯即清空；換檔/換盤兩堆全清（clearUndo）
 };
 
 // 任何會改動 EDITOR.data 的編輯都呼叫這個；切換棋譜前用 EDITOR.dirty 判斷是否提示。
 function markDirty() { EDITOR.dirty = true; }
+
+// ---------- undo / redo（走子樹編輯史）----------
+// 快照法：每個會動 EDITOR.data 的編輯，在「改動之前」壓入整樹深拷貝（structuredClone）
+// ＋當下 activePath。粗顆粒但簡單正確（編輯動作本就粗：增/刪步、升變化、改註解、改賽事）。
+// 深度封頂避免巨檔無限堆疊；新編輯清空 redo；換檔/換盤（EDITOR.data 抽換）兩堆全清。
+// 註：註解框內的 Ctrl+Z 不攔（鍵盤處理器跳過 TEXTAREA），交給瀏覽器原生文字 undo。
+const UNDO_CAP = 60;
+function snapshotState() {
+  if (!EDITOR.data) return null;
+  return { data: structuredClone(EDITOR.data), path: EDITOR.activePath.slice() };
+}
+function pushUndoSnapshot(snap) {
+  if (!snap) return;
+  EDITOR.undoStack.push(snap);
+  if (EDITOR.undoStack.length > UNDO_CAP) EDITOR.undoStack.shift();
+  EDITOR.redoStack.length = 0;     // 一旦有新編輯，原本的「重做未來」作廢
+  updateUndoButtons();
+}
+function pushUndo() { pushUndoSnapshot(snapshotState()); }
+function clearUndo() {
+  EDITOR.undoStack.length = 0;
+  EDITOR.redoStack.length = 0;
+  updateUndoButtons();
+}
+// Validate a saved index-path against the (restored) tree; fall back to [] if it
+// would dangle (defensive — a snapshot's path always matched its own tree).
+function validPathOr(path, fallback) {
+  let nodes = EDITOR.data && EDITOR.data.roots;
+  for (const idx of path) {
+    if (!nodes || !nodes[idx]) return fallback.slice();
+    nodes = nodes[idx].children;
+  }
+  return path.slice();
+}
+function restoreSnapshot(snap) {
+  EDITOR.data = snap.data;
+  EDITOR.activePath = validPathOr(snap.path, []);
+  EDITOR.dirty = true;             // 還原到不同的樹狀態＝有未存檔變更（存檔後 undo 會重新 dirty，這是對的）
+  clearSelection();
+  refreshActive();
+}
+function undo() {
+  if (!EDITOR.data || !EDITOR.undoStack.length) return;
+  EDITOR.redoStack.push(snapshotState());
+  if (EDITOR.redoStack.length > UNDO_CAP) EDITOR.redoStack.shift();
+  restoreSnapshot(EDITOR.undoStack.pop());
+  updateUndoButtons();
+  setStatus("已復原", "ok");
+}
+function redo() {
+  if (!EDITOR.data || !EDITOR.redoStack.length) return;
+  EDITOR.undoStack.push(snapshotState());
+  if (EDITOR.undoStack.length > UNDO_CAP) EDITOR.undoStack.shift();
+  restoreSnapshot(EDITOR.redoStack.pop());
+  updateUndoButtons();
+  setStatus("已重做", "ok");
+}
+function updateUndoButtons() {
+  const u = $("#undoBtn"), r = $("#redoBtn");
+  if (u) u.disabled = !(EDITOR.data && EDITOR.undoStack.length);
+  if (r) r.disabled = !(EDITOR.data && EDITOR.redoStack.length);
+}
 
 // Side-to-move ("w"/"b") from a `<board> <side> …` FEN — the editor's FEN
 // contract. The lightweight counterpart to board.js's parseFen (which also
@@ -638,6 +702,7 @@ async function deleteCurrentMove() {
   const siblings = parentPath.length === 0
     ? EDITOR.data.roots
     : (nodeAt(parentPath).children || []);
+  pushUndo();
   siblings.splice(idx, 1);
   markDirty();
 
@@ -666,6 +731,7 @@ function moveVariation(parentPath, idx, delta) {
   if (!siblings) return;
   const to = idx + delta;
   if (to < 0 || to >= siblings.length) return;
+  pushUndo();
   const [moved] = siblings.splice(idx, 1);
   siblings.splice(to, 0, moved);
   markDirty();
@@ -733,6 +799,7 @@ async function insertMoveAt(parentPath, newNode) {
     if (!ok) { clearSelection(); refreshActive(); return "cancelled"; }
   }
   clearSelection();
+  pushUndo();
   siblings.push(newNode);
   markDirty();
   navigateTo(parentPath.concat([siblings.length - 1]));
@@ -825,6 +892,7 @@ async function applyRoot(path) {
   EDITOR.currentPath = null;
   EDITOR.data = null;
   EDITOR.activePath = [];
+  clearUndo();
   clearSelection();
   stopAutoPlay(null, false);   // data just dropped — clear session, don't restore old path
   clearAutoHistory();
@@ -949,6 +1017,7 @@ async function selectFile(rel, liEl) {
     EDITOR.data = data;
     EDITOR.activePath = [];
     EDITOR.dirty = false;   // 剛載入＝乾淨狀態
+    clearUndo();            // 換檔＝換文件，前一檔的復原史不可沿用
     clearSelection();
     // New file → the old analysis no longer applies. Stop any running stream
     // and wipe both the 引擎分析 history and the AI 分析 trend.
@@ -1949,11 +2018,12 @@ function commitAnnoteEdit() {
   const newVal = $("#annoteBox").value;
   const node = nodeAt(EDITOR.activePath);
   if (node) {
-    if (node.annote !== newVal) { node.annote = newVal; markDirty(); }
+    if (node.annote !== newVal) { pushUndo(); node.annote = newVal; markDirty(); }
     return;
   }
   // Initial position — edits go to the book-level intro.
   if (EDITOR.data && (EDITOR.data.init_annote || "") !== newVal) {
+    pushUndo();
     EDITOR.data.init_annote = newVal;
     markDirty();
   }
@@ -2057,6 +2127,7 @@ function applyMetaEdits() {
   if (!EDITOR.data) { closeMetaModal(); return; }
   if (!EDITOR.data.info) EDITOR.data.info = {};
   const info = EDITOR.data.info;
+  const snap = snapshotState();   // pre-edit snapshot; only committed to undo if something changes
   let changed = false;
   for (const k of META_FIELDS) {
     const el = $("#metaField-" + k);
@@ -2069,7 +2140,7 @@ function applyMetaEdits() {
     }
   }
   closeMetaModal();
-  if (changed) { markDirty(); setStatus("資訊已更新（記得存檔）", "ok"); }
+  if (changed) { pushUndoSnapshot(snap); markDirty(); setStatus("資訊已更新（記得存檔）", "ok"); }
 }
 
 // ---------- new-XQF dialog ----------
@@ -2336,6 +2407,14 @@ window.addEventListener("keydown", (e) => {
     case "s": case "S":
       if (e.ctrlKey || e.metaKey) { save(); e.preventDefault(); }
       break;
+    case "z": case "Z":
+      // Tree undo/redo. Only fires with focus on the board/move-list (the
+      // form-control guard above lets the annote textarea keep native text undo).
+      if (e.ctrlKey || e.metaKey) { if (e.shiftKey) redo(); else undo(); e.preventDefault(); }
+      break;
+    case "y": case "Y":
+      if (e.ctrlKey || e.metaKey) { redo(); e.preventDefault(); }   // Windows-style redo
+      break;
   }
 });
 
@@ -2348,6 +2427,8 @@ const ICON = {
   play: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
   stop: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>',
   trash: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  undo: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H10"/></svg>',
+  redo: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>',
   clipboard: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
   demo: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8"/></svg>',
   branch: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
@@ -2458,6 +2539,8 @@ $("#navBranch").onclick = navToNearestBranch;
 $("#navNext").onclick = navNext;
 $("#navLast").onclick = navLast;
 $("#navDelete").onclick = deleteCurrentMove;
+if ($("#undoBtn")) $("#undoBtn").onclick = undo;
+if ($("#redoBtn")) $("#redoBtn").onclick = redo;
 $("#autoStartBtn").onclick = toggleAutoPlay;
 
 // Annote textarea: commit on every keystroke so EDITOR.data stays in sync.
@@ -2710,6 +2793,9 @@ $("#newXqfBtn").innerHTML = iconLabel("plus", "新增");
 $("#rescanBtn").innerHTML = iconLabel("refresh", "重掃");
 $("#settingsBtn").innerHTML = ICON.settings;
 $("#navDelete").innerHTML = ICON.trash;
+if ($("#undoBtn")) $("#undoBtn").innerHTML = ICON.undo;
+if ($("#redoBtn")) $("#redoBtn").innerHTML = ICON.redo;
+updateUndoButtons();   // start disabled (empty stacks)
 $("#navFirst").innerHTML = ICON.skipBack;
 $("#navPrev").innerHTML = ICON.chevL;
 $("#navBranch").innerHTML = ICON.branch;  // icon-only; hint lives in the title attr

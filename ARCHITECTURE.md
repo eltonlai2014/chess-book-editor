@@ -365,6 +365,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 檔案樹渲染 / 檔案 li 工廠 | `renderDir`（`.cbl` 節點＝📚 可展開、懶載入）/ `makeFileLi` |
 | CBL 資料夾懶展開（首次展開打 `cbl-children`，塞盤目；失敗可重試；尚未開棋譜時盤面顯示「棋庫載入中」膠囊） | `toggleCblDir` |
 | **未存檔守門**（換盤/換檔/換目錄前提示存/棄；存檔失敗則留原棋譜） | `maybeSaveBeforeLeaving`（`EDITOR.dirty` 旗標、`markDirty`；`save` 成功清旗標） |
+| **復原／重做**（快照法）：每個改 `EDITOR.data` 的編輯在「改動前」`pushUndo()` 壓入整樹 `structuredClone`＋`activePath`（封頂 `UNDO_CAP`=60）。掛點都貼著 `markDirty`：`insertMoveAt`/`deleteCurrentMove`/`moveVariation`(含 `moveActiveVariation`＋走法▲▼)/`commitAnnoteEdit`(含 `applyAnnotePreset`)/`applyMetaEdits`。`undo`/`redo` 換回 `data`+`path`→`refreshActive`，還原即 `dirty=true`。**新編輯清 redo；換檔/換盤（`EDITOR.data` 抽換的載入＋reset）`clearUndo` 清兩堆——不可跨檔復原**；堆疊只在記憶體、不持久化。UI＝棋譜面板頭 `#undoBtn`/`#redoBtn`（緊鄰刪除）＋鍵盤 `Ctrl+Z`／`Ctrl+Shift+Z`／`Ctrl+Y`（**註解框 focus 時不攔，走原生文字 undo**）。空堆疊 `updateUndoButtons` disable | `pushUndo`/`undo`/`redo`/`clearUndo`/`snapshotState`（editor.js，`markDirty` 旁）|
 | 展開祖先→定位某檔（`doLoad`：true=載入／false=只高亮不載入） | `revealFileInTree` |
 | 開機自動載入上次檔案（`revealFileInTree(…,true)`；CBL 盤先展開該庫再載盤） | `tryAutoLoadLastFile` |
 | **重新掃描目錄**（`🔄 重掃`：重拉 `/api/xqf/list` 重繪樹→偵測磁碟上新增/刪除的檔；**不動目前棋譜**，重繪後 `revealFileInTree(currentPath,false)` 還原定位） | `rescanTree`（`#rescanBtn`） |
@@ -404,6 +405,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 - **加按鈕** → `ICON` map(1723) 加圖示 → boot 段(2284–2437) 綁 `.onclick` + `innerHTML=iconLabel(...)`。禁 emoji。
 - **加 API** → app.py 加 `@app.get/post`（薄路由，只做 IO+驗證）→ 邏輯放對應 service：資料 `xqf_service`/`eval_service`，引擎 `engine_service`，路徑/偏好 `config`，原生對話框 `picker_service`。
 - **改著法顯示** → 一律經 `_apply_side_glyphs`(xqf_service:267)；UI 端不要再拼字形。
+- **加會改 `EDITOR.data` 的編輯** → 函式開頭、**改動之前**呼叫 `pushUndo()`（快照法 undo/redo 才涵蓋；條件式突變如賽事用 `snapshotState()` 先存、確認有變才 `pushUndoSnapshot`）。換掉 `EDITOR.data` 的新路徑要 `clearUndo()`。
 - **改面板尺寸/版面** → splitter `data-pref` + `setupSplitters`；尺寸自動進 PREFS。
 - **動分析串流** → 後端 `engine_service._parse_info_line` 解析、`analyze_stream` 串流（route `engine_analyze`）；前端 `startAnalysis`/`renderEngineHistory` 消費。改欄位兩邊都要動。
 - **動分數/WDL 約定** → 改 `engine_service._parse_info_line` 的 flip/WDL 互換，前端 `fmtEngineScore`/`fmtWdlHtml` 同步。
