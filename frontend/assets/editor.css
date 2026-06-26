@@ -2424,6 +2424,68 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
   border-radius: 8px;
 }
 
+/* ---------- settings form controls: themed select / number / checkbox ----------
+   The native <select> caret + number spinners rendered OS-default (stark, light)
+   and clashed with the dark capsule language. Restyle — scoped to .settingsForm so
+   the header / meta selects stay as-is — into the same --bg-2 capsule as the path
+   chips: faint accent border, custom chevron, themed focus ring, accent checks. */
+.settingsForm select {
+  height: 34px;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  margin-left: 16px;
+  padding: 0 32px 0 12px;        /* right room for the custom caret */
+  background-color: var(--bg-2);
+  color: var(--text);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.22);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  /* Muted chevron — a single static tone that reads on every (dark) UI theme. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a8a094' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.settingsForm select option {
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+/* Hover / focus affordance shared by selects + number inputs. */
+.settingsForm select:hover,
+.settingsForm .settingRow input[type="number"]:hover {
+  border-color: rgba(var(--accent-strong-rgb), 0.5);
+}
+.settingsForm select:focus,
+.settingsForm .settingRow input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+}
+
+/* Drop the clunky native number spinner — keyboard ↑/↓ still steps the value. */
+.settingsForm input[type="number"] {
+  appearance: textfield;
+  -webkit-appearance: textfield;
+}
+.settingsForm input[type="number"]::-webkit-outer-spin-button,
+.settingsForm input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Themed checkboxes (走子音效 / AI 紅方·黑方) — accent tint + a touch larger. */
+.settingsForm input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-strong);
+  cursor: pointer;
+}
+
 /* DB path strip — small monospace chip above the eval line. Mirrors the
    file-pane rootPath chip so the "what data is wired" reads as one pattern. */
 .evalDbRow {
