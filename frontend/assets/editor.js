@@ -930,7 +930,7 @@ async function toggleCblDir(span, sub, rel) {
     sub.appendChild(err);
   } finally {
     // 還原閒置盤面（仍未開棋譜時）。已開棋譜的盤面全程未動。
-    if (showPill && !EDITOR.data) drawBoardLoading("尚未載入棋譜 · 從左側選擇", false);
+    if (showPill && !EDITOR.data) drawBoardLoading("從左側選擇棋譜", false);
   }
 }
 
@@ -3023,5 +3023,5 @@ async function recoverSettingsFromLocalStorage() {
   await tryAutoLoadLastFile();
   // No last file (or it vanished) → tryAutoLoadLastFile never drew a position;
   // settle the pulse into a static idle prompt instead of spinning forever.
-  if (!EDITOR.data) drawBoardLoading("尚未載入棋譜 · 從左側選擇", false);
+  if (!EDITOR.data) drawBoardLoading("從左側選擇棋譜", false);
 })();
