@@ -309,24 +309,29 @@ function renderAiReport() {
   const a = EDITOR.aiAnalysis;
   if (a.running || a.points.length < 2) { box.innerHTML = ""; return; }
   const rows = [];
-  const counts = { best: 0, good: 0, ok: 0, poor: 0, blunder: 0 };
+  const newSide = () => ({ best: 0, good: 0, ok: 0, poor: 0, blunder: 0, total: 0 });
+  const sides = { red: newSide(), black: newSide() };
   let worst = null;
   for (let i = 1; i < a.points.length; i++) {
     const loss = aiPlyLoss(a.points, i);
     if (loss == null) continue;
     const g = aiGrade(loss);
-    counts[g.key]++;
+    // Side that played the move INTO point i = the side to move at the pre-move
+    // point (i-1). Read from the fen (not i%2) so it's correct for the rare XQF
+    // that starts black-to-move. Tally each side's grades + total separately.
+    const sc = fenSide(a.points[i - 1].fen) === "w" ? sides.red : sides.black;
+    sc[g.key]++; sc.total++;
     const r = { idx: i, loss, g, p: a.points[i] };
     rows.push(r);
     if (!worst || loss > worst.loss) worst = r;
   }
   if (!rows.length) { box.innerHTML = ""; return; }
 
-  // Header: total moves + the five grade tallies.
-  const head = `<div class="aiRepHead">`
-    + `<span class="aiRepTotal">共 ${rows.length} 手</span>`
-    + AI_GRADE_BANDS.map((b) => `<span class="aiGradeChip g-${b.key}">${b.label} ${counts[b.key]}</span>`).join("")
-    + `</div>`;
+  // Header: one row PER SIDE (紅 then 黑) — 共N手 + 偏差率 + that side's five grade
+  // tallies. Per-side so you see at a glance which player drifted (was a single
+  // aggregate row before). 偏差率 = 差/劣 share = exactly the 失準清單 below.
+  const head = aiSideHeadHtml("紅", "red", sides.red)
+             + aiSideHeadHtml("黑", "black", sides.black);
 
   // When the AI panel is tall (展開 / 全畫面) we show more detail: the engine's
   // 建議走法 next to 轉折/失準, plus the grade-threshold legend. Re-evaluated on
@@ -346,7 +351,9 @@ function renderAiReport() {
   // 失準手數: the 差/劣 moves, coloured by grade, each click-to-navigate.
   const flaws = rows.filter((r) => r.g.key === "poor" || r.g.key === "blunder");
   const flawVal = flaws.length
-    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}" data-aiidx="${r.idx}">${r.p.label} ${aiLossTag(r)}${roomy ? aiSuggestHtml(r.idx, "→ ") : ""}</a>`).join("")
+    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}" data-aiidx="${r.idx}">`
+        + `${r.p.label} <span class="aiFlawEval">${aiEvalRed(r.p)}</span> ${aiLossTag(r)}`
+        + `${roomy ? aiSuggestHtml(r.idx, "→ ") : ""}</a>`).join("")
     : `<span class="aiRepNone">無（皆中等以上）</span>`;
 
   // 關鍵轉折 + 失準手數 in an aligned label↔content grid (report-form look).
@@ -364,6 +371,20 @@ function renderAiReport() {
       if (p && p.path) navigateTo(p.path);
     };
   });
+}
+
+// One per-side header row: side tag (warm 紅 / cool 黑, single-source hues) +
+// 共N手 + 偏差率 (the 差/劣 share, = the 失準清單) + that side's five grade
+// tallies. Returns "" for a side with no graded moves so a 1-ply line doesn't
+// print an all-zero 黑 row.
+function aiSideHeadHtml(label, sideKey, sc) {
+  if (!sc.total) return "";
+  const rate = Math.round((sc.poor + sc.blunder) / sc.total * 100);
+  return `<div class="aiRepHead">`
+    + `<span class="aiRepSide ${sideKey}">${label}</span>`
+    + `<span class="aiRepTotal">共 ${sc.total} 手 · 偏差率 ${rate}%</span>`
+    + AI_GRADE_BANDS.map((b) => `<span class="aiGradeChip g-${b.key}">${b.label} ${sc[b.key]}</span>`).join("")
+    + `</div>`;
 }
 
 // The engine's best alternative at a flaw's DECISION POINT (the position before
@@ -395,7 +416,16 @@ function aiThresholdLegendHtml() {
 // a forced mate (point.mate) or the cp being in mate-fold territory.
 function aiMateLoss(r) { return r.p.mate != null || Math.abs(r.loss) >= 9000; }
 function aiLossPhrase(r) { return aiMateLoss(r) ? "走入殺局" : `約失 ${Math.round(r.loss)} 分`; }
-function aiLossTag(r) { return aiMateLoss(r) ? "殺" : "−" + Math.round(r.loss); }
+function aiLossTag(r) { return aiMateLoss(r) ? "殺" : "虧" + Math.round(r.loss); }
+
+// Red-POV score string for a swept point's POST-move position (the 走後分 shown
+// in the 失準清單): mate folded to #±N, else signed cp. Mirrors renderAiReadout's
+// fmt so the report list and the hover card read identically. "" with no score.
+function aiEvalRed(p) {
+  if (!p) return "";
+  if (p.mate != null) return mateSign(p.mate, p.fen) > 0 ? `#+${Math.abs(p.mate)}` : `#-${Math.abs(p.mate)}`;
+  return p.cp != null ? (p.cp > 0 ? "+" + p.cp : "" + p.cp) : "";
+}
 
 // Centred rounded "analysing" badge shown while the sweep runs.
 function drawAiBusy(svg, text) {

@@ -19,3 +19,6 @@ dist/
 output/
 preferences.json
 tools/*.txt
+
+# Playwright MCP scratch (page snapshots / screenshots)
+.playwright-mcp/

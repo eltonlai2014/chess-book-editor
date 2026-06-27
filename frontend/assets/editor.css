@@ -2564,6 +2564,16 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
   margin-right: 2px;
 }
 
+/* 紅/黑 side tag leading each per-side report row — warm 紅 / cool 黑 from the
+   single-source side hues (same as annote pills + chart), so the split reads by
+   hue, not brightness. */
+.aiRepSide {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+.aiRepSide.red { color: var(--side-red-strong); }
+.aiRepSide.black { color: var(--side-black-strong); }
+
 /* 關鍵轉折 / 失準手數 in an aligned label↔content grid (report-form look). */
 .aiRepGrid {
   display: grid;
@@ -2607,6 +2617,13 @@ html[data-ui-theme="light"] .plyLine.active .plyNum { color: var(--text); }
 }
 
 .aiFlaw { font-variant-numeric: tabular-nums; }
+
+/* 走後分 inside a 失準 row: the resulting red-POV eval, muted so the grade-
+   coloured 著法 + 虧損 stay the accents (CCN-style「走後分 虧損」pairing). */
+.aiFlawEval {
+  color: var(--text-muted);
+  font-weight: 400;
+}
 
 .aiRepNone { color: var(--text-faint); }
 
