@@ -47,7 +47,7 @@ const EDITOR = {
   evalDbInfo: null,   // [owner: editor.js] result of GET /api/eval/info — drives UI gating
   engineInfo: null,   // [owner: editor.js] result of GET /api/engine/info — Pikafish config chip
   engineAnalysis: { es: null, running: false, fen: null, mode: null, startPath: [], history: [] },  // [owner: editor-engine] live SSE analysis
-  aiAnalysis: { running: false, points: [], queryIdx: null },  // [owner: editor-aichart] depth-limited whole-line sweep → trend chart (queryIdx = hovered point)
+  aiAnalysis: { running: false, points: [], queryIdx: null, flawSide: "red" },  // [owner: editor-aichart] depth-limited whole-line sweep → trend chart (queryIdx = hovered point; flawSide = 報告 紅/黑 頁籤)
   cdbLine: { running: false, steps: [], startFen: null, startPath: [], endReason: "" },  // [owner: editor-cdb] 雲庫演繹: forward chessdb principal variation
   demo: { fens: [], notations: [], lastIccs: [], idx: 0, timer: null },  // [owner: editor-demo] 演示 playback state
   // [owner: editor-autoplay] AI 自動走棋: pikafish drives one or both sides; per-side

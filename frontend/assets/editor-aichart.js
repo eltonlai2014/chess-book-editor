@@ -364,65 +364,79 @@ function renderAiView() {
 }
 
 // Whole-game review built entirely from the sweep — no extra engine work, no
-// positions.db: grade every scored move (aiGrade), then aggregate into 評價統計
-// + 關鍵轉折 (the single biggest-loss move) + 失準手數 (the 差/劣 list, each
-// clickable to jump there). Mirrors xqpoint's 報告 view but on the LOCAL engine
-// (no quota/login). Collapses (empty) until a sweep has scored ≥1 move.
+// positions.db: grade every scored move (aiGrade), bucket each under the side
+// that played it, then show ONE side at a time behind a 紅/黑 頁籤 — 評價統計 +
+// 關鍵轉折 (that side's biggest-loss move) + 失準手數 (that side's 差/劣 list, each
+// click-to-navigate). Per-side throughout (master's call): a side's view shows
+// only its own flaws, never a mixed aggregate. Mirrors xqpoint's 報告 view but on
+// the LOCAL engine (no quota/login). Collapses (empty) until ≥1 move is scored.
 function renderAiReport() {
   const box = $("#aiReport");
   if (!box) return;
   const a = EDITOR.aiAnalysis;
   if (a.running || a.points.length < 2) { box.innerHTML = ""; return; }
-  const rows = [];
-  const newSide = () => ({ best: 0, good: 0, ok: 0, poor: 0, blunder: 0, total: 0 });
-  const sides = { red: newSide(), black: newSide() };
-  let worst = null;
+  // Grade every scored move and bucket it under the side that PLAYED it (side to
+  // move at the pre-move point i-1; read from the fen, not i%2, so a black-first
+  // XQF is correct). Each side keeps its own tallies, 失準 rows, and worst move.
+  const newSide = () => ({ sc: { best: 0, good: 0, ok: 0, poor: 0, blunder: 0, total: 0 }, rows: [], worst: null });
+  const data = { red: newSide(), black: newSide() };
   for (let i = 1; i < a.points.length; i++) {
     const loss = aiPlyLoss(a.points, i);
     if (loss == null) continue;
     const g = aiGrade(loss);
-    // Side that played the move INTO point i = the side to move at the pre-move
-    // point (i-1). Read from the fen (not i%2) so it's correct for the rare XQF
-    // that starts black-to-move. Tally each side's grades + total separately.
-    const sc = fenSide(a.points[i - 1].fen) === "w" ? sides.red : sides.black;
-    sc[g.key]++; sc.total++;
+    const sd = data[fenSide(a.points[i - 1].fen) === "w" ? "red" : "black"];
+    sd.sc[g.key]++; sd.sc.total++;
     const r = { idx: i, loss, g, p: a.points[i] };
-    rows.push(r);
-    if (!worst || loss > worst.loss) worst = r;
+    sd.rows.push(r);
+    if (!sd.worst || loss > sd.worst.loss) sd.worst = r;
   }
-  if (!rows.length) { box.innerHTML = ""; return; }
+  if (!data.red.sc.total && !data.black.sc.total) { box.innerHTML = ""; return; }
 
-  // Header: one row PER SIDE (紅 then 黑) — 共N手 + 偏差率 + that side's five grade
-  // tallies. Per-side so you see at a glance which player drifted (was a single
-  // aggregate row before). 偏差率 = 差/劣 share = exactly the 失準清單 below.
-  const head = aiSideHeadHtml("紅", "red", sides.red)
-             + aiSideHeadHtml("黑", "black", sides.black);
+  // 頁籤: 紅／黑 only (no mixed 全部) — a side's view shows ONLY its own stats +
+  // 失準 + 關鍵轉折. Fall back to the other side if the chosen one never moved
+  // (1-ply line) so the panel is never blank.
+  let side = a.flawSide === "black" ? "black" : "red";
+  if (!data[side].sc.total) side = side === "red" ? "black" : "red";
+  const sd = data[side];
+  const flawN = (s) => data[s].rows.filter((r) => r.g.key === "poor" || r.g.key === "blunder").length;
+  const tabs = `<div class="aiSideTabs">`
+    + [["red", "紅"], ["black", "黑"]].map(([k, lbl]) =>
+        `<a class="aiSideTab ${k}${side === k ? " on" : ""}" data-flawside="${k}">${lbl} ${flawN(k)}</a>`).join("")
+    + `</div>`;
 
-  // When the AI panel is tall (展開 / 全畫面) we show more detail: the engine's
-  // 建議走法 next to 轉折/失準, plus the grade-threshold legend. Re-evaluated on
-  // resize via the chart's ResizeObserver → renderAiView; panel height is set by
-  // the splitter (stable) so this can't feedback-loop the decision.
+  // 共N手 + 偏差率 + the five grade tallies for the SELECTED side (the active
+  // 頁籤 already names 紅/黑, so the stat row drops the leading side tag).
+  const head = aiSideHeadHtml(sd.sc);
+
+  // 建議走法 ALWAYS shows next to 轉折/失準 (master's call — it must not vanish when
+  // the panel is short). roomy now gates ONLY the secondary 評級門檻 legend. Re-
+  // evaluated on resize via the chart's ResizeObserver → renderAiView; panel height
+  // is set by the splitter (stable) so this can't feedback-loop the decision.
   const panel = document.getElementById("anBodyAi");
   const roomy = !!(panel && panel.clientHeight >= 480);
+  const cur = aiCursorIdx();
 
-  // 關鍵轉折: the most damaging single move. Only crowned when it's a real swing
-  // (≥100cp) — a clean game shows 平穩 instead of a trivial wobble.
+  // 關鍵轉折: THIS side's most damaging single move. Only crowned when it's a real
+  // swing (≥100cp) — a clean side shows 平穩 instead of a trivial wobble.
+  const worst = sd.worst;
   const turnVal = (worst && worst.loss >= 100)
     ? `<a class="aiRepMove" data-aiidx="${worst.idx}">${worst.p.label}</a>`
-        + `<span class="aiRepLoss">${aiLossPhrase(worst)}</span>`
-        + (roomy ? aiSuggestHtml(worst.idx, "建議 ") : "")
+        + `<span class="aiRepLoss">${aiLossTag(worst)}</span>`
+        + aiSuggestHtml(worst.idx, "建議 ")
     : `<span class="aiRepNone">走勢平穩，無明顯轉折</span>`;
 
-  // 失準手數: the 差/劣 moves, coloured by grade, each click-to-navigate.
-  const flaws = rows.filter((r) => r.g.key === "poor" || r.g.key === "blunder");
+  // 失準手數: THIS side's 差/劣 moves, grade-coloured, click-to-navigate. The
+  // queried/hovered row carries .hot so it lights up in sync with the chart
+  // cursor (圖↔清單 連動).
+  const flaws = sd.rows.filter((r) => r.g.key === "poor" || r.g.key === "blunder");
   const flawVal = flaws.length
-    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}" data-aiidx="${r.idx}">`
+    ? flaws.map((r) => `<a class="aiFlaw g-${r.g.key}${r.idx === cur ? " hot" : ""}" data-aiidx="${r.idx}">`
         + `${r.p.label} <span class="aiFlawEval">${aiEvalRed(r.p)}</span> ${aiLossTag(r)}`
-        + `${roomy ? aiSuggestHtml(r.idx, "→ ") : ""}</a>`).join("")
+        + `${aiSuggestHtml(r.idx, "建議 ")}</a>`).join("")
     : `<span class="aiRepNone">無（皆中等以上）</span>`;
 
   // 關鍵轉折 + 失準手數 in an aligned label↔content grid (report-form look).
-  let html = head
+  let html = tabs + head
     + `<div class="aiRepGrid">`
     + `<span class="aiRepLbl">關鍵轉折</span><span class="aiRepTurn">${turnVal}</span>`
     + `<span class="aiRepLbl">失準手數</span><span class="aiFlawList">${flawVal}</span>`
@@ -436,30 +450,56 @@ function renderAiReport() {
       if (p && p.path) navigateTo(p.path);
     };
   });
+  // 紅/黑 頁籤: switch the whole per-side view (re-render the report only — the
+  // chart is side-agnostic, so it stays as drawn).
+  box.querySelectorAll("[data-flawside]").forEach((el) => {
+    el.onclick = (e) => { e.stopPropagation(); a.flawSide = el.dataset.flawside; renderAiReport(); };
+  });
+  // 圖↔清單 連動: hovering a 失準 row jumps the chart cursor (its amber dot pops) +
+  // the readout to that move — chart/readout repaint ONLY, so the list DOM stays
+  // stable under the pointer (a full re-render would yank the row mid-hover).
+  // Leaving restores the resting cursor.
+  box.querySelectorAll(".aiFlaw[data-aiidx]").forEach((el) => {
+    const idx = +el.dataset.aiidx;
+    el.onmouseenter = () => {
+      a.queryIdx = idx;
+      const svg = $("#aiChart"); if (svg) drawAiChart(svg, a.points, idx);
+      renderAiReadout(idx);
+    };
+    el.onmouseleave = () => {
+      a.queryIdx = null;
+      const svg = $("#aiChart"); if (svg) drawAiChart(svg, a.points, aiCursorIdx());
+      renderAiReadout(aiCursorIdx());
+    };
+  });
 }
 
-// One per-side header row: side tag (warm 紅 / cool 黑, single-source hues) +
-// 共N手 + 偏差率 (the 差/劣 share, = the 失準清單) + that side's five grade
-// tallies. Returns "" for a side with no graded moves so a 1-ply line doesn't
-// print an all-zero 黑 row.
-function aiSideHeadHtml(label, sideKey, sc) {
+// The SELECTED side's stat row: 共N手 + 偏差率 (the 差/劣 share, = the 失準清單) +
+// that side's five grade tallies. No leading 紅/黑 tag — the active 頁籤 already
+// names the side. Returns "" for a side with no graded moves.
+function aiSideHeadHtml(sc) {
   if (!sc.total) return "";
   const rate = Math.round((sc.poor + sc.blunder) / sc.total * 100);
   return `<div class="aiRepHead">`
-    + `<span class="aiRepSide ${sideKey}">${label}</span>`
     + `<span class="aiRepTotal">共 ${sc.total} 手 · 偏差率 ${rate}%</span>`
     + AI_GRADE_BANDS.map((b) => `<span class="aiGradeChip g-${b.key}">${b.label} ${sc[b.key]}</span>`).join("")
     + `</div>`;
 }
 
-// The engine's best alternative at a flaw's DECISION POINT (the position before
-// the move = points[idx-1]), translated UCI→中文 by fillAiBlunderBest. Empty
-// until that async translation lands (fillAiBlunderBest re-renders when ready).
-// prefix labels it: "建議 " for 轉折, "→ " for the inline 失準 list.
+// The engine's best alternative at a flaw's DECISION POINT (points[idx-1]),
+// translated UCI→中文 by fillAiBlunderBest, WITH that alternative's 走後分 — the
+// decision-point eval (= what best play preserves), red POV, the SAME +N the
+// readout card shows. Binding the suggestion's own score beside it (the played
+// move's 走後分 sits by the played move) kills the "which number is the
+// suggestion's?" ambiguity. Empty until the async translation lands. Both the
+// 轉折 headline and the 失準 list pass prefix "建議 " so the suggestion reads
+// identically in either place.
 function aiSuggestHtml(idx, prefix) {
   const sp = EDITOR.aiAnalysis.points[idx - 1];
   const zh = sp && sp.bestZh;
-  return zh ? ` <span class="aiRepSug">${prefix}${zh}</span>` : "";
+  if (!zh) return "";
+  const ev = aiEvalRed(sp);   // decision-point (best-play) eval, red POV
+  return ` <span class="aiRepSug">${prefix}${zh}${ev ? " " + ev : ""}</span>`;
 }
 
 // The 5-level grade thresholds (per-move cp loss), derived from AI_GRADE_BANDS so
@@ -475,12 +515,12 @@ function aiThresholdLegendHtml() {
     + `<span class="aiThList">${chips}<span class="aiThUnit">每手失分 cp</span></span></div>`;
 }
 
-// Mate-aware loss phrasing. A folded-mate loss (~30000 cp scale) means the move
-// crossed the win/loss line — print 殺/走入殺局 instead of the meaningless huge
-// number (e.g. the old "約失 29358 分"). Detected by the resulting position being
-// a forced mate (point.mate) or the cp being in mate-fold territory.
+// Mate-aware loss tag. A folded-mate loss (~30000 cp scale) means the move
+// crossed the win/loss line — print 殺 instead of the meaningless huge number
+// (e.g. the old "虧29358"). Detected by the resulting position being a forced
+// mate (point.mate) or the cp being in mate-fold territory. Used by BOTH the
+// 關鍵轉折 headline and the 失準清單 so the same move reads identically (虧N / 殺).
 function aiMateLoss(r) { return r.p.mate != null || Math.abs(r.loss) >= 9000; }
-function aiLossPhrase(r) { return aiMateLoss(r) ? "走入殺局" : `約失 ${Math.round(r.loss)} 分`; }
 function aiLossTag(r) { return aiMateLoss(r) ? "殺" : "虧" + Math.round(r.loss); }
 
 // Red-POV score string for a swept point's POST-move position (the 走後分 shown
