@@ -7,10 +7,15 @@ Flask Response. The shared subprocess plumbing (``_spawn``/``_shutdown``) and th
 editor-FEN→6-field conversion (``_engine_fen``) live here so the two streams
 don't each reimplement them — that's the "兩支 SSE 合一" of the backlog.
 
-Both streams are EPHEMERAL by design: each generator kills its engine in
-``finally`` (client disconnect raises GeneratorExit on the next yield), and
-nothing is persisted (contrast positions.db). Scores are red POV (cp/mate),
-matching #evalLine and the eval DB convention.
+The single-position live stream (``analyze_stream``) is EPHEMERAL by design: it
+kills its engine in ``finally`` (client disconnect raises GeneratorExit on the
+next yield) and persists nothing (contrast positions.db). The whole-line sweep
+(``analyze_line_stream``) is ALSO ephemeral in its streaming, but OPTIONALLY
+consults + fills an editor-owned eval cache (``eval_cache``) when handed a
+``cache_path`` — so a re-scan of the same / overlapping line skips Pikafish. The
+engine itself is still spawned/killed per request (and deferred to the first
+cache miss). Scores are red POV (cp/mate), matching #evalLine and the eval DB
+convention.
 """
 from __future__ import annotations
 
@@ -197,23 +202,75 @@ def pikafish_info(p) -> dict:
     return info
 
 
-def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int):
+def engine_signature(engine_path) -> str:
+    """A cheap identity for the engine binary + its sibling NNUE net(s), used as
+    part of the eval-cache key so swapping or rebuilding either MISSES (recomputes)
+    instead of serving a stale score. Stat-based (name+size+mtime) — no UCI
+    handshake needed, so it's free to compute per sweep. Changes whenever the user
+    points at a different binary, the binary is rebuilt, or the net file changes.
+    Falls back to bare names if a stat fails (still stable within one install)."""
+    parts = []
+    try:
+        st = engine_path.stat()
+        parts.append(f"{engine_path.name}:{st.st_size}:{st.st_mtime_ns}")
+    except OSError:
+        parts.append(engine_path.name)
+    try:
+        for nnue in sorted(engine_path.parent.glob("*.nnue")):
+            st = nnue.stat()
+            parts.append(f"{nnue.name}:{st.st_size}:{st.st_mtime_ns}")
+    except OSError:
+        pass
+    return "|".join(parts)
+
+
+def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int,
+                        cache_path=None, fresh: bool = False):
     """Generator: analyse a whole line of positions at a fixed depth, yielding one
     NDJSON record per position. One engine process reused for the whole sweep.
     Each record: ``{ply, total, cp|null, mate|null, best|null}``; when ``depth2``
     is given (>0), a single ``go depth max(depth, depth2)`` search also reports the
     second (usually deeper) eval as ``cp2|null, mate2|null`` — the client diffs
-    the two to flag positions where shallow and deep search disagree."""
+    the two to flag positions where shallow and deep search disagree.
+
+    When ``cache_path`` is given, each position is looked up in the editor eval
+    cache first (key = fen + the depth pair + this engine's signature): a hit is
+    replayed verbatim with NO engine work, and a miss is computed then written
+    back. The engine is spawned LAZILY on the first miss, so a fully-cached
+    re-scan never starts Pikafish at all. ``fresh=True`` ignores cached rows
+    (still writes back) — the force-recompute escape hatch."""
     go_depth = max(depth, depth2) if depth2 else depth
-    proc, send = _spawn(engine_path)
-    last = _start_stall_watchdog(proc)
+    total = len(fens)
+    # Editor eval cache (optional). Resolve the pooled connection + this run's
+    # engine signature up front; any failure disables caching but never breaks
+    # the sweep (the engine path still works).
+    cache = sig = None
+    if cache_path is not None:
+        try:
+            from backend import eval_cache as _eval_cache
+            cache = _eval_cache.ensure(cache_path)
+            sig = engine_signature(engine_path)
+        except Exception:
+            cache = None
+    proc = send = last = None   # spawned lazily on the first cache miss
     try:
-        send("uci")
-        send("setoption name Threads value 4")
-        send("setoption name Hash value 128")
-        send("isready")
-        total = len(fens)
         for idx, fen in enumerate(fens):
+            # Cache hit → replay the stored record (engine untouched).
+            if cache is not None and not fresh:
+                hit = _eval_cache.read(cache, fen, depth, depth2, sig)
+                if hit is not None:
+                    yield json.dumps({"ply": idx, "total": total, **hit},
+                                     ensure_ascii=False) + "\n"
+                    continue
+            # Miss → make sure the engine is up (spawn + handshake once), then
+            # search this position.
+            if proc is None:
+                proc, send = _spawn(engine_path)
+                last = _start_stall_watchdog(proc)
+                send("uci")
+                send("setoption name Threads value 4")
+                send("setoption name Hash value 128")
+                send("isready")
             if proc.poll() is not None:
                 break   # watchdog killed a wedged engine — stop cleanly
             full_fen, flip = _engine_fen(fen)
@@ -224,12 +281,14 @@ def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int):
             # evals — iterative deepening passes through `depth` on its way up.
             cap = {}   # iteration-depth -> {"cp": x} | {"mate": x}
             best = None
+            completed = False   # True only once `bestmove` confirms the search finished
             for line in proc.stdout:
                 last[0] = time.monotonic()
                 line = line.strip()
                 if line.startswith("bestmove"):
                     bits = line.split()
                     best = bits[1] if len(bits) > 1 and bits[1] != "(none)" else None
+                    completed = True
                     break
                 if line.startswith("info ") and " score " in line and " depth " in line:
                     sc = _parse_score(line, flip)
@@ -262,9 +321,23 @@ def analyze_line_stream(engine_path, fens: list[str], depth: int, depth2: int):
                 sc2 = _pick(depth2)
                 rec["cp2"] = sc2.get("cp") if sc2 else None
                 rec["mate2"] = sc2.get("mate") if sc2 else None
+            # Persist this freshly-computed record (ply/total are per-request, so
+            # store only the eval fields) — but ONLY when the search actually
+            # finished (`bestmove` seen). A position whose engine was stall-killed
+            # mid-search holds a shallower-than-requested (or empty) score; caching
+            # that would serve a wrong-depth eval forever. It's still streamed for
+            # live display, just not written. Cache failure never breaks the stream.
+            if cache is not None and completed:
+                try:
+                    _eval_cache.write(cache, fen, depth, depth2, sig,
+                                      {k: rec[k] for k in
+                                       ("cp", "mate", "best", "cp2", "mate2") if k in rec})
+                except Exception:
+                    pass
             yield json.dumps(rec, ensure_ascii=False) + "\n"
     finally:
-        _shutdown(proc, send)
+        if proc is not None:
+            _shutdown(proc, send)
 
 
 def analyze_stream(engine_path, fen: str, depth: int, movetime: int):

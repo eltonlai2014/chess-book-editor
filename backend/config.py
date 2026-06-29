@@ -67,6 +67,10 @@ PREFS_PATH = _data_base() / "preferences.json"
 # from the read-only positions.db (AI repo) and the AI pipeline's
 # chessdb_cache.json — see backend/chessdb_service.py.
 CHESSDB_CACHE_PATH = _data_base() / "output" / "editor_chessdb_cache.db"
+# Editor's OWN writable cache for whole-line engine sweeps (AI 整局掃描). Lets a
+# re-scan of the same / overlapping line skip Pikafish entirely — keyed by
+# (fen, depth, depth2, engine signature). See backend/eval_cache.py.
+EVAL_CACHE_PATH = _data_base() / "output" / "editor_eval_cache.db"
 
 
 # ---------- user preferences --------------------------------------------------

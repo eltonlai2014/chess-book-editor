@@ -1146,6 +1146,9 @@ async function selectFile(rel, liEl) {
     // Eval lookup is fire-and-forget: don't block file load on it. When it
     // resolves, re-render so #evalLine populates.
     fetchEvalsForFile().then(() => renderEvalLine());
+    // If the AI 分析 tab is open, show this file's cached sweep instantly
+    // (cache-only; no engine). No-op when the tab's hidden or nothing's cached.
+    maybeAutoLoadAiCache();
   } catch (e) {
     setStatus("載入失敗：" + e.message, "err");
     drawBoardLoading("載入失敗", false);   // stop the pulse so it doesn't spin forever
@@ -2604,7 +2607,7 @@ function switchAnnoteTab(tab) {
   const bar = $("#aiBar");
   if (bar) bar.hidden = tab !== "ai";
   // The chart can't size itself while hidden — redraw now it's visible.
-  if (tab === "ai") renderAiView();
+  if (tab === "ai") { renderAiView(); maybeAutoLoadAiCache(); }
 }
 
 // [moved to editor-engine.js — T2-1 split]

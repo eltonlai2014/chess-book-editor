@@ -57,7 +57,17 @@ def get_ro(path: Path) -> sqlite3.Connection:
 def get_rw(path: Path, init_sql: str | None = None) -> sqlite3.Connection:
     """Pooled writable connection. ``init_sql`` (e.g. ``CREATE TABLE IF NOT
     EXISTS``) runs once, when the connection is first created — not on every
-    call. Creates the parent directory if needed."""
+    call. Creates the parent directory if needed.
+
+    Opened in **WAL + ``synchronous=NORMAL``**: a commit no longer fsyncs on every
+    write (only at checkpoint), so the hot per-row writers — the AI sweep's
+    per-position eval cache and chessdb's per-navigation cache — commit nearly for
+    free instead of paying a disk fsync each time. Safe for these stores: they're
+    editor-owned, single-user, and fully regenerable, so NORMAL's only risk (losing
+    the very last transaction on an OS crash/power loss — never corruption) costs
+    at most a re-query/re-scan of one position. WAL also lets readers not block the
+    lone writer. ``journal_mode=WAL`` persists in the DB file; ``synchronous`` is
+    per-connection, so both are set here on first open."""
     key = _key(path, "rw")
     with _lock:
         con = _cache.get(key)
@@ -65,6 +75,8 @@ def get_rw(path: Path, init_sql: str | None = None) -> sqlite3.Connection:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             con = sqlite3.connect(str(path), check_same_thread=False)
             con.row_factory = sqlite3.Row
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA synchronous=NORMAL")
             if init_sql:
                 con.execute(init_sql)
                 con.commit()

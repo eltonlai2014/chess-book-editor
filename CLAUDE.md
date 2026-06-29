@@ -109,6 +109,20 @@ Persistence layer (the original foundation, still the correctness anchor):
   stream depth/score/PV; strictly **ephemeral**, nothing persisted (contrast
   positions.db). Binary via `preferences.json` `pikafishPath` (default sibling
   `chess-book-ai/engine/Windows/pikafish-avx2.exe`); UI chip in the file pane.
+  **Exception — the whole-line sweep IS cached.** `POST /api/engine/analyze-line`
+  (the 走勢圖/整局報告 sweep) writes each computed eval to the editor's OWN
+  writable `output/editor_eval_cache.db` (`backend/eval_cache.py`), keyed by
+  `(去步數fen, depth, depth2, 引擎簽章)` — so a re-scan of the same/overlapping
+  line replays from cache and a fully-cached line never spawns Pikafish (lazy
+  spawn on first miss). The KEY MUST keep the depth pair + the engine signature
+  (`engine_service.engine_signature` = binary+nnue stat): an eval is only valid
+  for a fixed depth and engine, so dropping either would serve stale scores.
+  `fresh:true` recomputes. positions.db stays read-only; this is the only
+  engine-eval store the editor writes (parallels the chessdb editor cache).
+  `POST /api/engine/eval-cache` is the **cache-only read** (NEVER spawns the
+  engine — keep it that way): the frontend fires it when the AI tab opens or a
+  file is switched while it's open (`maybeAutoLoadAiCache`) so a previously-swept
+  line shows its chart+report instantly without pressing 掃描.
 - **Board rendering code reuse** → currently a TODO. When the UI starts, copy
   `assets/board.js` + `applyIccs` from chess-book-ai's `site_builder/assets/`,
   accept drift. Long-term: extract shared `xiangqi-board-lib`.

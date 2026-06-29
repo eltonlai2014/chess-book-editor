@@ -73,6 +73,7 @@ from backend.eval_service import (  # noqa: E402
 from backend.chessdb_service import lookup as chessdb_lookup  # noqa: E402
 from backend.config import (  # noqa: E402
     CHESSDB_CACHE_PATH,
+    EVAL_CACHE_PATH,
     FRONTEND_ROOT,
     _get_eval_db,
     _get_pikafish,
@@ -81,10 +82,12 @@ from backend.config import (  # noqa: E402
     get_xqf_root,
 )
 from backend.picker_service import _pick_file, _pick_folder  # noqa: E402
+from backend import eval_cache  # noqa: E402
 from backend.engine_service import (  # noqa: E402
     _safe_int,
     analyze_line_stream,
     analyze_stream,
+    engine_signature,
     pikafish_info,
 )
 
@@ -541,23 +544,55 @@ def analyze_line():
     """Analyse a whole line of positions at a fixed depth, streaming one NDJSON
     record per position so the client can build a score trend live.
 
-    Body: ``{fens: [editor-FEN, ...], depth (default 12), depth2?}``. Scores are
-    red POV; see engine_service.analyze_line_stream for the per-record shape and
-    the depth/depth2 semantics.
+    Body: ``{fens: [editor-FEN, ...], depth (default 12), depth2?, fresh?}``.
+    Scores are red POV; see engine_service.analyze_line_stream for the per-record
+    shape and the depth/depth2 semantics. Results are cached per (fen, depth pair,
+    engine) in EVAL_CACHE_PATH so a re-scan of the same/overlapping line skips the
+    engine; ``fresh:true`` ignores the cache and recomputes (still writes back).
     """
     body = request.get_json(silent=True) or {}
     fens = [f for f in (body.get("fens") or []) if isinstance(f, str) and f]
     depth = max(1, min(30, _safe_int(body.get("depth"), 12)))
     depth2 = body.get("depth2")
     depth2 = max(1, min(30, _safe_int(depth2, 0))) if depth2 is not None else 0
+    fresh = bool(body.get("fresh"))
     engine = _get_pikafish()
     if not (engine.exists() and engine.is_file()):
         return jsonify({"error": "皮卡魚引擎未設定（請先在檔案窗格選擇）"}), 400
     return Response(
-        stream_with_context(analyze_line_stream(engine, fens, depth, depth2)),
+        stream_with_context(analyze_line_stream(
+            engine, fens, depth, depth2, cache_path=EVAL_CACHE_PATH, fresh=fresh)),
         mimetype="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/engine/eval-cache")
+def engine_eval_cache():
+    """Cache-only read of the AI sweep results for a line — NEVER spawns the
+    engine. Lets the AI tab show prior analysis the instant it's opened (or a file
+    is switched while it's open) without pressing 掃描.
+
+    Body: ``{fens: [editor-FEN, ...], depth (default 12), depth2?}``. Returns
+    ``{depth, depth2, hits, total, records:[{cp,mate,best,cp2?,mate2?}|null, ...]}``
+    — one slot per fen, null on a cache miss. When the engine is unconfigured
+    there's no signature to key by, so every slot is null (hits 0); the client
+    only renders when hits>0.
+    """
+    body = request.get_json(silent=True) or {}
+    fens = [f for f in (body.get("fens") or []) if isinstance(f, str) and f]
+    depth = max(1, min(30, _safe_int(body.get("depth"), 12)))
+    depth2 = body.get("depth2")
+    depth2 = max(1, min(30, _safe_int(depth2, 0))) if depth2 is not None else 0
+    records = [None] * len(fens)
+    engine = _get_pikafish()
+    if engine.exists() and engine.is_file():
+        sig = engine_signature(engine)
+        con = eval_cache.ensure(EVAL_CACHE_PATH)
+        records = eval_cache.read_line(con, fens, depth, depth2, sig)
+    hits = sum(1 for r in records if r is not None)
+    return jsonify({"depth": depth, "depth2": depth2,
+                    "hits": hits, "total": len(fens), "records": records})
 
 
 @app.get("/api/engine/analyze")

@@ -16,6 +16,7 @@ Run:
 """
 import json
 import sys
+import tempfile
 import urllib.parse
 from pathlib import Path
 
@@ -23,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cchess import FULL_INIT_FEN  # noqa: E402
 from backend import app as app_module  # noqa: E402
+from backend import eval_cache, engine_service  # noqa: E402
 
 app = app_module.app
 app.testing = True
@@ -85,12 +87,50 @@ def test_analyze_line():
           all((x.get("cp") is not None or x.get("mate") is not None) for x in recs), recs)
     check("has best", all("best" in x for x in recs), recs)
 
+    # The sweep above must have written START to the editor eval cache (key =
+    # fen + depth pair + engine signature). Read it back directly to prove the
+    # write-back, and that a hit replays the same numbers the stream produced.
+    sig = engine_service.engine_signature(app_module._get_pikafish())
+    con = eval_cache.ensure(app_module.EVAL_CACHE_PATH)
+    cached = eval_cache.read(con, START, DEPTH, 0, sig)
+    check("eval cache stored the swept fen", cached is not None, cached)
+    check("cached record matches the stream",
+          cached and cached.get("best") == recs[0].get("best")
+          and cached.get("cp") == recs[0].get("cp"), (cached, recs[0]))
+
     # depth2 -> a second (deeper) eval column cp2/mate2 appears.
     r = c.post("/api/engine/analyze-line",
                json={"fens": [START], "depth": 8, "depth2": DEPTH})
     recs = [json.loads(ln) for ln in r.get_data(as_text=True).splitlines() if ln.strip()]
     check("depth2 adds cp2/mate2 key",
           recs and ("cp2" in recs[0] or "mate2" in recs[0]), recs[:1])
+
+    # fresh=true must still stream a full record (ignores any cached row).
+    r = c.post("/api/engine/analyze-line",
+               json={"fens": [START], "depth": DEPTH, "fresh": True})
+    recs = [json.loads(ln) for ln in r.get_data(as_text=True).splitlines() if ln.strip()]
+    check("fresh=true still returns a record",
+          len(recs) == 1 and (recs[0].get("cp") is not None or recs[0].get("mate") is not None), recs)
+
+
+def test_eval_cache_endpoint():
+    print("[/api/engine/eval-cache]")
+    c = app.test_client()
+    # START was swept at depth DEPTH (single) in test_analyze_line → cache hit,
+    # with NO engine spawned by this read-only endpoint.
+    r = c.post("/api/engine/eval-cache", json={"fens": [START], "depth": DEPTH})
+    j = r.get_json()
+    check("eval-cache -> 200 json", r.status_code == 200 and isinstance(j, dict), (r.status_code, j))
+    check("hit count >= 1", bool(j) and j.get("hits", 0) >= 1, j)
+    rec0 = (j.get("records") or [None])[0] if j else None
+    check("hit record carries a score",
+          bool(rec0) and (rec0.get("cp") is not None or rec0.get("mate") is not None), rec0)
+    check("total == 1", bool(j) and j.get("total") == 1, j)
+    # A depth nobody scanned at → all misses (null slot, hits 0).
+    r = c.post("/api/engine/eval-cache", json={"fens": [START], "depth": 3})
+    j = r.get_json()
+    check("unscanned depth -> miss",
+          bool(j) and j.get("hits") == 0 and (j.get("records") or [1])[0] is None, j)
 
 
 def main():
@@ -99,8 +139,14 @@ def main():
         print(f"  SKIP  engine SSE tests — no Pikafish at {engine}")
         return 0
     print(f"engine = {engine}")
+    # Isolate the eval cache to a throwaway temp DB so the test stays hermetic
+    # (never touches output/editor_eval_cache.db). The analyze-line route reads
+    # this module-level path at call time, so reassigning it here takes effect.
+    tmpdir = tempfile.mkdtemp(prefix="eval_cache_test_")
+    app_module.EVAL_CACHE_PATH = Path(tmpdir) / "eval_cache.db"
     test_analyze()
     test_analyze_line()
+    test_eval_cache_endpoint()
     print()
     if _failures:
         print(f"FAILED: {len(_failures)} check(s): {', '.join(_failures)}")

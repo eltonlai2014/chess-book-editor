@@ -227,8 +227,73 @@ async function analyzeCurrentLine() {
 
 function clearAiAnalysis() {
   EDITOR.aiAnalysis.points = [];
+  // Bump the load sequence so a cache auto-load awaiting its fetch (started for
+  // the PREVIOUS line) discards its result instead of painting onto the new one.
+  EDITOR.aiAnalysis.loadSeq = (EDITOR.aiAnalysis.loadSeq || 0) + 1;
   const st = $("#aiState"); if (st) st.textContent = "尚未分析";
   renderAiView();
+}
+
+// Auto-load prior sweep results from the editor eval cache for the current line —
+// CACHE-ONLY (never runs the engine). Called when the AI tab is opened or a file
+// is switched while it's open, so previously-analysed lines show instantly
+// without pressing 掃描. A miss (nothing cached at the current depth settings, or
+// no engine to key the cache by) leaves the tab idle. Silent: no error toast, no
+// button disable — it's a best-effort convenience, the 掃描 button is the real path.
+async function loadAiCacheForCurrentLine() {
+  if (!EDITOR.data) return;
+  if (!EDITOR.engineInfo || !EDITOR.engineInfo.ok) return;  // no engine → no cache key
+  const ai = EDITOR.aiAnalysis;
+  if (ai.running || ai.points.length) return;
+  const positions = aiLinePositions();
+  if (!positions.length) return;
+  const depth = aiDepth();
+  const dual = aiDualEnabled();
+  const depth2 = aiDepth2();
+  const seq = (ai.loadSeq = (ai.loadSeq || 0) + 1);   // token to detect a stale await
+  let data;
+  try {
+    const resp = await fetch("/api/engine/eval-cache", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fens: positions.map((p) => p.fen), depth, ...(dual ? { depth2 } : {}) }),
+    });
+    if (!resp.ok) return;
+    data = await resp.json();
+  } catch (_) { return; }
+  // The line may have changed (file/tab) while awaiting — bail if so.
+  if (seq !== ai.loadSeq || ai.running || ai.points.length) return;
+  const recs = (data && data.records) || [];
+  const hits = recs.filter((r) => r && (r.cp != null || r.mate != null)).length;
+  if (!hits) return;   // nothing cached → stay on the "按掃描" idle state
+  ai.points = positions.map((p, i) => {
+    const r = recs[i] || {};
+    return {
+      ply: i, label: p.label, path: p.path, fen: p.fen,
+      cp: r.cp != null ? r.cp : null, mate: r.mate != null ? r.mate : null,
+      best: r.best != null ? r.best : null,
+      cp2: r.cp2 != null ? r.cp2 : null, mate2: r.mate2 != null ? r.mate2 : null,
+    };
+  });
+  ai.depth = depth;
+  ai.depth2 = dual ? depth2 : null;
+  ai.queryIdx = ai.points.length - 1;
+  const st = $("#aiState");
+  if (st) st.textContent = hits === positions.length
+    ? `快取載入 · ${positions.length} 步（按掃描重算）`
+    : `快取部分載入 · ${hits}/${positions.length} 步（按掃描補全）`;
+  renderAiView();
+  fillAiBlunderBest();   // translate 漏著 best alternatives for the readout (async)
+}
+
+// Trigger the cache auto-load only when it won't clobber existing work: the AI
+// tab must be visible and there must be no running sweep / already-loaded line.
+function maybeAutoLoadAiCache() {
+  const ai = EDITOR.aiAnalysis;
+  if (ai.running || ai.points.length) return;
+  const body = document.getElementById("anBodyAi");
+  if (!body || body.hidden) return;   // only when the AI 分析 tab is actually shown
+  loadAiCacheForCurrentLine();
 }
 
 // Index on the analysed line matching the board now (= moves made so far).

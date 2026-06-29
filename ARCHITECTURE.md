@@ -49,7 +49,7 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 |---|---|---|
 | **廣度 vs 深度分工** | 批量掃庫找問題＝chess-book-ai；鑽研單一盤面（輸入＋深算＋註解）＝本 repo。別在此重建批量管線。 | CLAUDE.md |
 | **即時分析純暫態** | SSE execs pikafish，逐層 stream，斷線即 kill，**任何結果都不落地**（對比 positions.db）。另有 stall watchdog（T3-5）：引擎 `_STALL_TIMEOUT`(30s) 無輸出即 kill（防卡死進程釘住 worker thread）——是「無進展」而非時長上限，故 `go infinite`/長搜尋持續吐 info 不會誤殺。 | app.py `engine_analyze` → engine_service.py `analyze_stream`（`_shutdown`/`_start_stall_watchdog`） |
-| **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。 | app.py `analyze_line` → engine_service.py `analyze_line_stream`；memory `project-ai-line-depth` |
+| **AI 走勢圖掃描** | `analyze_line` 重用單一引擎進程跑整條線，**逐局面不送 `ucinewgame`**（TT 累積→低層數即準，但各點非嚴格獨立）。層數＝pref `aiAnalysisDepth`(預設12)。**整局掃描快取**（editor 自有可寫 `editor_eval_cache.db`，key＝去步數 fen＋depth pair＋引擎簽章 `engine_signature`＝binary+nnue stat）：命中即原樣重播**不碰引擎**、**全命中則延遲 spawn 完全不開引擎**，miss 才算＋寫回（**逐點寫，且僅該點搜尋完成 `bestmove` 才寫**——stall 砍掉的半成品照 stream 但不入快取，免供應錯深度分）；`fresh:true` 強制重算仍寫回。寫死 positions.db 唯讀不碰。寫入便宜：`db_pool` 的可寫連線開 **WAL+`synchronous=NORMAL`**，逐點 commit 不再每次 fsync。 | app.py `analyze_line` → engine_service.py `analyze_line_stream`(`cache_path`/`fresh`)＋`engine_signature` → `eval_cache`(`db_pool` WAL)；memory `project-ai-line-depth` |
 | **App shell 用 flex** | body flex column＋header 自動高＋main `flex:1`＋`overflow:hidden`；**勿寫死 header 高度**（曾因 `calc(100vh-52px)` 比實際矮而溢出產生捲軸）。 | editor.css `body`/`header`/`main` |
 | **positions.db 唯讀** | `?mode=ro` 開啟，永不 INSERT/UPDATE，檔案歸 AI repo 管。 | eval_service.py `_open_ro`（驗證候選檔，短命）／`db_pool.get_ro`（熱路徑、池化、不 close） |
 | **DB 連線池化** | 熱路徑（`lookup_batch`／雲庫查）reuse 程序級連線，**不逐查 connect/close、不 `.close()` 池內連線**；read-only 序列化、單人工具無寫鎖爭用；路徑變動（換評估庫）→新連線、舊的閒置到退出。`db_info` 驗證任意候選檔仍用短命連線。 | db_pool.py；eval_service.py `lookup_batch`／chessdb_service.py |
@@ -98,7 +98,8 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 | `GET /api/engine/info` | `engine_info`:489 | pikafish 設定 chip（`config._get_pikafish`/`engine_service.pikafish_info`） |
 | `POST /api/engine/pick` `/path` | `pick_engine_dialog`:495 / `set_engine_path`:514 | 選/設引擎執行檔 |
 | `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:564 | 單局面即時分析串流→`engine_service.analyze_stream`（逐行 `_parse_info_line`、共用 `_spawn`/`_engine_fen`） |
-| `POST /api/engine/analyze-line` | `analyze_line`:540 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空** |
+| `POST /api/engine/analyze-line` | `analyze_line`:540 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空**；**eval cache**（`eval_cache`，key＝fen+depth+depth2+引擎簽章）命中跳引擎、`fresh:true` 重算 |
+| `POST /api/engine/eval-cache` | `engine_eval_cache` | **只讀 eval cache、絕不開引擎**：回 `{hits,total,records:[rec|null]}`（每 fen 一格）。前端進 AI 分頁／在該頁切檔時自動打，有快取就立刻畫（`eval_cache.read_line`）|
 | `POST /api/xqf/save` | `save`:641 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
 
 ### CBL/CBR 編輯整合（backend/cb_service.py）
@@ -291,7 +292,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 **AI 分析 —— 整條線走勢圖（AI分析 tab）**
 | 功能 | 函式:行 |
 |---|---|
-| 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**）；給 `depth2` 時單次深算同時擷取兩層分數 | `analyze_line`(app.py):528 → `engine_service.analyze_line_stream` / `_parse_score` ｜ `POST /api/engine/analyze-line {fens,depth,depth2?}` |
+| 後端逐局面掃描（NDJSON 串流，**共用 TT 不清空**，**命中 eval cache 跳引擎、全命中不開引擎**）；給 `depth2` 時單次深算同時擷取兩層分數 | `analyze_line`(app.py):528 → `engine_service.analyze_line_stream`(`cache_path`/`fresh`) / `_parse_score` / `eval_cache` ｜ `POST /api/engine/analyze-line {fens,depth,depth2?,fresh?}` |
+| **進 AI 分頁／在該頁切檔時自動讀快取**（只讀 `eval-cache`、不開引擎）：有快取就立刻畫整局圖＋報告，無快取維持「按掃描」閒置。競態防護＝`loadSeq`（換檔 `clearAiAnalysis` 累加，await 後序號不符即丟棄）；不綁導覽（只在分頁啟用＋換檔觸發）| `maybeAutoLoadAiCache`／`loadAiCacheForCurrentLine`(editor-aichart.js)；掛點 `switchAnnoteTab('ai')`＋`openFile` 載入後(editor.js)｜`POST /api/engine/eval-cache` |
 | 取層數(預設12)/組局面清單 | `aiDepth`:2027（pref `aiAnalysisDepth`）/ `aiLinePositions`:2068 |
 | **雙深度比對**：第二層數(預設20)/開關/門檻(預設200)/深淺差值+旗標 | `aiDepth2`:2035 / `aiDualEnabled`:2039 / `aiDiffThreshold`:2042 / `aiPointDiff`:2055（pref `aiAnalysisDepth2`/`aiDualDepth`/`aiDiffThreshold`）|
 | **漏著偵測（即時、全盤適用、不靠 positions.db）**：相鄰兩點分數即時算「著法損失」（紅POV分換算成走子方POV的下降，mate 折成 ±(30000−\|m\|)）做門檻判定；損失 ≥ 門檻(預設200)即在走勢圖標**亮黃 `✖` 記號**（粗體重十字 U+2716，`--eval-blunder` token：暗 `#ffd60a`／淺 `#b8860b`，深色描邊 outline 跨紅藍區/明暗主題皆清晰；不用紅色/三角因與紅勢區同色不顯）。讀數**單行**（`.aiReadCard` flex row）且**左右分組**：左＝「步名＋該步紅方分」綁一組（走的＋結果），右＝「✖ 最佳著＋該決策點紅方分」（`margin-left:auto` 推到右；該走的＋結果），避免分數被推離步名又與漏著黏在一起。漏著段**全紅方 POV**。過窄時步名 ellipsis、裁切不換行——決策點分＝最佳走法能守住的紅方分，與主行的走子後紅方分一比即見此步讓出多少（刻意不顯示走子方 POV 的損失數，避免與紅方分混 POV）。最佳著＝該決策點引擎 best（UCI→中文，掃描後對少數漏著點批量翻譯） | `aiPlyLoss`／`aiCpRed`／`aiBlunderThreshold`（pref `aiBlunderThreshold`）／`fillAiBlunderBest`（drawAiChart 標記偵測＋renderAiReadout 紅POV 顯示共用） |
