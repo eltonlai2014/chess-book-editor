@@ -68,7 +68,13 @@
       <div id="rpMoves" class="rpSection rpMoves">
         <h2 class="panelHead">
           <span>棋譜</span>
-          <button id="exportGifBtn" class="iconBtn" title="把目前主線匯出成動畫 GIF"></button>
+          <div class="exportWrap">
+            <button id="exportMenuBtn" class="iconBtn" title="匯出" aria-haspopup="true" aria-expanded="false"></button>
+            <div id="exportMenu" class="exportMenu" role="menu" hidden>
+              <button id="exportPngBtn" class="exportItem" role="menuitem" title="把目前局面存成 PNG 圖片（不含字幕）">當前局面 PNG</button>
+              <button id="exportGifBtn" class="exportItem" role="menuitem" title="把目前主線匯出成動畫 GIF">動畫 GIF</button>
+            </div>
+          </div>
           <button id="undoBtn" class="iconBtn" title="復原 (Ctrl+Z)" disabled></button>
           <button id="redoBtn" class="iconBtn" title="重做 (Ctrl+Shift+Z)" disabled></button>
           <button id="navDelete" class="danger iconBtn" title="刪除目前走法及其後續 (Delete)"></button>

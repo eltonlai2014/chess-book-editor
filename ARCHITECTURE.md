@@ -333,15 +333,16 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 > 加入（`addPvLine`）。換檔/換目錄走 `stopAutoPlay(null,false)` 只清狀態不還原（`EDITOR.data` 已換）。`boardFen()` 是
 > `currentFen()`/沙盒末筆的唯一分流點。
 
-**🎬 GIF 匯出（整條主線 → 動畫 GIF；純前端、後端零改動）**
+**🎬 匯出（當前局面 PNG／整條主線 GIF；純前端、後端零改動）**
 | 功能 | 函式（frontend/assets/gifexport.js，除非另註） |
 |---|---|
 | 主流程：`currentLine()` 逐手 → `drawBoard()`(board.js) 畫離屏 SVG → 光柵化進 `<canvas>`（底部字幕條：檔名＋第N步/共M步）→ `gifenc` 編碼 → 下載 | `exportGif` |
+| **當前局面 PNG**（×1、不帶字幕）：重用 GIF 同一套離屏渲染（`drawBoard`→內嵌字型→`svgToImage`）但只畫目前盤面 fen（`fenAndLastIccsFor(EDITOR.activePath)`）＋最後一手高亮、**無字幕條** → `canvas.toBlob('image/png')` → 下載 `{檔名}-第N步.png` | `exportPng` |
 | 影格清單（起始局面＋每手 post-move FEN＋last-move 高亮） | `buildFrames` |
 | **字型內嵌**（離屏光柵化時頁面 `<link>` webfont 不生效）：讀 `PIECE_FONTS[style].localUrl`（本地子集化 woff2）→ base64 組成 `@font-face`（family=`localFamily`）→ 注入每格 SVG `<defs><style>`；無 localUrl 才退回舊 `googleUrl` CDN 路徑；抓失敗退回系統 CJK 字型，不擋匯出。抓一次快取 | `loadEmbeddedFontCss` / `injectFontStyle` |
 | SVG→canvas 走 Blob URL（字型 base64 太大，免每格 encodeURIComponent）／字幕條／每手停留 ms（末格 ×2.5） | `svgToImage` / `paintCaption` / `frameDelayMs` |
 | 編碼器：vendored `gifenc`（無相依、無 worker、不走 runtime CDN），IIFE 包成 `window.gifenc`（GIFEncoder/quantize/applyPalette） | frontend/assets/gifenc.global.js |
-| 觸發鈕在棋譜列標頭 `#exportGifBtn`（Lucide `ICON.download`，editor.js boot 注入取代 HTML 的 🎬 fallback；純圖示）；進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead；綁定在 gifexport.js 末 `DOMContentLoaded` |
+| 觸發＝棋譜列標頭的 **「匯出 ▾」下拉**（`#exportMenuBtn`，`ICON.download`＋▾ caret；開關邏輯在 editor.js boot）收兩項：`#exportPngBtn`（當前局面 PNG）／`#exportGifBtn`（動畫 GIF）。選單 `left:0` **往右開**——按鈕在面板右半，往左開（`right:0`）會被 `#rpMoves` 的 `overflow-x:hidden` 裁掉左緣（量測後改的）。進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead `.exportWrap`/`.exportMenu`；CSS `.exportMenu`/`.exportItem`/`.exportItem:hover`(editor.css)；綁定在 gifexport.js 末 `DOMContentLoaded`（PNG＋GIF 各一） |
 
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |

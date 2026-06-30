@@ -222,8 +222,70 @@
     }
   }
 
+  // 匯出「當前局面」成 PNG（不帶字幕，×1）。重用 GIF 的同一套離屏渲染：drawBoard →
+  // 內嵌字型 → 光柵化 → canvas.toBlob('image/png') → 下載。畫的是目前盤面 fen＋最後一手
+  // 高亮（與 GIF 影格一致），但只一格、無底部字幕條。後端零改動。
+  async function exportPng(btn) {
+    if (typeof EDITOR === "undefined" || !EDITOR.data) { alert("尚未載入棋譜。"); return; }
+    // 目前盤面的 fen＋最後一手（與螢幕一致）。fenAndLastIccsFor 是 editor.js 的全域，
+    // 點擊時（所有 script 已載入）必在；保險起見退回 boardFen()、無高亮。
+    let fen = null, lastIccs = null;
+    if (typeof fenAndLastIccsFor === "function") {
+      ({ fen, lastIccs } = fenAndLastIccsFor(EDITOR.activePath));
+    } else if (typeof boardFen === "function") {
+      fen = boardFen();
+    }
+    if (!fen) { alert("目前沒有可匯出的局面。"); return; }
+
+    const title = ($("#fileTitle")?.textContent || "棋局").trim().replace(/\.(xqf|cbr|cbl)$/i, "");
+    const statusEl = document.getElementById("status");
+    const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
+    btn.disabled = true;
+    try {
+      setStatus("🖼️ 匯出圖片…");
+      const fontCss = await loadEmbeddedFontCss();     // 抓一次、快取（與 GIF 共用）
+      const svg = makeOffscreenSvg();
+      drawBoard(svg, fen, lastIccs, null);             // 同 GIF：最後一手高亮
+      injectFontStyle(svg, fontCss);                   // 內嵌字型 → 像素一致
+      const img = await svgToImage(svg);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = BOARD_W;                           // 540×600，無字幕條
+      canvas.height = BOARD_H;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+      ctx.drawImage(img, 0, 0, BOARD_W, BOARD_H);
+
+      const ply = (EDITOR.activePath && EDITOR.activePath.length) || 0;
+      const plyLabel = ply ? `第${ply}步` : "起始局面";
+      const safeTitle = title.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 40) || "棋局";
+      await new Promise((resolve) => canvas.toBlob((blob) => {
+        if (!blob) { resolve(); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${safeTitle}-${plyLabel}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        resolve();
+      }, "image/png"));
+      setStatus("🖼️ 已匯出圖片");
+    } catch (e) {
+      console.error(e);
+      setStatus("");
+      alert("匯出失敗：" + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("exportGifBtn");
-    if (btn) btn.addEventListener("click", () => exportGif(btn));
+    const gbtn = document.getElementById("exportGifBtn");
+    if (gbtn) gbtn.addEventListener("click", () => exportGif(gbtn));
+    const pbtn = document.getElementById("exportPngBtn");
+    if (pbtn) pbtn.addEventListener("click", () => exportPng(pbtn));
   });
 })();

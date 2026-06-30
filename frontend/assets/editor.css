@@ -1394,6 +1394,45 @@ h2 {
 
 /* Panel header with inline icon button (e.g. 棋譜 / 🗑) — keeps the small-caps
    title look but adds a flex baseline so the button sits flush with the rule. */
+/* 匯出下拉（當前局面 PNG／動畫 GIF）—— 標頭裡一顆圖示鈕點開的小選單，靠右對齊。 */
+.exportWrap { position: relative; display: inline-flex; }
+.exportWrap .exportCaret { font-size: 9px; margin-left: 1px; opacity: .8; }
+
+.exportMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  margin-top: 4px;
+  min-width: 138px;
+  padding: 4px;
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.18);
+  border-radius: 8px;
+  background: var(--surface-head-solid);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exportMenu[hidden] { display: none; }
+
+.exportItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.exportItem:hover { background: rgba(var(--accent-strong-rgb), 0.12); }
+
 h2.panelHead {
   display: flex;
   align-items: center;
