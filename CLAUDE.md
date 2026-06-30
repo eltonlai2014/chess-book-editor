@@ -409,6 +409,24 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   is the offline CLI's job (`extract`). A fresh machine with no practice.db gets
   `pooled()` auto-creating empty tables → `/info` returns `exists:false` → the UI
   gates the practice entry off (same graceful-degradation as engine/eval info).
+- **P1 frontend = a SELF-CONTAINED dialog with its OWN interactive board
+  (`editor-practice.js`, state in `PRACTICE`).** It deliberately never touches
+  `EDITOR`, the main `#board`, or the move tree — so it's a natural sandbox
+  ("沙盒＝不落地"). It reuses only stateless shared helpers (`drawBoard`/
+  `applyIccs`/coord fns from board.js, `editorColors`/`squareIccs`/`parseSquare`
+  from editor.js — called at runtime so load order is fine) + the backend
+  `legal-targets`/`move-info` validators and `/api/practice/*`. The clickable
+  overlay is a lean copy of `installBoardOverlay` (`installPracticeOverlay`) that
+  reads `PRACTICE` instead of `EDITOR` (no carried-piece float). DON'T wire
+  practice into the main board to "save" that ~60 lines — the decoupling is the
+  point (master picked the self-contained-dialog architecture 2026-06-30). Entry
+  is `setupPractice()` (called once from editor.js boot) + a header `#practiceBtn`
+  shown only when `/info` says the bank exists.
+- **First-cut UX choices open to iteration (don't treat as final):** a wrong
+  first move immediately reveals the answer + records a fail (no retry loop);
+  grading is the FIRST move only; the demo replays the book mainline on a timer.
+  Retry-on-wrong, multi-move solving, and per-move engine equivalence are the
+  expected next polish rounds (master's UI cadence is 2–3 rounds).
 
 ## CWP 造字區「車」亂碼 (2026-06-08)
 

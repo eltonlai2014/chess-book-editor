@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>梅友弈鑑 — 象棋譜分析</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/editor.css?v=42">
+  <link rel="stylesheet" href="/assets/editor.css?v=43">
 </head>
 
 <body>
@@ -31,6 +31,7 @@
         </select>
       </label>
       <span class="actionsDivider" aria-hidden="true"></span>
+      <button id="practiceBtn" hidden title="中局練習題庫（殺法／戰術／中局）">🎯 中局練習</button>
       <button id="saveBtn" disabled>儲存</button>
       <span id="status"></span>
     </div>
@@ -255,6 +256,40 @@
       <div id="demoStatus" class="demoStatus" hidden></div>
     </div>
   </div>
+  <!-- 中局練習 dialog. Self-contained interactive board (#practiceBoard) + its own
+       state (PRACTICE in editor-practice.js); never touches the main board / tree.
+       Opened from the header 🎯 中局練習 button (shown only when practice.db exists). -->
+  <div id="practiceModal" class="modal" hidden>
+    <div class="modalDialog practiceDialog" role="dialog" aria-modal="true" aria-labelledby="practiceTitle">
+      <h3 id="practiceTitle"><span>中局練習</span><button id="practiceClose" class="modalClose"
+          aria-label="關閉" title="關閉">✕</button></h3>
+      <div class="practiceTop">
+        <label>書目 <select id="practiceBook"><option value="">全部書目</option></select></label>
+        <label>難度 <select id="practiceDiff">
+          <option value="">全部</option>
+          <option value="1">★</option>
+          <option value="2">★★</option>
+          <option value="3">★★★</option>
+          <option value="4">★★★★</option>
+          <option value="5">★★★★★</option>
+        </select></label>
+        <span id="practiceProgress" class="practiceProgress"></span>
+      </div>
+      <div class="practiceMain">
+        <svg id="practiceBoard" viewBox="0 0 540 600" width="414" height="460"></svg>
+        <div class="practicePanel">
+          <div id="practiceMeta" class="practiceMeta"></div>
+          <div id="practiceResult" class="practiceResult"></div>
+          <div id="practiceCommentary" class="practiceCommentary" hidden></div>
+        </div>
+      </div>
+      <div class="practiceControls">
+        <button id="practiceRevealBtn" class="iconBtn" title="放棄並看答案">看答案</button>
+        <button id="practiceDemoBtn" class="iconBtn" title="重播答案主線">▶ 演示答案</button>
+        <button id="practiceNextBtn" class="iconBtn" title="換下一題（到期複習優先）">下一題 ▶</button>
+      </div>
+    </div>
+  </div>
   <!-- Settings dialog. Holds the rarely-changed paths (library root / eval DB /
        Pikafish), moved out of the file pane to free vertical space. IDs + chip
        classes preserved so the existing render/picker JS works unchanged. -->
@@ -406,7 +441,8 @@
   <script src="/assets/editor-autoplay.js?v=1"></script>
   <script src="/assets/editor-aichart.js?v=1"></script>
   <script src="/assets/editor-demo.js?v=1"></script>
-  <script src="/assets/editor.js?v=57"></script>
+  <script src="/assets/editor-practice.js?v=1"></script>
+  <script src="/assets/editor.js?v=58"></script>
   <script src="/assets/gifenc.global.js"></script>
   <script src="/assets/gifexport.js?v=3"></script>
 </body>

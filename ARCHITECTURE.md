@@ -151,7 +151,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 > CLI（離線批次抽題）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`。
 > P1 路由：`GET /api/practice/info|pick|puzzle/<id>|stats`、`POST /api/practice/check`（見 API 表）。
 > 測：`tests/test_practice.py`（抽題：合成濾除 CI-safe＋真語料抽樣）＋`tests/test_routes.py`（5 條路由契約，臨時 DB 隔離）。
-> **P1 前端（演示/評分/成績 UI：`editor-practice.js`＋practice modal）尚未建**——見 CLAUDE.md「中局練習題庫」。
+> P1 前端已建（`editor-practice.js`＋practice modal）——見下方「🎯 中局練習」區與 CLAUDE.md。
 
 ### XQF 譜處理（backend/xqf_service.py）
 
@@ -373,6 +373,20 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | SVG→canvas 走 Blob URL（字型 base64 太大，免每格 encodeURIComponent）／字幕條／每手停留 ms（末格 ×2.5） | `svgToImage` / `paintCaption` / `frameDelayMs` |
 | 編碼器：vendored `gifenc`（無相依、無 worker、不走 runtime CDN），IIFE 包成 `window.gifenc`（GIFEncoder/quantize/applyPalette） | frontend/assets/gifenc.global.js |
 | 觸發＝棋譜列標頭的 **「匯出 ▾」下拉**（`#exportMenuBtn`，`ICON.download`＋▾ caret；開關邏輯在 editor.js boot）收兩項：`#exportPngBtn`（當前局面 PNG）／`#exportGifBtn`（動畫 GIF）。選單 `left:0` **往右開**——按鈕在面板右半，往左開（`right:0`）會被 `#rpMoves` 的 `overflow-x:hidden` 裁掉左緣（量測後改的）。進度寫 header `#status`（圖示鈕不可塞文字會撐爆） | index.html 棋譜 panelHead `.exportWrap`/`.exportMenu`；CSS `.exportMenu`/`.exportItem`/`.exportItem:hover`(editor.css)；綁定在 gifexport.js 末 `DOMContentLoaded`（PNG＋GIF 各一） |
+
+**🎯 中局練習（frontend/assets/editor-practice.js；獨立對話框＋自帶互動棋盤，與 EDITOR/主盤/走子樹完全解耦）**
+| 功能 | 函式（editor-practice.js，狀態物件 `PRACTICE`） |
+|---|---|
+| 入口：開機 `GET /api/practice/info` 探測題庫，有題才顯示 header `#practiceBtn`（同 engine/eval info 優雅降級）；填書目下拉 | `setupPractice`（由 editor.js boot 呼一次）/ `fetchPracticeInfo` / `populatePracticeBooks` |
+| 開對話框→`pick` 抽題（書目/難度濾）→渲染盤面＋題目資訊（輪到X方/類目/★難度/書名） | `openPracticeModal` / `loadPracticePuzzle` / `renderPracticeMeta` |
+| **自帶點擊棋盤**：`drawBoard`(board.js) 畫子後**自繪**點擊覆蓋層（透明 rects＋合法落點環/點＋選中光暈），鏡像 `installBoardOverlay` 但讀 `PRACTICE`、無浮子 | `renderPracticeBoard` / `installPracticeOverlay` |
+| 選子→`POST /api/xqf/legal-targets`（race guard）；落子→`POST /api/practice/check` 評首著（書答或 engine_best＝引擎等值），`applyIccs` 顯示該手 | `practiceSquareClick` / `practicePlayMove` |
+| 結果：✓正解（via book/engine）/✗不是最佳手；揭示答案主線＋講解 | `renderPracticeResult` |
+| 看答案（放棄→記 fail＋揭示）/ 演示重播（由 init_fen 逐手 `applyIccs` 算 fens，setInterval 步播） | `revealPracticeAnswer` / `togglePracticeDemo` / `startPracticeDemo` / `renderDemoStep` |
+| 成績列（`GET /api/practice/stats`：作答/正確/待複習） | `refreshPracticeStats` |
+
+> 模態 HTML：index.html `#practiceModal`（`#practiceBoard` SVG＋`.practicePanel`）；CSS：editor.css `.practiceDialog`/`.practiceMain`/`.practiceVerdict` 等（用主題 token，不寫死色）。
+> **解耦原則**：練習盤即天然沙盒（不碰 EDITOR/走子樹）；只複用無狀態共享 helper（drawBoard/applyIccs/座標）＋後端驗法/取題路由。多步逐著、落子後引擎再評等值＝後續迭代。
 
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |

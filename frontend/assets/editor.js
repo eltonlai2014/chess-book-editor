@@ -2705,6 +2705,8 @@ $("#enginePickBtn").onclick = pickEngine;
 // live-analysis toggle.
 $("#rpVars").querySelectorAll(".rpTab").forEach((b) => b.addEventListener("click", () => switchRpTab(b.dataset.tab)));
 $("#rpAnnote").querySelectorAll(".rpTab").forEach((b) => b.addEventListener("click", () => switchAnnoteTab(b.dataset.tab)));
+// 中局練習（editor-practice.js）：自帶對話框＋棋盤，gate 於 practice.db 是否存在。
+if (typeof setupPractice === "function") setupPractice();
 $("#engineToggleBtn").onclick = () => engineModeClick("prev");
 $("#engineCurBtn").onclick = () => engineModeClick("cur");
 $("#engineClearBtn").onclick = clearAnalysisHistory;

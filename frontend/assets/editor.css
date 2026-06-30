@@ -1962,6 +1962,174 @@ h2.panelHead>span {
   background: rgba(var(--accent-strong-rgb), 0.07);
 }
 
+/* ===== 中局練習 dialog（自帶互動棋盤＋側面板；獨立於主編輯器） ============= */
+.practiceDialog {
+  max-width: none;
+  width: auto;
+}
+
+.practiceTop {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.practiceTop label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.practiceTop select {
+  padding: 4px 8px;
+  background: var(--bg-1);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  max-width: 240px;
+}
+
+.practiceProgress {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 棋盤＋側面板並排；窄窗時側面板掉到棋盤下方。 */
+.practiceMain {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.practiceMain #practiceBoard {
+  display: block;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.practicePanel {
+  flex: 1 1 230px;
+  min-width: 220px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.practiceMeta .practiceSide {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.practiceMeta .practiceSide b { color: var(--accent-strong); }
+.practiceMeta .practiceSide.black b { color: var(--ply-black); }
+
+.practiceTags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.practiceCat {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.practiceStars {
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+
+.practiceBookline {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.practiceVerdict {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.practiceVerdict.ok { color: var(--ok); }
+.practiceVerdict.no { color: var(--err); }
+.practiceVerdict.gaveup { color: var(--text-muted); }
+
+.practiceAnswer {
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.practiceDemoStep {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.practiceErr { color: var(--err); font-size: 13px; }
+
+.practiceEmpty {
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.practiceCommentary {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  background: rgba(var(--accent-strong-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
+  border-radius: 8px;
+  padding: 8px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.practiceControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.practiceControls .iconBtn {
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.28);
+}
+
+.practiceControls #practiceNextBtn {
+  margin-left: 6px;
+  color: var(--btn-primary-text-hover, #1a1305);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 .demoStatus.err {
   color: var(--err);
   background: rgba(var(--err-rgb), 0.08);
