@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cchess import FULL_INIT_FEN  # noqa: E402
 from backend import app as app_module  # noqa: E402
 from backend import chessdb_service  # noqa: E402
+from backend import practice_service  # noqa: E402
 
 app = app_module.app
 app.testing = True
@@ -219,11 +220,104 @@ def test_thresholds():
           body == app_module.TRAP_THRESHOLDS, body)
 
 
+def _seed_practice_db(path):
+    """臨時 practice.db 塞兩題：A 書答=engine_best（h2e2），B engine_best≠書答。"""
+    con = practice_service.connect(path)
+    rows = [
+        # (init_fen, side, answer_iccs, answer_zh, engine_best, verdict, difficulty)
+        (START, "w", ["h2e2", "h9g7"], ["炮二平五", "馬８進７"], "h2e2", "match", 2),
+        (START, "w", ["b2e2", "b9c7"], ["炮八平五", "馬２進３"], "c3c4", "alt", 3),
+    ]
+    import json as _json
+    for fen, side, ai, az, eb, vd, diff in rows:
+        con.execute(
+            "INSERT INTO puzzles (source_rel, game_index, init_fen, side,"
+            " answer_iccs, answer_zh, commentary, category, title, book_title,"
+            " book_author, ply_count, engine_best, engine_verdict, difficulty,"
+            " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("t.cbl", rows.index((fen, side, ai, az, eb, vd, diff)), fen, side,
+             _json.dumps(ai), _json.dumps(az), "講解", "類", "題", "測試書",
+             "", len(ai), eb, vd, diff, "2026-06-30 00:00:00"))
+    con.commit()
+    con.close()
+
+
+def test_practice_routes():
+    print("[/api/practice/*]")
+    c = app.test_client()
+    orig_path = practice_service.PRACTICE_DB_PATH
+    with tempfile.TemporaryDirectory() as td:
+        dbp = Path(td) / "practice.db"
+        _seed_practice_db(dbp)
+        practice_service.PRACTICE_DB_PATH = dbp
+        practice_service._pooled_inited.discard(str(dbp))
+        try:
+            # info
+            r = c.get("/api/practice/info")
+            body = r.get_json()
+            check("info -> 200", r.status_code == 200, f"{r.status_code} {body}")
+            check("info exists true", body.get("exists") is True, body)
+            check("info total == 2", body.get("total") == 2, body)
+            check("info books shape", isinstance(body.get("books"), list)
+                  and body["books"] and "count" in body["books"][0], body)
+
+            # pick -> a puzzle with answer parsed to list
+            r = c.get("/api/practice/pick")
+            pz = r.get_json()
+            check("pick -> 200", r.status_code == 200, f"{r.status_code} {pz}")
+            check("pick has init_fen", bool(pz.get("init_fen")), pz)
+            check("pick answer_iccs is list", isinstance(pz.get("answer_iccs"), list), pz)
+
+            # check: correct first move (book) on puzzle 1
+            r = c.post("/api/practice/check",
+                       json={"puzzle_id": 1, "user_iccs": "h2e2", "time_ms": 1200})
+            body = r.get_json()
+            check("check book-correct -> 200", r.status_code == 200, body)
+            check("check correct true", body.get("correct") is True, body)
+            check("check via book", body.get("via") == "book", body)
+            check("check returns answer list", isinstance(body.get("answer_iccs"), list), body)
+
+            # check: engine-equivalent move (== engine_best, != book) on puzzle 2
+            r = c.post("/api/practice/check",
+                       json={"puzzle_id": 2, "user_iccs": "c3c4"})
+            body = r.get_json()
+            check("check engine-equiv correct", body.get("correct") is True, body)
+            check("check via engine", body.get("via") == "engine", body)
+
+            # check: wrong move
+            r = c.post("/api/practice/check",
+                       json={"puzzle_id": 1, "user_iccs": "a0a1"})
+            body = r.get_json()
+            check("check wrong -> correct false", body.get("correct") is False, body)
+            check("check wrong still returns answer", body.get("expected_iccs") == "h2e2", body)
+
+            # check: missing fields -> 400
+            r = c.post("/api/practice/check", json={"puzzle_id": 1})
+            check("check missing user_iccs -> 400", r.status_code == 400, r.status_code)
+
+            # stats reflects the 3 attempts
+            r = c.get("/api/practice/stats")
+            body = r.get_json()
+            check("stats -> 200", r.status_code == 200, body)
+            check("stats attempts == 3", body.get("attempts") == 3, body)
+            check("stats passed == 2", body.get("passed") == 2, body)
+        finally:
+            practice_service.PRACTICE_DB_PATH = orig_path
+            practice_service._pooled_inited.discard(str(dbp))
+            # db_pool keeps the WAL connection open (by design); close+evict it
+            # so the temp dir can be removed on Windows (open handle = locked file).
+            from backend import db_pool
+            con = db_pool._cache.pop(db_pool._key(dbp, "rw"), None)
+            if con is not None:
+                con.close()
+
+
 def main():
     test_move_info()
     test_eval_batch()
     test_chessdb()
     test_thresholds()
+    test_practice_routes()
     print()
     if _failures:
         print(f"FAILED: {len(_failures)} check(s): {', '.join(_failures)}")

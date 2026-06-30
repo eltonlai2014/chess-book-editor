@@ -101,6 +101,11 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 | `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:564 | 單局面即時分析串流→`engine_service.analyze_stream`（逐行 `_parse_info_line`、共用 `_spawn`/`_engine_fen`） |
 | `POST /api/engine/analyze-line` | `analyze_line`:540 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空**；**eval cache**（`eval_cache`，key＝fen+depth+depth2+引擎簽章）命中跳引擎、`fresh:true` 重算 |
 | `POST /api/engine/eval-cache` | `engine_eval_cache` | **只讀 eval cache、絕不開引擎**：回 `{hits,total,records:[rec|null]}`（每 fen 一格）。前端進 AI 分頁／在該頁切檔時自動打，有快取就立刻畫（`eval_cache.read_line`）|
+| `GET /api/practice/info` | `practice_info_route` | 題庫總覽 gate 練習入口（空庫 exists:false）→`practice_service.practice_info` |
+| `GET /api/practice/pick` | `practice_pick_route` | 抽題（到期複習→新題→任一；排除 doubt）→`pick_puzzle`。query：book/difficulty/include_doubt |
+| `GET /api/practice/puzzle/<id>` | `practice_puzzle_route` | 取單題含答案（演示/揭示）→`get_puzzle` |
+| `POST /api/practice/check` | `practice_check_route` | 評首著（書答或 engine_best＝引擎等值）＋記 attempt＋間隔重練→`check_answer` |
+| `GET /api/practice/stats` | `practice_stats_route` | 個人成績（作答/答對/狀態/到期）→`practice_progress_stats` |
 | `POST /api/xqf/save` | `save`:641 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
 
 ### CBL/CBR 編輯整合（backend/cb_service.py）
@@ -138,10 +143,15 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 抽單檔/資料夾遞迴（UPSERT，不抹既有引擎欄位） | `extract_cbl` / `extract_path` / `_upsert_puzzle` |
 | 引擎仲裁：一支引擎跑全批（複用 `engine_service.analyze_line_stream`，eval 回寫共用 cache）；判 `match`/`alt`/`doubt`；見殺改用殺步距離 refine 難度 | `arbitrate` / `_verdict` / `_mate_difficulty` |
 | 難度帶 placeholder（解題方著數＝半 ply，1..5） / 類目解析 / 書名作者 | `_difficulty` / `_parse_title` / `_book_meta` |
+| **路由層（P1）**：Flask 池化連線（db_pool，WAL，晚綁路徑可測試重導向） | `pooled` |
+| 抽題（到期複習→新題→任一，排除 doubt） / 取單題 | `pick_puzzle` / `get_puzzle` |
+| 評首著（對書答或已存 engine_best＝引擎等值）＋記 attempt＋間隔重練 | `check_answer` / `record_attempt` / `update_progress`（learning1d→review3d→mastered7d） |
+| 題庫總覽 / 個人成績 | `practice_info` / `practice_progress_stats` |
 
-> CLI（離線批次）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`。
-> 契約測：`tests/test_practice.py`（合成濾除＝CI-safe＋真語料抽樣，缺語料 SKIP）。
-> P1（UI/路由：演示/評分/成績）尚未建——見 CLAUDE.md「中局練習題庫」。
+> CLI（離線批次抽題）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`。
+> P1 路由：`GET /api/practice/info|pick|puzzle/<id>|stats`、`POST /api/practice/check`（見 API 表）。
+> 測：`tests/test_practice.py`（抽題：合成濾除 CI-safe＋真語料抽樣）＋`tests/test_routes.py`（5 條路由契約，臨時 DB 隔離）。
+> **P1 前端（演示/評分/成績 UI：`editor-practice.js`＋practice modal）尚未建**——見 CLAUDE.md「中局練習題庫」。
 
 ### XQF 譜處理（backend/xqf_service.py）
 

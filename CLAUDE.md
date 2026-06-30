@@ -392,6 +392,23 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   keep the ply placeholder. Glicko-2 is a later upgrade.
 - **practice.db is generated data, gitignored (`output/`).** The CODE is the
   deliverable; the DB is rebuilt locally via the CLI. Don't commit it.
+- **P1 routes grade the FIRST move against the book answer OR the stored
+  `engine_best` — no live engine call.** `check_answer` reads the pre-computed
+  `engine_best` (from arbitration) as the "engine-equivalent" acceptance, so an
+  already-arbitrated puzzle grades instantly without spawning Pikafish. This is a
+  first cut: it accepts exactly two moves (book first move + engine #1). True
+  per-move equivalence (re-evaluate the user's actual move, accept if it keeps a
+  winning eval) is a later iteration — don't assume the current grader covers
+  every winning alternative. Multi-move line-solving is also future work (P1 cut
+  grades move 1 only — the key move). Spaced repetition: `update_progress` is a
+  3-box Leitner (learning +1d → review +3d → mastered +7d; a fail drops back to
+  learning). `pooled()` late-binds `PRACTICE_DB_PATH` (not a signature default)
+  so tests redirect it; it's a `db_pool` WAL connection — NEVER `.close()` it
+  (route tests close+evict it from `db_pool._cache` only to free the temp dir).
+- **The Flask routes only READ/grade; they never populate.** Filling practice.db
+  is the offline CLI's job (`extract`). A fresh machine with no practice.db gets
+  `pooled()` auto-creating empty tables → `/info` returns `exists:false` → the UI
+  gates the practice entry off (same graceful-degradation as engine/eval info).
 
 ## CWP 造字區「車」亂碼 (2026-06-08)
 

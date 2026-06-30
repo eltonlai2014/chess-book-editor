@@ -21,6 +21,11 @@ Local-only by design (binds 127.0.0.1), no auth:
     POST /api/engine/path body {path}  -> persist Pikafish path to prefs
     GET  /api/engine/analyze?fen=      -> SSE live analysis of one position
     POST /api/engine/analyze-line      -> NDJSON score-trend sweep over a line
+    GET  /api/practice/info            -> {exists, total, by_difficulty, books}
+    GET  /api/practice/pick?book=&difficulty= -> one puzzle (due>new>any)
+    GET  /api/practice/puzzle/<id>     -> one puzzle incl. answer (demo/reveal)
+    POST /api/practice/check body {puzzle_id, user_iccs} -> grade + record
+    GET  /api/practice/stats           -> {attempts, passed, states, due}
     GET  /api/preferences              -> prefs dict
     POST /api/preferences body {...}   -> shallow-merge into prefs
 
@@ -83,6 +88,7 @@ from backend.config import (  # noqa: E402
 )
 from backend.picker_service import _pick_file, _pick_folder  # noqa: E402
 from backend import eval_cache  # noqa: E402
+from backend import practice_service  # noqa: E402
 from backend.engine_service import (  # noqa: E402
     _safe_int,
     analyze_line_stream,
@@ -670,6 +676,70 @@ def chessdb_query():
         return jsonify({"status": "error", "moves": [], "best": None,
                         "source": "live", "error": str(e)})
     return jsonify(result)
+
+
+# ---------- 中局練習題庫（practice.db；P1 路由） -----------------------------
+# 題庫由 backend/practice_service.py 的離線 CLI 預先填充；這些路由只讀題/評分/記成績。
+# practice.db 是編輯器自有可寫庫（pooled，WAL），不存在時 pooled() 自動建空表 →
+# /info 回 exists:false，前端據此 gate 練習入口（同 engine/info、eval/info）。
+
+@app.get("/api/practice/info")
+def practice_info_route():
+    """題庫總覽（gate 練習入口）：題數/已仲裁/難度分布/書目。空庫回 exists:false。"""
+    con = practice_service.pooled()
+    return jsonify(practice_service.practice_info(con))
+
+
+@app.get("/api/practice/pick")
+def practice_pick_route():
+    """抽一題（到期複習優先→新題→任一）。query：book / difficulty / include_doubt。"""
+    book = (request.args.get("book") or "").strip() or None
+    difficulty = request.args.get("difficulty")
+    difficulty = _safe_int(difficulty, 0) or None if difficulty else None
+    exclude_doubt = request.args.get("include_doubt") not in ("1", "true", "yes")
+    con = practice_service.pooled()
+    puzzle = practice_service.pick_puzzle(con, book=book, difficulty=difficulty,
+                                          exclude_doubt=exclude_doubt)
+    if puzzle is None:
+        return jsonify({"error": "題庫為空或無符合條件的題（先用 CLI 抽題）"}), 404
+    return jsonify(puzzle)
+
+
+@app.get("/api/practice/puzzle/<int:pid>")
+def practice_puzzle_route(pid: int):
+    """取單題完整內容（含答案）——演示/解答揭示用。"""
+    con = practice_service.pooled()
+    puzzle = practice_service.get_puzzle(con, pid)
+    if puzzle is None:
+        return jsonify({"error": f"查無題目 id={pid}"}), 404
+    return jsonify(puzzle)
+
+
+@app.post("/api/practice/check")
+def practice_check_route():
+    """評使用者首著（對書答或已存 engine_best＝引擎等值），記 attempt＋更新間隔重練。
+
+    Body：``{puzzle_id, user_iccs(單著或list), time_ms?}``。回 ``{correct, via,
+    expected_iccs, answer_iccs, answer_zh, commentary, ...}``。
+    """
+    body = request.get_json(silent=True) or {}
+    pid = _safe_int(body.get("puzzle_id"), 0)
+    user_iccs = body.get("user_iccs")
+    if not pid or not user_iccs:
+        return jsonify({"error": "puzzle_id 與 user_iccs 為必填"}), 400
+    con = practice_service.pooled()
+    result = practice_service.check_answer(con, pid, user_iccs,
+                                           time_ms=_safe_int(body.get("time_ms"), 0))
+    if result is None:
+        return jsonify({"error": f"查無題目 id={pid}"}), 404
+    return jsonify(result)
+
+
+@app.get("/api/practice/stats")
+def practice_stats_route():
+    """個人成績總覽（成績分頁）：作答數/答對數/狀態分布/到期數。"""
+    con = practice_service.pooled()
+    return jsonify(practice_service.practice_progress_stats(con))
 
 
 @app.post("/api/xqf/save")

@@ -380,6 +380,170 @@ def _verdict(best: str | None, cp: int | None, mate: int | None,
     return "doubt"
 
 
+# ---------- 路由用：池化連線 + 抽題 + 評分 + 間隔重練 ------------------------
+#
+# CLI 用 connect()（自有連線、自行 close）；Flask 用 pooled()（程序級池化，勿 close）。
+# 評分用「已存的 engine_best」判引擎等值——免每次開引擎，已仲裁的題秒回。
+
+_pooled_inited: set[str] = set()
+
+
+def pooled(db_path: Path | None = None) -> sqlite3.Connection:
+    """Flask 用的程序級池化可寫連線（db_pool，WAL）；首次建表。**勿 close**。
+
+    晚綁 ``PRACTICE_DB_PATH``（不在簽名預設綁死）——測試可改 module 變數重導向。
+    """
+    from backend import db_pool
+    db_path = db_path or PRACTICE_DB_PATH
+    con = db_pool.get_rw(db_path)
+    key = str(db_path)
+    if key not in _pooled_inited:
+        con.executescript(_SCHEMA)
+        con.commit()
+        _pooled_inited.add(key)
+    return con
+
+
+def practice_info(con: sqlite3.Connection) -> dict:
+    """題庫總覽（gate UI 入口）：題數、已仲裁數、難度分布、書目清單。"""
+    total = con.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0]
+    arbitrated = con.execute(
+        "SELECT COUNT(*) FROM puzzles WHERE engine_verdict IS NOT NULL").fetchone()[0]
+    by_diff = {int(k): v for k, v in con.execute(
+        "SELECT difficulty, COUNT(*) FROM puzzles GROUP BY difficulty").fetchall()}
+    books = [{"book": r[0], "count": r[1]} for r in con.execute(
+        "SELECT book_title, COUNT(*) c FROM puzzles GROUP BY book_title"
+        " ORDER BY c DESC").fetchall()]
+    return {"exists": total > 0, "total": total, "arbitrated": arbitrated,
+            "by_difficulty": by_diff, "books": books}
+
+
+def _filters(book, difficulty, exclude_doubt) -> tuple[str, list]:
+    where, params = [], []
+    if book:
+        where.append("p.book_title = ?"); params.append(book)
+    if difficulty:
+        where.append("p.difficulty = ?"); params.append(int(difficulty))
+    if exclude_doubt:
+        where.append("(p.engine_verdict IS NULL OR p.engine_verdict != 'doubt')")
+    return ((" AND " + " AND ".join(where)) if where else ""), params
+
+
+def pick_puzzle(con: sqlite3.Connection, book: str | None = None,
+                difficulty: int | None = None, exclude_doubt: bool = True) -> dict | None:
+    """抽一題：① 到期複習（progress.next_review_ts ≤ now，最舊優先）→ ② 新題
+    （無 progress，隨機）→ ③ 任一符合（隨機）。預設排除 doubt 題。"""
+    wsql, params = _filters(book, difficulty, exclude_doubt)
+    now = _now()
+    row = con.execute(
+        f"SELECT p.* FROM puzzles p JOIN progress g ON g.puzzle_id = p.id"
+        f" WHERE g.next_review_ts IS NOT NULL AND g.next_review_ts <= ?{wsql}"
+        f" ORDER BY g.next_review_ts LIMIT 1", [now, *params]).fetchone()
+    if row is None:
+        row = con.execute(
+            f"SELECT p.* FROM puzzles p LEFT JOIN progress g ON g.puzzle_id = p.id"
+            f" WHERE g.puzzle_id IS NULL{wsql} ORDER BY RANDOM() LIMIT 1",
+            params).fetchone()
+    if row is None:
+        row = con.execute(
+            f"SELECT p.* FROM puzzles p WHERE 1=1{wsql} ORDER BY RANDOM() LIMIT 1",
+            params).fetchone()
+    return _puzzle_dict(row) if row else None
+
+
+def get_puzzle(con: sqlite3.Connection, pid: int) -> dict | None:
+    row = con.execute("SELECT * FROM puzzles WHERE id = ?", (pid,)).fetchone()
+    return _puzzle_dict(row) if row else None
+
+
+def _puzzle_dict(row: sqlite3.Row) -> dict:
+    """puzzle row → 前端 JSON（answer 解析成 list；含 progress 若有）。"""
+    d = dict(row)
+    d["answer_iccs"] = json.loads(d["answer_iccs"])
+    d["answer_zh"] = json.loads(d["answer_zh"])
+    return d
+
+
+def check_answer(con: sqlite3.Connection, pid: int, user_iccs,
+                 time_ms: int = 0) -> dict | None:
+    """評使用者**首著**：對書答首著或引擎最佳著（已存 engine_best＝引擎等值）相符即過。
+    記一筆 attempt＋更新 progress（間隔重練）。回判定＋完整答案供 UI 揭示。
+
+    （首著評分為第一版；多步逐著、落子後引擎再評等值，留待後續迭代。）
+    """
+    row = con.execute("SELECT * FROM puzzles WHERE id = ?", (pid,)).fetchone()
+    if row is None:
+        return None
+    answer = json.loads(row["answer_iccs"])
+    answer_zh = json.loads(row["answer_zh"])
+    expected = answer[0] if answer else None
+    user_first = user_iccs[0] if isinstance(user_iccs, list) else user_iccs
+    correct, via = False, None
+    if expected and user_first == expected:
+        correct, via = True, "book"
+    elif row["engine_best"] and user_first == row["engine_best"]:
+        correct, via = True, "engine"
+    record_attempt(con, pid, "pass" if correct else "fail", user_first, time_ms)
+    update_progress(con, pid, correct)
+    return {
+        "correct": correct, "via": via,
+        "expected_iccs": expected,
+        "expected_zh": answer_zh[0] if answer_zh else None,
+        "engine_best": row["engine_best"],
+        "answer_iccs": answer, "answer_zh": answer_zh,
+        "commentary": row["commentary"], "ply_count": row["ply_count"],
+    }
+
+
+def record_attempt(con: sqlite3.Connection, pid: int, result: str,
+                   user_iccs, time_ms: int) -> None:
+    con.execute(
+        "INSERT INTO attempts (puzzle_id, ts, result, user_iccs, time_ms)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (pid, _now(), result,
+         user_iccs if isinstance(user_iccs, str) else json.dumps(user_iccs),
+         int(time_ms or 0)))
+    con.commit()
+
+
+# 間隔重練：答對沿 new/learning→review(+3d)→mastered(+7d)；答錯回 learning(+1d)。
+_REVIEW_DAYS = {"learning": 1, "review": 3, "mastered": 7}
+
+
+def update_progress(con: sqlite3.Connection, pid: int, passed: bool) -> None:
+    row = con.execute(
+        "SELECT state, fails FROM progress WHERE puzzle_id = ?", (pid,)).fetchone()
+    state = row["state"] if row else "new"
+    fails = row["fails"] if row else 0
+    if not passed:
+        state, fails, days = "learning", fails + 1, _REVIEW_DAYS["learning"]
+    elif state in ("new", "learning"):
+        state, days = "review", _REVIEW_DAYS["review"]
+    else:  # review / mastered → mastered（之後仍每 7 天複習）
+        state, days = "mastered", _REVIEW_DAYS["mastered"]
+    con.execute(
+        "INSERT INTO progress (puzzle_id, state, fails, next_review_ts)"
+        " VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(puzzle_id) DO UPDATE SET"
+        " state=excluded.state, fails=excluded.fails,"
+        " next_review_ts=excluded.next_review_ts",
+        (pid, state, fails, _future_ts(days)))
+    con.commit()
+
+
+def practice_progress_stats(con: sqlite3.Connection) -> dict:
+    """個人成績總覽（成績分頁用）。"""
+    a = con.execute(
+        "SELECT COUNT(*), COALESCE(SUM(result='pass'),0) FROM attempts").fetchone()
+    states = dict(con.execute(
+        "SELECT state, COUNT(*) FROM progress GROUP BY state").fetchall())
+    due = con.execute(
+        "SELECT COUNT(*) FROM progress WHERE next_review_ts <= ?",
+        (_now(),)).fetchone()[0]
+    return {"attempts": a[0] or 0, "passed": a[1] or 0,
+            "states": states, "due": due}
+
+
 # ---------- 統計 / CLI -------------------------------------------------------
 
 def stats(con: sqlite3.Connection) -> dict:
@@ -402,6 +566,12 @@ def stats(con: sqlite3.Connection) -> dict:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _future_ts(days: float) -> str:
+    """now + days → 同 _now() 格式的可排序字串（間隔重練到期時間）。"""
+    return time.strftime("%Y-%m-%d %H:%M:%S",
+                         time.localtime(time.time() + days * 86400))
 
 
 def _print_extract(results: list[dict], elapsed: float) -> None:
