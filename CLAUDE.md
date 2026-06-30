@@ -345,6 +345,54 @@ are reused verbatim — the only new code is the format boundary in
     terminator. Regression: `test_cbl_title_even_aligned_decode` in
     `tests/test_cb_roundtrip.py`.
 
+## 中局練習題庫 (P0) (2026-06-30)
+
+`backend/practice_service.py` turns the CBL corpus (殺法/戰術/中局 books) into a
+middlegame-puzzle bank in the editor's OWN writable `output/practice.db`. A book
+game = `cb_service.load_cb`'s `{init_fen, init_annote, roots}`; a puzzle = the
+custom set-up position + one answer mainline + commentary. This is the depth
+side of the editor's purpose (drill into one position), reusing the CBL stack —
+**not** a new analysis pipeline. P0 = the offline extraction CLI; **P1 (the play
+UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
+
+- **Read-only at the source; practice.db is the only thing this writes.** Same
+  rule as `eval_cache` / the chessdb editor cache — never write the CBL, never
+  touch positions.db. `connect()` builds three tables (`puzzles` keyed UNIQUE on
+  `(source_rel, game_index)`, plus `attempts` / `progress` for P1's scoring +
+  spaced-repetition). Re-extracting UPSERTs and does NOT clobber the engine
+  columns (so a re-extract after a content fix keeps the arbitration).
+- **The answer mainline is "first child every ply" (`_mainline`).** CBL puzzle
+  trees store the solution as the main line; siblings are variations. Don't walk
+  variations into the answer — the puzzle has ONE intended line (alternatives are
+  judged at play-time by engine equivalence, not baked into `answer_iccs`).
+- **Extraction filters are deliberate — and verified to drop only non-puzzles.**
+  `build_puzzle` skips: `no-fen`, `no-answer` (front-matter like 内容提要/作者简介
+  → empty roots), `too-short` (< `min_ply`, default 2 → trivial one-movers), and
+  `opening-start` (init_fen == the standard start board → a 布局 game from move 1,
+  NOT a middlegame set-up). Spot-checked: 弃子.CBL (17 布局譜 from std start) and
+  攻防新战术's chapter headers correctly drop to 0; real tactic books (少子百局谱,
+  弃子十三刀100例) all pass. So a "0 puzzles" book is genuinely 布局/前言, not a
+  filter bug. Filters log per-reason counts — **no silent drops**.
+- **Engine arbitration verdict ≠ puzzle quality gate.** `arbitrate` runs ONE
+  Pikafish over the whole batch (reuses `engine_service.analyze_line_stream`, so
+  the evals also land in the shared `editor_eval_cache.db` — re-arbitration is
+  free). `_verdict`: `match` (engine_best == book's first move), `alt` (different
+  first move but the mover is clearly winning — engine sees mate, or mover-POV
+  cp ≥ 300 → book line is one of several equivalent wins), `doubt` (engine
+  doesn't confirm the mover is winning). **`doubt` is a FLAG, not "delete".** At a
+  shallow depth (12) deep sacrifice tactics (弃子) legitimately read as `doubt`
+  because the material payback resolves deeper — re-run `arbitrate --fresh
+  --depth <bigger>` to reduce false doubts. Don't auto-prune `doubt` rows.
+- **Difficulty: ply placeholder, refined to mate-distance.** `_difficulty` seeds
+  1..5 from the solver's move count (half the mainline plies) so `--no-engine`
+  still gives a band; `arbitrate` then OVERRIDES it with the mate distance
+  (`_mate_difficulty(|engine_mate|)`) whenever the engine finds a forced mate for
+  the mover — mate-in-N is a far better signal than book-line length (which
+  includes the opponent's replies + extra mop-up moves). Non-mate (cp) puzzles
+  keep the ply placeholder. Glicko-2 is a later upgrade.
+- **practice.db is generated data, gitignored (`output/`).** The CODE is the
+  deliverable; the DB is rebuilt locally via the CLI. Don't commit it.
+
 ## CWP 造字區「車」亂碼 (2026-06-08)
 
 The `以民金儒` CWP corpus (1267 files) was authored in CCBridge, which stuffed 車

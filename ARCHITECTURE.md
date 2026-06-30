@@ -31,6 +31,7 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
   ├─ vendor/io_xqf_patched.py  PatchedXQFWriter（XQF 寫檔，修上游 3 bug）
   ├─ eval_service.py  唯讀讀取 chess-book-ai 的 positions.db（評估/雲庫勝率）
   ├─ chessdb_service.py  即時查 chessdb.cn 雲庫（cache-first；寫 editor 自有快取）
+  ├─ practice_service.py  中局練習抽題管線＋practice.db（從 CBL 抽題＋引擎仲裁；CLI，P0）
   ├─ db_pool.py  程序級 SQLite 連線池（熱路徑 reuse，免每查 connect/close）
   └─ (subprocess) pikafish  即時分析，execs 既有 binary，逐層 stream，不落地
         ▲
@@ -122,6 +123,25 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 > （`write_cbr_bytes`/`write_cbl_bytes`）。保真關鍵：`write_cbl_bytes` 的 `guids` 參數
 > 讓覆寫沿用原 GUID（未給則每次重新產生→未編輯盤身分會漂移）。
 > 往返測：`tests/test_cb_roundtrip.py`（CBR 路徑全等＋CBL 改一盤後其餘盤/GUID/metadata 不變）。
+
+### 中局練習抽題（backend/practice_service.py，P0）
+
+從 CBL 書庫（殺法/戰術/中局）抽中局練習題進編輯器自有 `output/practice.db`。一局 =
+`load_cb` 的 `{init_fen, init_annote, roots}`；題 = 自訂盤面＋一條答案主線＋講解。
+**唯讀於來源 CBL**；practice.db 是本模組唯一寫入的題庫（平行 eval_cache / chessdb cache）。
+
+| 功能 | 函式 |
+|---|---|
+| 開/建 practice.db（puzzles/attempts/progress 三表，`UNIQUE(source_rel,game_index)`） | `connect` / `_SCHEMA` |
+| 一局 JSON → 題（含濾除）：no-fen / no-answer / too-short(<min_ply) / opening-start(標準起手布局) | `build_puzzle` |
+| 答案主線＝沿 roots[0] 每步**第一個 child** 走到底（iccs/中文/節點註解） | `_mainline` |
+| 抽單檔/資料夾遞迴（UPSERT，不抹既有引擎欄位） | `extract_cbl` / `extract_path` / `_upsert_puzzle` |
+| 引擎仲裁：一支引擎跑全批（複用 `engine_service.analyze_line_stream`，eval 回寫共用 cache）；判 `match`/`alt`/`doubt`；見殺改用殺步距離 refine 難度 | `arbitrate` / `_verdict` / `_mate_difficulty` |
+| 難度帶 placeholder（解題方著數＝半 ply，1..5） / 類目解析 / 書名作者 | `_difficulty` / `_parse_title` / `_book_meta` |
+
+> CLI（離線批次）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`。
+> 契約測：`tests/test_practice.py`（合成濾除＝CI-safe＋真語料抽樣，缺語料 SKIP）。
+> P1（UI/路由：演示/評分/成績）尚未建——見 CLAUDE.md「中局練習題庫」。
 
 ### XQF 譜處理（backend/xqf_service.py）
 
