@@ -422,11 +422,30 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   point (master picked the self-contained-dialog architecture 2026-06-30). Entry
   is `setupPractice()` (called once from editor.js boot) + a header `#practiceBtn`
   shown only when `/info` says the bank exists.
-- **First-cut UX choices open to iteration (don't treat as final):** a wrong
-  first move immediately reveals the answer + records a fail (no retry loop);
-  grading is the FIRST move only; the demo replays the book mainline on a timer.
-  Retry-on-wrong, multi-move solving, and per-move engine equivalence are the
-  expected next polish rounds (master's UI cadence is 2–3 rounds).
+- **Solving flow (2026-06-30 redesign, master-directed):** the user plays their
+  side on the practice board. A move matching the book answer at the current ply
+  → the system auto-plays the opponent's book reply and the user keeps solving
+  (`continueBookLine`); completing the whole line → 完全解出. A NON-answer move
+  does NOT reveal/end — it shows a hint + the AI eval & the loss vs best
+  (`enterSparring` runs ONE `analyze-line` over `[preFen, postFen]` at
+  `PRACTICE.aiDepth`, `fmtEval`/`fmtGap` render it mover-POV), then OPENS
+  play-vs-AI from that position: the engine replies at depth `aiDepth`
+  (`sparEngineReply`) and the user can spar on. Depth defaults to 20, set via
+  `PREFS.practiceAiDepth` (settings field `#practiceDepthInput`).
+  - **Stats record the FIRST move only, once** (`recordFirstMove` → `/check`,
+    guarded by `PRACTICE.recorded`): finding the key move = pass. The multi-move
+    continuation and the spar are for learning, NOT re-graded — don't add per-ply
+    `/check` calls (would inflate the attempt count).
+  - **Grading is LOCAL** (compare to `answer_iccs[plyIdx]`); `/check`'s server-
+    side grade is used only to record the first move. The engine (`analyze-line`,
+    cached in `editor_eval_cache.db`) is hit only on a wrong move / during spar —
+    NOT on every move. No engine configured → wrong move degrades to reveal-answer
+    (`_spar:"noEngine"`), never a hard error.
+  - Only own-side pieces are selectable (`practicePieceSide` vs
+    `practiceSideToMove`), so the user can't accidentally move the engine's side.
+  - Still-open iterations: per-move engine equivalence (a non-book but equally-
+    winning move currently counts as "wrong" → enters spar with ~0 loss, which
+    reads fine but isn't celebrated), and richer spar UX (live depth ticker).
 
 ## CWP 造字區「車」亂碼 (2026-06-08)
 

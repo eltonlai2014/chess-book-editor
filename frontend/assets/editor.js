@@ -2763,6 +2763,18 @@ if (aiDepthInput) {
     savePreference("aiAnalysisDepth", v);
   });
 }
+// 中局練習對弈層數（預設 20，editor-practice.js 讀 PREFS.practiceAiDepth）。
+const practiceDepthInput = $("#practiceDepthInput");
+if (practiceDepthInput) {
+  practiceDepthInput.addEventListener("change", () => {
+    let v = parseInt(practiceDepthInput.value, 10);
+    if (!Number.isFinite(v)) v = 20;
+    v = Math.max(1, Math.min(30, v));
+    practiceDepthInput.value = v;
+    savePreference("practiceAiDepth", v);
+    if (typeof PRACTICE === "object" && PRACTICE) PRACTICE.aiDepth = v;
+  });
+}
 const aiDepth2Input = $("#aiDepth2Input");
 if (aiDepth2Input) {
   aiDepth2Input.addEventListener("change", () => {
@@ -3295,6 +3307,8 @@ async function recoverSettingsFromLocalStorage() {
   if (aiDepthEl) aiDepthEl.value = aiDepth();
   const aiDepth2El = $("#aiDepth2Input");
   if (aiDepth2El) aiDepth2El.value = aiDepth2();
+  const practiceDepthEl = $("#practiceDepthInput");
+  if (practiceDepthEl) practiceDepthEl.value = practiceAiDepthPref();
   const aiDiffThreshEl = $("#aiDiffThreshInput");
   if (aiDiffThreshEl) aiDiffThreshEl.value = aiDiffThreshold();
   const aiBlunderThreshEl = $("#aiBlunderThreshInput");

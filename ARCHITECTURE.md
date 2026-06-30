@@ -380,13 +380,15 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 入口：開機 `GET /api/practice/info` 探測題庫，有題才顯示 header `#practiceBtn`（同 engine/eval info 優雅降級）；填書目下拉 | `setupPractice`（由 editor.js boot 呼一次）/ `fetchPracticeInfo` / `populatePracticeBooks` |
 | 開對話框→`pick` 抽題（書目/難度濾）→渲染盤面＋題目資訊（輪到X方/類目/★難度/書名） | `openPracticeModal` / `loadPracticePuzzle` / `renderPracticeMeta` |
 | **自帶點擊棋盤**：`drawBoard`(board.js) 畫子後**自繪**點擊覆蓋層（透明 rects＋合法落點環/點＋選中光暈），鏡像 `installBoardOverlay` 但讀 `PRACTICE`、無浮子 | `renderPracticeBoard` / `installPracticeOverlay` |
-| 選子→`POST /api/xqf/legal-targets`（race guard）；落子→`POST /api/practice/check` 評首著（書答或 engine_best＝引擎等值），`applyIccs` 顯示該手 | `practiceSquareClick` / `practicePlayMove` |
-| 結果：✓正解（via book/engine）/✗不是最佳手；揭示答案主線＋講解 | `renderPracticeResult` |
-| 看答案（放棄→記 fail＋揭示）/ 演示重播（由 init_fen 逐手 `applyIccs` 算 fens，setInterval 步播） | `revealPracticeAnswer` / `togglePracticeDemo` / `startPracticeDemo` / `renderDemoStep` |
-| 成績列（`GET /api/practice/stats`：作答/正確/待複習） | `refreshPracticeStats` |
+| 選子（只選輪到走的一方 `practicePieceSide`/`practiceSideToMove`）→`POST /api/xqf/legal-targets`（race guard）；落子 `applyIccs` | `practiceSquareClick` / `practicePlayMove` |
+| **多步逐著**：對書中該手→系統回對手書著→續解，全對＝完全解出 | `continueBookLine` / `practiceFullySolved` |
+| **非正解→人機對弈**：顯示 AI 評分與落差（一次 `analyze-line [preFen,postFen]`，`fmtEval`/`fmtGap` 解題方視角）→開放在該局面與 AI 對弈（深度 `PRACTICE.aiDepth`，預設 20／`PREFS.practiceAiDepth`／設定 `#practiceDepthInput`） | `enterSparring` / `sparEngineReply` / `playEngineMove` / `practiceAnalyze` |
+| 成績**只記首著一次**（`recordFirstMove`→`/check`，`PRACTICE.recorded` 守）；本地逐手判定不重複記 | `recordFirstMove` |
+| 看答案（放棄→記 fail＋揭示）/ 演示重播（init_fen 逐手 `applyIccs` 算 fens，setInterval 步播）/ 成績列（`GET /api/practice/stats`） | `revealPracticeAnswer` / `startPracticeDemo` / `renderDemoStep` / `refreshPracticeStats` |
 
-> 模態 HTML：index.html `#practiceModal`（`#practiceBoard` SVG＋`.practicePanel`）；CSS：editor.css `.practiceDialog`/`.practiceMain`/`.practiceVerdict` 等（用主題 token，不寫死色）。
-> **解耦原則**：練習盤即天然沙盒（不碰 EDITOR/走子樹）；只複用無狀態共享 helper（drawBoard/applyIccs/座標）＋後端驗法/取題路由。多步逐著、落子後引擎再評等值＝後續迭代。
+> 模態 HTML：index.html `#practiceModal`（`#practiceBoard` SVG＋`.practicePanel`）；CSS：editor.css `.practiceDialog`/`.practiceMain`/`.practiceSparNote` 等（用主題 token，不寫死色）。
+> **解耦原則**：練習盤即天然沙盒（不碰 EDITOR/走子樹）；只複用無狀態共享 helper（drawBoard/applyIccs/座標）＋後端驗法（legal-targets）/取題（practice/*）/評分著（analyze-line）路由。
+> 引擎只在「走錯／對弈」時打（analyze-line，eval 進共用 cache），非每步；無引擎則走錯退化成揭答。仍待迭代：非書著但等值仍判「錯」（進對弈、落差≈0）。
 
 **設定 / 路徑 / 偏好**
 | 功能 | 函式:行 |

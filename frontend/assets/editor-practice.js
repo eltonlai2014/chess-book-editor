@@ -3,31 +3,42 @@
  * 中局練習 — 獨立對話框＋自帶互動棋盤（P1 前端）。
  *
  * 刻意與主編輯器/走子樹「完全解耦」：練習盤是 #practiceModal 內的 #practiceBoard，
- * 自己一套狀態（PRACTICE），不碰 EDITOR、不碰主盤、不碰走子樹——所以練習本身就是
- * 一個天然沙盒（「重用沙盒＝不落地」的精神）。只複用無狀態的共享 helper：
- *   board.js：drawBoard / applyIccs / screenX / screenY / parseFen / SVG_NS
- *   editor.js：editorColors / squareIccs / parseSquare（runtime 才呼叫，不怕載入序）
- *   後端：POST /api/xqf/legal-targets、/api/xqf/move-info 驗法；/api/practice/* 取題評分。
+ * 自己一套狀態（PRACTICE），不碰 EDITOR、不碰主盤、不碰走子樹——練習本身即天然沙盒。
+ * 只複用無狀態共享 helper：board.js 的 drawBoard/applyIccs/screenX/screenY/parseFen/
+ * SVG_NS、editor.js 的 editorColors/squareIccs/parseSquare（runtime 才呼叫，不怕載入序）；
+ * 後端 POST /api/xqf/legal-targets 驗合法落點、/api/engine/analyze-line 取評分＋AI 著、
+ * /api/practice/* 取題記成績。
  *
- * 評分為「找關鍵首著」：使用者下第一手 → /api/practice/check 對書答或引擎等值判定，
- * 再揭示整條答案＋講解，可一鍵演示重播。多步逐著留待後續迭代（見 CLAUDE.md）。
+ * 解題流程（2026-06-30 改版）：
+ *   · 多步逐著：走對書中該手 → 系統回對手書著 → 續解到底（全對＝完全解出）。
+ *   · 走非正解：不揭答、不結束 → 提示「非正解」＋顯示 AI 評分與落差（虧多少）→
+ *     接著開放在該局面與 AI 對弈（深度 PREFS.practiceAiDepth，預設 20，設定可改）。
+ *   · 成績只記「首著對不對」一次（/check）；多步續解/對弈為學習，不重複記。
  */
 
 const PRACTICE = {
-  info: null,         // /api/practice/info（gate 入口＋填書目）
-  puzzle: null,       // 目前題（/pick 或 /puzzle）
-  fen: null,          // 練習盤目前 fen（起＝init_fen，下首著後推進顯示）
-  lastIccs: null,     // 盤面高亮的最後一手
-  selected: null,     // 已選來源格 iccs
-  legal: [],          // 已選子的合法落點
-  solved: false,      // 已評分／已揭示（鎖盤，改用「下一題」）
-  result: null,       // check 回傳
-  startTs: 0,         // 計時（time_ms）
-  demo: null,         // 答案重播 {fens, lastIccs[], idx, timer}
+  info: null,
+  puzzle: null,
+  fen: null,
+  lastIccs: null,
+  selected: null,
+  legal: [],
+  plyIdx: 0,          // 答案線目前 ply（解題方走偶數 index、系統走奇數）
+  mode: "solve",      // "solve"(循書) | "spar"(人機對弈) | "done"(鎖盤)
+  recorded: false,    // 首著已記一次成績
+  busy: false,        // 等引擎中（鎖盤）
+  startTs: 0,
+  demo: null,
+  aiDepth: 20,
   filters: { book: "", difficulty: "" },
 };
 
 function $pr(id) { return document.getElementById(id); }
+
+function practiceAiDepthPref() {
+  const d = parseInt((typeof PREFS === "object" && PREFS) ? PREFS.practiceAiDepth : 20, 10);
+  return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 20;
+}
 
 function setupPractice() {
   const btn = $pr("practiceBtn");
@@ -40,11 +51,9 @@ function setupPractice() {
   $pr("practiceBoard").addEventListener("click", onPracticeSquareClick);
   $pr("practiceBook").onchange = (e) => { PRACTICE.filters.book = e.target.value; };
   $pr("practiceDiff").onchange = (e) => { PRACTICE.filters.difficulty = e.target.value; };
-  // Esc 關閉（僅當練習開著）
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !$pr("practiceModal").hidden) closePracticeModal();
   });
-  // 開機探測題庫；有題才顯示入口（同 engine/eval info 的優雅降級）。
   fetchPracticeInfo();
 }
 
@@ -72,6 +81,7 @@ function populatePracticeBooks(info) {
 
 async function openPracticeModal() {
   stopPracticeDemo();
+  PRACTICE.aiDepth = practiceAiDepthPref();
   $pr("practiceModal").hidden = false;
   await refreshPracticeStats();
   await loadPracticePuzzle();
@@ -97,11 +107,14 @@ async function loadPracticePuzzle() {
     PRACTICE.lastIccs = null;
     PRACTICE.selected = null;
     PRACTICE.legal = [];
-    PRACTICE.solved = false;
-    PRACTICE.result = null;
+    PRACTICE.plyIdx = 0;
+    PRACTICE.mode = "solve";
+    PRACTICE.recorded = false;
+    PRACTICE.busy = false;
+    PRACTICE.aiDepth = practiceAiDepthPref();
     PRACTICE.startTs = Date.now();
     renderPracticeMeta();
-    renderPracticeResult(null);
+    renderPracticeResult({ _hint: "輪到你走，找出最佳一手" });
     $pr("practiceCommentary").hidden = true;
     setPracticeButtons();
     renderPracticeBoard();
@@ -112,6 +125,7 @@ async function loadPracticePuzzle() {
 
 function showPracticeEmpty(msg) {
   PRACTICE.puzzle = null;
+  PRACTICE.mode = "done";
   $pr("practiceMeta").innerHTML =
     `<div class="practiceEmpty">${escHtml(msg || "題庫為空或無符合條件的題（請先用 CLI 抽題）")}</div>`;
   $pr("practiceResult").innerHTML = "";
@@ -121,10 +135,14 @@ function showPracticeEmpty(msg) {
 
 /* ---------- 盤面渲染（自帶點擊覆蓋層，鏡像 installBoardOverlay 但讀 PRACTICE） ---- */
 
+function practiceInteractive() {
+  return PRACTICE.puzzle && PRACTICE.mode !== "done" && !PRACTICE.busy && !PRACTICE.demo;
+}
+
 function renderPracticeBoard() {
   const svg = $pr("practiceBoard");
   drawBoard(svg, PRACTICE.fen, PRACTICE.lastIccs, null);
-  if (!PRACTICE.solved) installPracticeOverlay(svg);
+  if (practiceInteractive()) installPracticeOverlay(svg);
 }
 
 function installPracticeOverlay(svg) {
@@ -132,7 +150,6 @@ function installPracticeOverlay(svg) {
   const layer = document.createElementNS(SVG_NS, "g");
   layer.setAttribute("class", "clickLayer");
 
-  // 合法落點：敵子上空心環（吃），空格實心點（走）。
   const occupied = new Set();
   if (PRACTICE.fen) {
     const { rows } = parseFen(PRACTICE.fen);
@@ -157,7 +174,6 @@ function installPracticeOverlay(svg) {
     layer.appendChild(mark);
   }
 
-  // 選中來源格的光暈。
   if (PRACTICE.selected) {
     const { col, row } = parseSquare(PRACTICE.selected);
     const halo = document.createElementNS(SVG_NS, "circle");
@@ -168,7 +184,6 @@ function installPracticeOverlay(svg) {
     layer.appendChild(halo);
   }
 
-  // 透明點擊矩形（蓋最上，data-iccs）。
   for (let r = 0; r <= 9; r++) {
     for (let c = 0; c <= 8; c++) {
       const rect = document.createElementNS(SVG_NS, "rect");
@@ -183,22 +198,35 @@ function installPracticeOverlay(svg) {
   svg.appendChild(layer);
 }
 
-/* ---------- 點擊／落子／評分 ------------------------------------------------ */
+/* ---------- 點擊／選子（只選輪到走的一方） ---------------------------------- */
+
+function practiceSideToMove() {
+  return (PRACTICE.fen && PRACTICE.fen.split(" ")[1] === "b") ? "b" : "w";
+}
+
+function practicePieceSide(sq) {
+  const { rows } = parseFen(PRACTICE.fen);
+  const { col, row } = parseSquare(sq);
+  const p = rows[row] && rows[row][col];
+  if (!p) return null;
+  return p === p.toUpperCase() ? "w" : "b";   // 紅=大寫=w，黑=小寫=b
+}
 
 function onPracticeSquareClick(e) {
-  if (PRACTICE.solved || !PRACTICE.puzzle) return;
+  if (!practiceInteractive()) return;
   const target = e.target.closest("[data-iccs]");
   if (!target) return;
   practiceSquareClick(target.getAttribute("data-iccs"));
 }
 
 async function practiceSquareClick(sq) {
-  // 已選子且點到合法落點 → 落子評分。
   if (PRACTICE.selected && PRACTICE.legal.includes(sq)) {
     await practicePlayMove(PRACTICE.selected + sq);
     return;
   }
-  // 否則（重）選來源格，取合法落點。
+  const ps = practicePieceSide(sq);
+  if (!ps) { PRACTICE.selected = null; PRACTICE.legal = []; renderPracticeBoard(); return; }
+  if (ps !== practiceSideToMove()) return;      // 只選輪到走的一方
   PRACTICE.selected = sq;
   PRACTICE.legal = [];
   renderPracticeBoard();
@@ -208,68 +236,160 @@ async function practiceSquareClick(sq) {
       body: JSON.stringify({ fen: PRACTICE.fen, from: sq }),
     });
     const resp = await r.json();
-    if (PRACTICE.selected !== sq) return;           // race guard
+    if (PRACTICE.selected !== sq) return;        // race guard
     PRACTICE.legal = (resp && resp.targets) || [];
     renderPracticeBoard();
   } catch (_) { /* 留空，點擊落子仍可用 */ }
 }
 
+/* ---------- 落子：多步逐著 / 非正解→對弈 ----------------------------------- */
+
 async function practicePlayMove(iccs) {
+  if (PRACTICE.busy || PRACTICE.mode === "done") return;
+  const preFen = PRACTICE.fen;
   PRACTICE.selected = null;
   PRACTICE.legal = [];
-  const timeMs = Date.now() - PRACTICE.startTs;
-  let res;
-  try {
-    const r = await fetch("/api/practice/check", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ puzzle_id: PRACTICE.puzzle.id, user_iccs: iccs, time_ms: timeMs }),
-    });
-    res = await r.json();
-  } catch (e) {
-    res = { error: e.message };
-  }
-  if (res.error) { renderPracticeResult({ correct: false, _err: res.error }); return; }
-  PRACTICE.solved = true;
-  PRACTICE.result = res;
-  PRACTICE.fen = applyIccs(PRACTICE.fen, iccs);     // 顯示使用者剛走的手
+  PRACTICE.fen = applyIccs(preFen, iccs);
   PRACTICE.lastIccs = iccs;
   renderPracticeBoard();
-  renderPracticeResult(res);
-  setPracticeButtons();
-  refreshPracticeStats();
+
+  if (PRACTICE.mode === "spar") { await sparEngineReply(); return; }
+
+  // solve 模式：對書中該手？
+  const answer = PRACTICE.puzzle.answer_iccs || [];
+  const expected = answer[PRACTICE.plyIdx];
+  const isBook = iccs === expected;
+
+  if (!PRACTICE.recorded) {                       // 首著記一次成績（/check）
+    PRACTICE.recorded = true;
+    recordFirstMove(iccs);
+  }
+
+  if (isBook) { await continueBookLine(); return; }
+  await enterSparring(preFen);
 }
 
-/* ---------- 揭示答案 / 演示重播 -------------------------------------------- */
+async function continueBookLine() {
+  const answer = PRACTICE.puzzle.answer_iccs || [];
+  const zh = PRACTICE.puzzle.answer_zh || [];
+  PRACTICE.plyIdx += 1;
+  if (PRACTICE.plyIdx >= answer.length) { practiceFullySolved(); return; }
+  // 系統回對手書著（稍候，讓使用者看清）。
+  PRACTICE.busy = true;
+  renderPracticeBoard();
+  await practiceSleep(450);
+  const reply = answer[PRACTICE.plyIdx];
+  const replyZh = zh[PRACTICE.plyIdx] || "";
+  PRACTICE.fen = applyIccs(PRACTICE.fen, reply);
+  PRACTICE.lastIccs = reply;
+  PRACTICE.plyIdx += 1;
+  PRACTICE.busy = false;
+  renderPracticeBoard();
+  if (PRACTICE.plyIdx >= answer.length) { practiceFullySolved(); return; }
+  const left = Math.ceil((answer.length - PRACTICE.plyIdx) / 2);
+  renderPracticeResult({ _solveStep: true, replyZh, left });
+}
+
+function practiceFullySolved() {
+  PRACTICE.mode = "done";
+  renderPracticeBoard();
+  renderPracticeResult({ _full: true });
+  showCommentary();
+  setPracticeButtons();
+}
+
+/* 非正解 → 顯示 AI 評分＋落差 → 開放與 AI 對弈（深度 practiceAiDepth）。 */
+async function enterSparring(preFen) {
+  PRACTICE.mode = "spar";
+  PRACTICE.busy = true;
+  renderPracticeBoard();
+  renderPracticeResult({ _spar: "calc" });
+  const postFen = PRACTICE.fen;
+  const side = PRACTICE.puzzle.side;
+  const recs = await practiceAnalyze([preFen, postFen], PRACTICE.aiDepth);
+  PRACTICE.busy = false;
+  if (!recs) {                                    // 無引擎：退化成只揭答
+    PRACTICE.mode = "done";
+    renderPracticeBoard();
+    renderPracticeResult({ _spar: "noEngine" });
+    showCommentary();
+    setPracticeButtons();
+    return;
+  }
+  renderPracticeResult({ _spar: "gap", pre: recs[0], post: recs[1], side });
+  setPracticeButtons();
+  const aiReply = recs[1] ? recs[1].best : null;
+  if (aiReply && aiReply !== "(none)") await playEngineMove(aiReply);
+  else { renderPracticeResult({ _spar: "over", side, pre: recs[0], post: recs[1] }); PRACTICE.mode = "done"; }
+  renderPracticeBoard();
+}
+
+async function sparEngineReply() {
+  PRACTICE.busy = true;
+  renderPracticeBoard();
+  const recs = await practiceAnalyze([PRACTICE.fen], PRACTICE.aiDepth);
+  PRACTICE.busy = false;
+  const rec = recs ? recs[0] : null;
+  const best = rec ? rec.best : null;
+  if (best && best !== "(none)") {
+    await playEngineMove(best);
+    renderPracticeResult({ _sparRunning: true, rec, side: PRACTICE.puzzle.side });
+  } else {
+    PRACTICE.mode = "done";
+    renderPracticeResult({ _spar: "over", side: PRACTICE.puzzle.side, post: rec });
+  }
+  renderPracticeBoard();
+}
+
+async function playEngineMove(iccs) {
+  await practiceSleep(350);
+  PRACTICE.fen = applyIccs(PRACTICE.fen, iccs);
+  PRACTICE.lastIccs = iccs;
+  renderPracticeBoard();
+}
+
+/* 一次 analyze-line 取多個 fen 的 {cp,mate,best}（紅 POV）；無引擎/失敗回 null。 */
+async function practiceAnalyze(fens, depth) {
+  try {
+    const r = await fetch("/api/engine/analyze-line", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fens, depth }),
+    });
+    if (!r.ok) return null;                        // 400＝引擎未設定
+    const text = await r.text();
+    const out = new Array(fens.length).fill(null);
+    for (const line of text.trim().split("\n")) {
+      if (!line) continue;
+      const rec = JSON.parse(line);
+      if (typeof rec.ply === "number") out[rec.ply] = rec;
+    }
+    return out;
+  } catch (_) { return null; }
+}
+
+/* ---------- 揭答 / 演示 ------------------------------------------------------ */
 
 async function revealPracticeAnswer() {
-  if (!PRACTICE.puzzle) return;
-  // 已解出就直接顯示已存的答案；未解出（放棄）則記一次 fail 後揭示。
-  if (!PRACTICE.solved) {
-    let res;
+  if (!PRACTICE.puzzle || PRACTICE.mode === "done") { togglePracticeDemo(); return; }
+  if (!PRACTICE.recorded) {                        // 放棄＝記一次 fail
+    PRACTICE.recorded = true;
     try {
-      const r = await fetch("/api/practice/check", {
+      await fetch("/api/practice/check", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ puzzle_id: PRACTICE.puzzle.id, user_iccs: "______", time_ms: 0 }),
       });
-      res = await r.json();
-    } catch (_) { res = null; }
-    PRACTICE.solved = true;
-    PRACTICE.result = res && !res.error ? res : { correct: false, answer_iccs: PRACTICE.puzzle.answer_iccs, answer_zh: PRACTICE.puzzle.answer_zh, commentary: PRACTICE.puzzle.commentary };
-    PRACTICE.result._gaveUp = true;
-    renderPracticeBoard();
-    renderPracticeResult(PRACTICE.result);
-    setPracticeButtons();
+    } catch (_) {}
     refreshPracticeStats();
   }
-  togglePracticeDemo();   // 揭示後直接播一次答案
-}
-
-function practiceAnswerData() {
-  // 答案來源：result（含答案）優先，否則用題目本身。
-  const r = PRACTICE.result || {};
-  const iccs = r.answer_iccs || (PRACTICE.puzzle && PRACTICE.puzzle.answer_iccs) || [];
-  const zh = r.answer_zh || (PRACTICE.puzzle && PRACTICE.puzzle.answer_zh) || [];
-  return { iccs, zh };
+  PRACTICE.mode = "done";
+  PRACTICE.fen = PRACTICE.puzzle.init_fen;
+  PRACTICE.lastIccs = null;
+  PRACTICE.plyIdx = 0;
+  renderPracticeBoard();
+  renderPracticeResult({ _gaveUp: true });
+  showCommentary();
+  setPracticeButtons();
+  togglePracticeDemo();                            // 直接播一次答案
 }
 
 function togglePracticeDemo() {
@@ -279,12 +399,12 @@ function togglePracticeDemo() {
 
 function startPracticeDemo() {
   if (!PRACTICE.puzzle) return;
-  const { iccs, zh } = practiceAnswerData();
+  const iccs = PRACTICE.puzzle.answer_iccs || [];
+  const zh = PRACTICE.puzzle.answer_zh || [];
   if (!iccs.length) return;
-  // 由 init_fen 逐手推出每步 fen。
   const fens = [PRACTICE.puzzle.init_fen];
   for (const mv of iccs) fens.push(applyIccs(fens[fens.length - 1], mv));
-  PRACTICE.solved = true;                 // 演示期間鎖盤
+  PRACTICE.mode = "done";
   PRACTICE.demo = { fens, iccs, zh, idx: 0, timer: null };
   renderDemoStep();
   PRACTICE.demo.timer = setInterval(() => {
@@ -305,7 +425,8 @@ function renderDemoStep() {
   renderPracticeBoard();
   const moved = d.idx > 0 ? `${d.idx}. ${d.zh[d.idx - 1] || ""}` : "起始局面";
   const more = d.idx < d.iccs.length ? "" : "（演示完）";
-  $pr("practiceResult").querySelector(".practiceDemoStep")?.remove();
+  const old = $pr("practiceResult").querySelector(".practiceDemoStep");
+  if (old) old.remove();
   const tag = document.createElement("div");
   tag.className = "practiceDemoStep";
   tag.textContent = `演示：${moved} ${more}`;
@@ -325,41 +446,95 @@ function renderPracticeMeta() {
   const p = PRACTICE.puzzle;
   if (!p) return;
   const sideTxt = p.side === "b" ? "黑方" : "紅方";
-  const stars = "★".repeat(p.difficulty || 1) + "☆".repeat(5 - (p.difficulty || 1));
+  const d = p.difficulty || 1;
+  const stars = "★".repeat(d) + "☆".repeat(5 - d);
   const cat = p.category ? `<span class="practiceCat">${escHtml(p.category)}</span>` : "";
   $pr("practiceMeta").innerHTML =
-    `<div class="practiceSide ${p.side === "b" ? "black" : "red"}">輪到 <b>${sideTxt}</b> 走，找出最佳一手</div>` +
+    `<div class="practiceSideLine ${p.side === "b" ? "black" : "red"}">輪到 <b>${sideTxt}</b> 走，找出最佳一手</div>` +
     `<div class="practiceTags">${cat}<span class="practiceStars" title="難度">${stars}</span></div>` +
     `<div class="practiceBookline">${escHtml(p.book_title || "")}${p.title ? "　·　" + escHtml(p.title) : ""}</div>`;
 }
 
-function renderPracticeResult(res) {
+function renderPracticeResult(st) {
   const box = $pr("practiceResult");
-  if (!res) { box.innerHTML = ""; return; }
-  if (res._err) { box.innerHTML = `<div class="practiceErr">評分失敗：${escHtml(res._err)}</div>`; return; }
-  const { zh } = practiceAnswerData();
-  const answerStr = zh.join(" ");
-  let head;
-  if (res._gaveUp) head = `<div class="practiceVerdict gaveup">已看答案</div>`;
-  else if (res.correct) {
-    const via = res.via === "engine" ? "（引擎等值）" : "";
-    head = `<div class="practiceVerdict ok">✓ 正解${via}</div>`;
-  } else {
-    head = `<div class="practiceVerdict no">✗ 不是最佳手</div>`;
+  if (!st) { box.innerHTML = ""; return; }
+  const side = (PRACTICE.puzzle && PRACTICE.puzzle.side) || "w";
+  let html = "";
+  if (st._hint) {
+    html = `<div class="practiceHint">${escHtml(st._hint)}</div>`;
+  } else if (st._solveStep) {
+    html = `<div class="practiceVerdict ok">✓ 正解，續走！</div>` +
+           `<div class="practiceAnswer">對手應：${escHtml(st.replyZh)}　（還剩約 ${st.left} 手）</div>`;
+  } else if (st._full) {
+    html = `<div class="practiceVerdict ok">✓ 完全解出！</div>` +
+           `<div class="practiceAnswer">答案：${escHtml((PRACTICE.puzzle.answer_zh || []).join(" "))}</div>`;
+  } else if (st._gaveUp) {
+    html = `<div class="practiceVerdict gaveup">已看答案</div>` +
+           `<div class="practiceAnswer">答案：${escHtml((PRACTICE.puzzle.answer_zh || []).join(" "))}</div>`;
+  } else if (st._spar === "calc") {
+    html = `<div class="practiceVerdict no">✗ 非正解</div><div class="practiceAnswer">引擎評分中…</div>`;
+  } else if (st._spar === "noEngine") {
+    html = `<div class="practiceVerdict no">✗ 非正解</div>` +
+           `<div class="practiceAnswer">（未設定引擎，無法對弈）答案：${escHtml((PRACTICE.puzzle.answer_zh || []).join(" "))}</div>`;
+  } else if (st._spar === "gap") {
+    const best = fmtEval(st.pre, side), now = fmtEval(st.post, side);
+    const gap = fmtGap(st.pre, st.post, side);
+    html = `<div class="practiceVerdict no">✗ 非正解</div>` +
+           `<div class="practiceAnswer">AI 評分：最佳 <b>${best}</b>　你這手後 <b>${now}</b> ${gap}</div>` +
+           `<div class="practiceSparNote">⚔ 已在此局面開放與 AI 對弈（深度 ${PRACTICE.aiDepth}）——繼續落子試試。</div>`;
+  } else if (st._sparRunning) {
+    html = `<div class="practiceSparNote">⚔ 對弈中（深度 ${PRACTICE.aiDepth}）　目前評分：<b>${fmtEval(st.rec, side)}</b></div>`;
+  } else if (st._spar === "over") {
+    html = `<div class="practiceVerdict gaveup">對弈結束（終局）</div>`;
   }
-  const ans = answerStr
-    ? `<div class="practiceAnswer">答案：${escHtml(answerStr)}</div>` : "";
-  box.innerHTML = head + ans;
-  // 講解
-  const cm = (res.commentary || (PRACTICE.puzzle && PRACTICE.puzzle.commentary) || "").trim();
+  box.innerHTML = html;
+}
+
+function showCommentary() {
+  const cm = ((PRACTICE.puzzle && PRACTICE.puzzle.commentary) || "").trim();
   const cmBox = $pr("practiceCommentary");
   if (cm) { cmBox.textContent = cm; cmBox.hidden = false; }
   else cmBox.hidden = true;
 }
 
+/* 評分顯示（解題方視角；mate 友善化）。 */
+function fmtEval(rec, side) {
+  if (!rec) return "—";
+  const sign = side === "w" ? 1 : -1;
+  if (rec.mate != null) {
+    const m = rec.mate * sign;
+    if (m === 0) return "被將死";
+    return m > 0 ? `${m} 步殺` : `對方 ${-m} 步殺`;
+  }
+  if (rec.cp != null) {
+    const v = rec.cp * sign;
+    return (v > 0 ? "+" : "") + v;
+  }
+  return "—";
+}
+
+function evalScalar(rec, side) {
+  if (!rec) return null;
+  const sign = side === "w" ? 1 : -1;
+  if (rec.mate != null) {
+    const m = rec.mate * sign;
+    return m >= 0 ? 30000 - m * 50 : -30000 - m * 50;
+  }
+  if (rec.cp != null) return rec.cp * sign;
+  return null;
+}
+
+function fmtGap(pre, post, side) {
+  const a = evalScalar(pre, side), b = evalScalar(post, side);
+  if (a == null || b == null) return "";
+  const loss = a - b;
+  if (loss <= 20) return "（與最佳手相當）";
+  if (loss >= 25000) return "（錯失殺著）";
+  return `（虧 ${loss} 分）`;
+}
+
 function setPracticeButtons() {
-  const solved = PRACTICE.solved;
-  $pr("practiceRevealBtn").disabled = solved;        // 已解出/已揭示就不需要
+  $pr("practiceRevealBtn").disabled = (PRACTICE.mode === "done");
   $pr("practiceDemoBtn").disabled = !PRACTICE.puzzle;
 }
 
@@ -373,7 +548,18 @@ async function refreshPracticeStats() {
   } catch (_) {}
 }
 
+function recordFirstMove(iccs) {
+  // /check 評首著（對書答或 engine_best＝引擎等值）並記 attempt＋進度。本地另行
+  // 逐手判定，這裡只為「記一次成績」；回傳不需要。
+  fetch("/api/practice/check", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ puzzle_id: PRACTICE.puzzle.id, user_iccs: iccs, time_ms: Date.now() - PRACTICE.startTs }),
+  }).then(() => refreshPracticeStats()).catch(() => {});
+}
+
 /* ---------- 小工具 ---------------------------------------------------------- */
+
+function practiceSleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function escHtml(s) {
   return String(s == null ? "" : s)

@@ -2077,6 +2077,26 @@ h2.panelHead>span {
   line-height: 1.6;
 }
 
+.practiceAnswer b { color: var(--accent-strong); }
+
+.practiceHint {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* 走錯後開放與 AI 對弈的提示橫條 — 用 accent 軟底，讀作「進入對弈模式」。 */
+.practiceSparNote {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--accent-strong);
+  background: rgba(var(--accent-strong-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-strong-rgb), 0.16);
+  border-radius: 8px;
+  padding: 7px 11px;
+}
+.practiceSparNote b { color: var(--text-active, var(--accent-strong)); }
+
 .practiceDemoStep {
   margin-top: 6px;
   font-size: 13px;

@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>梅友弈鑑 — 象棋譜分析</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/editor.css?v=43">
+  <link rel="stylesheet" href="/assets/editor.css?v=44">
 </head>
 
 <body>
@@ -346,6 +346,11 @@
               <input id="aiBlunderThreshInput" type="number" min="0" max="2000" step="10" value="200"
                 title="某步的著法損失達到此值時標為漏著">
             </div>
+            <div class="settingRow">
+              <label title="中局練習走錯後，與 AI 在該局面對弈時皮卡魚的搜尋深度（越高越強越慢）">中局練習對弈層數</label>
+              <input id="practiceDepthInput" type="number" min="1" max="30" step="1" value="20"
+                title="中局練習走錯後與 AI 對弈的搜尋深度">
+            </div>
           </div>
         </section>
 
@@ -441,8 +446,8 @@
   <script src="/assets/editor-autoplay.js?v=1"></script>
   <script src="/assets/editor-aichart.js?v=1"></script>
   <script src="/assets/editor-demo.js?v=1"></script>
-  <script src="/assets/editor-practice.js?v=1"></script>
-  <script src="/assets/editor.js?v=58"></script>
+  <script src="/assets/editor-practice.js?v=3"></script>
+  <script src="/assets/editor.js?v=59"></script>
   <script src="/assets/gifenc.global.js"></script>
   <script src="/assets/gifexport.js?v=3"></script>
 </body>
