@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.cb_service import (  # noqa: E402
+    list_cbl_games,
     load_cb,
     read_cbl_guids,
     read_cbl_lib_meta,
@@ -36,9 +37,46 @@ from vendor.io_cb_writer import write_cbr_bytes  # noqa: E402
 # 任一含多盤的 CBL；若搬移請改這裡。
 SRC_CBL = Path(r"D:\Elton\CCBridge3\CBL\中貴棋譜.cbl")
 
+# 盤數回歸（_cbl_record_starts 漏數修正，2026-06-30）。舊版把 CBR_MAGIC 當迴圈
+# 守衛，一撞到 multi-slot 記錄的續接 slot 就 break → 後面全漏（全庫 1571 檔有 315
+# 檔受害）。新版掃到檔尾、跳過續接 slot，盤數須與 cchess read_cbl 一致。
+# 路徑較深、可能搬移：缺檔則 SKIP 個別案例（CI-safe），不讓整測 fail。
+_RECORD_COUNT_CASES = [
+    # (檔路徑, 期望盤數, 是否與 read_cbl 交叉比對, 說明)
+    (SRC_CBL, 824, False, "全 1-slot：向後相容（修正前後都應 824）"),
+    (Path(r"D:\Elton\CCBridge3\CBL\棋研探秘\象棋杀着大全\象棋杀着大全.cbl"),
+     624, False, "含 2-slot：舊 parser 只讀到 1"),
+    (Path(r"D:\Elton\CCBridge3\CBL\象棋丛书\黄少龙著\象棋实战中局谱\象棋实战中局谱--黄少龙.CBL"),
+     61, True, "index(62)與實體(61)不同步的髒檔：以 magic 邊界為準，須同 read_cbl"),
+]
+
 
 def _ok(msg):
     print(f"  ✓ {msg}")
+
+
+def test_cbl_record_count_multislot():
+    """多-slot／髒檔的盤數須對，且每個起點都是可解析的真記錄。"""
+    ran = 0
+    for path, expect, xcheck, note in _RECORD_COUNT_CASES:
+        if not path.is_file():
+            print(f"  · SKIP（缺檔）：{path.name} — {note}")
+            continue
+        ran += 1
+        games = list_cbl_games(path)  # 只讀 header、不解析走子樹（快）
+        assert len(games) == expect, \
+            f"{path.name} 盤數 {len(games)} != 期望 {expect}（{note}）"
+        # 髒檔才付 read_cbl 全解析的代價，交叉確認與權威 reader 一致。
+        if xcheck:
+            n_read = len(read_cbl(str(path))["games"])
+            assert n_read == expect, f"{path.name} read_cbl 讀到 {n_read} != {expect}"
+        # 頭/中/尾抽樣：每個起點都是真記錄、可被 load_cb 解析（單盤解析，快）。
+        for idx in sorted({0, len(games) // 2, len(games) - 1}):
+            data = load_cb(path, idx)
+            assert data.get("roots") is not None, f"{path.name} 第 {idx} 盤載入無 roots"
+        tag = " ＝read_cbl" if xcheck else ""
+        _ok(f"{path.name}：{len(games)} 盤{tag}（{note}）")
+    assert ran > 0, "所有回歸檔都缺：請確認 D:\\Elton\\CCBridge3\\CBL 仍在"
 
 
 def test_cbr_single_roundtrip(book):
@@ -122,6 +160,9 @@ def main():
 
     print("[2] CBL 覆寫整庫保真")
     test_cbl_fidelity_overwrite()
+
+    print("[3] CBL 盤數（multi-slot／髒檔回歸）")
+    test_cbl_record_count_multislot()
 
     print("\n全部通過 ✓")
 

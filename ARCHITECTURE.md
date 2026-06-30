@@ -110,7 +110,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 功能 | 函式 |
 |---|---|
 | rel `lib.cbl#3` 拆 (base, index) / 判 CB 檔 | `parse_cb_rel` / `is_cb_path` |
-| CBL 資料區定位（固定 4096-byte 記錄；不解析走子樹） | `_cbl_record_starts` |
+| CBL 資料區定位（每 4096-byte slot 看 magic；multi-slot 記錄的續接 slot 跳過不計、**不 break**；掃到檔尾，盤數同 read_cbl；不解析走子樹） | `_cbl_record_starts` |
 | 列舉 CBL 盤目（讀 CBR header 標題＋紅/黑/賽果固定 offset，**不解析走子樹**；有真棋手 name=「1. 布局名 — 紅 先勝 黑」，否則只布局名） | `list_cbl_games`／`_compose_cbl_label` |
 | 載入 CBR/CBL 指定盤→JSON（CBL **只解析該盤** `read_from_cbr_buffer`；不跑 Big5 recovery） | `load_cb` |
 | 存 CBR（保留原 record GUID） | `save_cbr` |

@@ -252,9 +252,20 @@ are reused verbatim — the only new code is the format boundary in
 - **NEVER `read_cbl()` just to list titles or open one game.** `read_cbl`
   (`Book.read_from_lib`) parses EVERY game's move tree — ~26s for the 824-game
   中貴棋譜.cbl. That made both "expand library" and "open one game" crawl. The
-  fix exploits CBL being **fixed 4096-byte records** at `66624 + book_count*276`
-  (`cbl_index_fix`'s linear offset): `_cbl_record_starts` finds each record by
-  the `CCBridge Record` magic + 4096 stride (no move parse). `list_cbl_games`
+  fix exploits CBL being **4096-byte slots** at `66624 + book_count*276`
+  (`cbl_index_fix`'s linear offset): `_cbl_record_starts` walks every 4096-byte
+  slot to EOF and keeps the ones that **start with** the `CCBridge Record` magic
+  (no move parse). **A record can span >1 slot** (a game whose moves/annotes
+  exceed 4096 bytes takes 2–4 slots); the continuation slots don't start with the
+  magic, so they're **skipped — NOT a stop**. The original parser used the magic
+  as the loop *guard* and broke at the first continuation slot, dropping every
+  game after the first multi-slot record (1571-file corpus: 315 files
+  under-counted, some down to 1 game; 象棋杀着大全 1→624). Counts now equal
+  cchess `read_cbl`'s — even on a dirty file whose index is out of sync with the
+  physical layout (黄少龙's 象棋实战中局谱: index claims 62, only 61 physical
+  records → `_cbl_record_starts`=61=read_cbl, because magic boundaries are the
+  ground truth, not the stale index slot_counts). Regression: the multi-slot /
+  dirty-file counts are asserted in `tests/test_cb_roundtrip.py`. `list_cbl_games`
   reads each record's title (CBR header +180) **plus red/black/result (fixed
   offsets +1076/+1300/+2076) to build the tree label** — `布局名 — 紅 先勝 黑`
   when both players are real, else just the title (`_compose_cbl_label`;

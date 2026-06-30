@@ -119,8 +119,17 @@ def is_cb_path(base_rel: str) -> bool:
 def _cbl_record_starts(contents: bytes) -> list[int]:
     """回傳每筆 CBR 記錄在 contents 內的起始 offset（順序＝盤序）。
 
-    比照 cchess 的固定 4096-byte 走法：從資料區找第一個 'CCBridge Record'，每
-    4096 bytes 一筆，遇非記錄（補零）即停。與 read_cbl 的盤序/盤數一致。
+    比照 cchess 的固定 4096-byte 走法：從資料區起，每 4096-byte slot 看一次——
+    開頭是 'CCBridge Record' 的才是一筆記錄的起點；不是的，就是「**多-slot 記錄
+    的續接 slot**」（一盤的著法/講解超過 4096 bytes 時會佔 2~4 slot），**跳過不計、
+    但不可停**，往下一個 slot 繼續掃到檔尾。
+
+    舊版把 magic 當迴圈守衛，一撞到第一個 multi-slot 記錄的續接 slot 就整個 break，
+    後面所有盤全漏掉（全庫 1571 檔有 315 檔受害，少數只讀到 1 盤；如象棋杀着大全
+    1→624）。改成「掃描＋跳續接 slot」後，盤序/盤數與 cchess read_cbl 完全一致——
+    連索引與實體佈局不同步的髒檔（index 宣稱 62、實體只有 61），都以實際 magic
+    邊界為準（read_cbl 亦讀 61），每筆都落在真記錄起點、可被 read_from_cbr_buffer
+    解析。回歸測試見 tests/test_cb_roundtrip.py。
     """
     _name, book_count, _valid = _parse_cbl_header(contents)
     buff_start = get_cbl_data_offset(book_count)
@@ -130,8 +139,9 @@ def _cbl_record_starts(contents: bytes) -> list[int]:
     starts = []
     pos = buff_start + rel_first
     n = len(contents)
-    while pos + len(CBR_MAGIC) <= n and contents[pos : pos + len(CBR_MAGIC)] == CBR_MAGIC:
-        starts.append(pos)
+    while pos + len(CBR_MAGIC) <= n:
+        if contents[pos : pos + len(CBR_MAGIC)] == CBR_MAGIC:
+            starts.append(pos)
         pos += _CBL_RECORD_SIZE
     return starts
 
