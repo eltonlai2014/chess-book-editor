@@ -493,10 +493,11 @@ function renderPracticeMeta() {
   const d = p.difficulty || 1;
   const stars = "★".repeat(d) + "☆".repeat(5 - d);
   const cat = p.category ? `<span class="practiceCat">${escHtml(p.category)}</span>` : "";
+  const bookline = `${p.book_title || ""}${p.title ? "　·　" + p.title : ""}`;
   $pr("practiceMeta").innerHTML =
     `<div class="practiceSideLine ${p.side === "b" ? "black" : "red"}">輪到 <b>${sideTxt}</b> 走，找出最佳一手</div>` +
     `<div class="practiceTags">${cat}<span class="practiceStars" title="難度">${stars}</span></div>` +
-    `<div class="practiceBookline">${escHtml(p.book_title || "")}${p.title ? "　·　" + escHtml(p.title) : ""}</div>`;
+    `<div class="practiceBookline" title="${escAttr(bookline)}">${escHtml(bookline)}</div>`;
 }
 
 function renderPracticeResult(st) {

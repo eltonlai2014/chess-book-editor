@@ -2017,7 +2017,9 @@ h2.panelHead>span {
 .practicePanel {
   flex: 1 1 230px;
   min-width: 220px;
-  max-width: 320px;
+  /* ~棋盤寬：面板掉到棋盤下方時用滿整列，書名/題名那行才有足夠寬度不被截斷
+     （仍保留 nowrap+ellipsis 兜超長標題）。 */
+  max-width: 414px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2060,6 +2062,11 @@ h2.panelHead>span {
   font-size: 12px;
   color: var(--text-faint);
   line-height: 1.5;
+  /* 書名＋完整題名常過長：不換行、超出以 … 截斷（完整文字走 title tooltip），
+     避免在面板裡折成兩行的醜換行。 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .practiceVerdict {
