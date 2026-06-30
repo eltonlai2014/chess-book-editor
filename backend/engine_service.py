@@ -387,3 +387,47 @@ def analyze_stream(engine_path, fen: str, depth: int, movetime: int):
                 yield "data: " + json.dumps(ev, ensure_ascii=False) + "\n\n"
     finally:
         _shutdown(proc, send)
+
+
+def bestmove_with_moves(engine_path, fen: str, moves: list[str], depth: int) -> dict:
+    """一次取最佳著＋分數，**帶走子歷史**（`position fen <fen> moves <m1 m2 …>`）。
+
+    給「中局練習走錯後與 AI 對弈」用。關鍵：只送單一 FEN 時引擎沒有歷史、偵測不到
+    重複局面，於勝勢局面會一直挑同一將軍著 → **長將循環**。送出自起始盤以來的完整
+    走子串後，Pikafish 依陸規（長將判負、三次重複判和）就會避開長將、有殺則收殺。
+    一次性、不快取（局面隨歷史而異，以 FEN 為鍵的 eval cache 會誤命中）。
+
+    回 `{best, cp, mate}`，cp/mate 為**紅方 POV**（同 analyze_line_stream 慣例）。
+    `_engine_fen` 的 flip 是依 `fen` 的走子方；套用 `moves` 後走子方會翻 len(moves)
+    次，故奇數步要再反號，分數才正確歸到紅方 POV。
+    """
+    full_fen, flip = _engine_fen(fen)
+    if moves and len(moves) % 2 == 1:
+        flip = -flip
+    mv = (" moves " + " ".join(moves)) if moves else ""
+    proc, send = _spawn(engine_path)
+    last = _start_stall_watchdog(proc)
+    try:
+        send("uci")
+        send("setoption name Threads value 4")
+        send("setoption name Hash value 128")
+        send("isready")
+        send(f"position fen {full_fen}{mv}")
+        send(f"go depth {depth}")
+        best = None
+        cp = mate = None
+        for line in proc.stdout:
+            last[0] = time.monotonic()
+            line = line.strip()
+            if line.startswith("bestmove"):
+                bits = line.split()
+                best = bits[1] if len(bits) > 1 and bits[1] != "(none)" else None
+                break
+            if line.startswith("info ") and " score " in line and " depth " in line:
+                sc = _parse_score(line, flip)
+                if sc is not None:
+                    cp = sc.get("cp")    # 最新一條 info 勝出（深度最深）
+                    mate = sc.get("mate")
+        return {"best": best, "cp": cp, "mate": mate}
+    finally:
+        _shutdown(proc, send)

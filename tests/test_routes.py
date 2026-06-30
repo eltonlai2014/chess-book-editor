@@ -295,6 +295,10 @@ def test_practice_routes():
             r = c.post("/api/practice/check", json={"puzzle_id": 1})
             check("check missing user_iccs -> 400", r.status_code == 400, r.status_code)
 
+            # engine-move: missing fen -> 400 (validated before the engine spawns).
+            r = c.post("/api/practice/engine-move", json={"moves": [], "depth": 8})
+            check("engine-move missing fen -> 400", r.status_code == 400, r.status_code)
+
             # stats reflects the 3 attempts
             r = c.get("/api/practice/stats")
             body = r.get_json()

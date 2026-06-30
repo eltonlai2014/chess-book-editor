@@ -30,6 +30,8 @@ const PRACTICE = {
   startTs: 0,
   demo: null,
   aiDepth: 20,
+  moves: [],          // 自 init_fen 起的完整 UCI 走子串（對弈帶歷史給引擎，避免長將）
+  fenCounts: {},      // 局面(盤+走子方)出現次數，三次重複即判和結束對弈
   filters: { book: "", difficulty: "" },
 };
 
@@ -111,8 +113,11 @@ async function loadPracticePuzzle() {
     PRACTICE.mode = "solve";
     PRACTICE.recorded = false;
     PRACTICE.busy = false;
+    PRACTICE.moves = [];
+    PRACTICE.fenCounts = {};
     PRACTICE.aiDepth = practiceAiDepthPref();
     PRACTICE.startTs = Date.now();
+    practiceTrackFen();                        // 計入起始局面
     renderPracticeMeta();
     renderPracticeResult({ _hint: "輪到你走，找出最佳一手" });
     $pr("practiceCommentary").hidden = true;
@@ -244,13 +249,26 @@ async function practiceSquareClick(sq) {
 
 /* ---------- 落子：多步逐著 / 非正解→對弈 ----------------------------------- */
 
+// 走一手並登記進歷史（餵引擎避長將）＋計局面重複；回該局面累計出現次數。
+function practiceApply(iccs) {
+  PRACTICE.fen = applyIccs(PRACTICE.fen, iccs);
+  PRACTICE.lastIccs = iccs;
+  PRACTICE.moves.push(iccs);
+  return practiceTrackFen();
+}
+
+function practiceTrackFen() {
+  const key = (PRACTICE.fen || "").split(" ").slice(0, 2).join(" ");
+  PRACTICE.fenCounts[key] = (PRACTICE.fenCounts[key] || 0) + 1;
+  return PRACTICE.fenCounts[key];
+}
+
 async function practicePlayMove(iccs) {
   if (PRACTICE.busy || PRACTICE.mode === "done") return;
   const preFen = PRACTICE.fen;
   PRACTICE.selected = null;
   PRACTICE.legal = [];
-  PRACTICE.fen = applyIccs(preFen, iccs);
-  PRACTICE.lastIccs = iccs;
+  practiceApply(iccs);
   renderPracticeBoard();
 
   if (PRACTICE.mode === "spar") { await sparEngineReply(); return; }
@@ -280,8 +298,7 @@ async function continueBookLine() {
   await practiceSleep(450);
   const reply = answer[PRACTICE.plyIdx];
   const replyZh = zh[PRACTICE.plyIdx] || "";
-  PRACTICE.fen = applyIccs(PRACTICE.fen, reply);
-  PRACTICE.lastIccs = reply;
+  practiceApply(reply);
   PRACTICE.plyIdx += 1;
   PRACTICE.busy = false;
   renderPracticeBoard();
@@ -325,27 +342,54 @@ async function enterSparring(preFen) {
 }
 
 async function sparEngineReply() {
+  // 玩家剛走的這手若已造成三次重複 → 收場（和）。
+  if ((PRACTICE.fenCounts[currentFenKey()] || 0) >= 3) { endSparRepetition(); return; }
   PRACTICE.busy = true;
   renderPracticeBoard();
-  const recs = await practiceAnalyze([PRACTICE.fen], PRACTICE.aiDepth);
+  // 帶完整走子歷史，引擎才偵測得到重複、依陸規避開長將。
+  const rec = await practiceEngineMove(PRACTICE.puzzle.init_fen, PRACTICE.moves, PRACTICE.aiDepth);
   PRACTICE.busy = false;
-  const rec = recs ? recs[0] : null;
   const best = rec ? rec.best : null;
   if (best && best !== "(none)") {
-    await playEngineMove(best);
+    const count = await playEngineMove(best);
+    if (count >= 3) { endSparRepetition(rec); return; }
     renderPracticeResult({ _sparRunning: true, rec, side: PRACTICE.puzzle.side });
   } else {
     PRACTICE.mode = "done";
     renderPracticeResult({ _spar: "over", side: PRACTICE.puzzle.side, post: rec });
+    renderPracticeBoard();
   }
+}
+
+function currentFenKey() {
+  return (PRACTICE.fen || "").split(" ").slice(0, 2).join(" ");
+}
+
+function endSparRepetition(rec) {
+  PRACTICE.mode = "done";
+  renderPracticeResult({ _sparDraw: true });
   renderPracticeBoard();
+  setPracticeButtons();
 }
 
 async function playEngineMove(iccs) {
   await practiceSleep(350);
-  PRACTICE.fen = applyIccs(PRACTICE.fen, iccs);
-  PRACTICE.lastIccs = iccs;
+  const count = practiceApply(iccs);
   renderPracticeBoard();
+  return count;
+}
+
+/* 帶走子歷史的一次取著（紅 POV {best,cp,mate}）；無引擎/失敗回 null。 */
+async function practiceEngineMove(fen, moves, depth) {
+  try {
+    const r = await fetch("/api/practice/engine-move", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, moves, depth }),
+    });
+    if (!r.ok) return null;
+    const rec = await r.json();
+    return rec && !rec.error ? rec : null;
+  } catch (_) { return null; }
 }
 
 /* 一次 analyze-line 取多個 fen 的 {cp,mate,best}（紅 POV）；無引擎/失敗回 null。 */
@@ -486,6 +530,8 @@ function renderPracticeResult(st) {
     html = `<div class="practiceSparNote">⚔ 對弈中（深度 ${PRACTICE.aiDepth}）　目前評分：<b>${fmtEval(st.rec, side)}</b></div>`;
   } else if (st._spar === "over") {
     html = `<div class="practiceVerdict gaveup">對弈結束（終局）</div>`;
+  } else if (st._sparDraw) {
+    html = `<div class="practiceVerdict gaveup">對弈結束（局面三次重複，判和）</div>`;
   }
   box.innerHTML = html;
 }

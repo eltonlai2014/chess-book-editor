@@ -446,6 +446,23 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   - Still-open iterations: per-move engine equivalence (a non-book but equally-
     winning move currently counts as "wrong" → enters spar with ~0 loss, which
     reads fine but isn't celebrated), and richer spar UX (live depth ticker).
+- **Spar must feed the engine the MOVE HISTORY, not just a FEN — else it
+  perpetual-checks (長將).** A single `position fen <fen>` gives Pikafish NO
+  repetition context, so from a winning position it keeps picking the same
+  checking move forever. Pikafish DOES implement the Chinese repetition rules
+  (perpetual check = loss for the checker) but ONLY when handed the history via
+  `position fen <start> moves <m1 m2 …>` (confirmed against the official Pikafish
+  UCI wiki — there is NO setoption for this; history is the mechanism). So spar
+  replies go through `POST /api/practice/engine-move {fen, moves, depth}` →
+  `engine_service.bestmove_with_moves` (one-shot, NOT cached — the best move
+  depends on history, so an eval-cache keyed by FEN alone would mis-hit). The
+  frontend tracks every applied move from `init_fen` in `PRACTICE.moves`
+  (`practiceApply`) and sends the full list each spar turn. Flip note: the eval
+  is red-POV, but `_engine_fen`'s flip keys off the START fen's side — after an
+  ODD number of `moves` the side-to-move has flipped, so `bestmove_with_moves`
+  negates the flip for odd-length histories. Belt-and-suspenders: the frontend
+  also 3-fold-repetition-guards (`PRACTICE.fenCounts`, `practiceTrackFen`) and
+  ends the spar as a draw (`endSparRepetition`) if any position recurs 3×.
 
 ## CWP 造字區「車」亂碼 (2026-06-08)
 

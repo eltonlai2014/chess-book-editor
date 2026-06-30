@@ -106,6 +106,7 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 | `GET /api/practice/puzzle/<id>` | `practice_puzzle_route` | 取單題含答案（演示/揭示）→`get_puzzle` |
 | `POST /api/practice/check` | `practice_check_route` | 評首著（書答或 engine_best＝引擎等值）＋記 attempt＋間隔重練→`check_answer` |
 | `GET /api/practice/stats` | `practice_stats_route` | 個人成績（作答/答對/狀態/到期）→`practice_progress_stats` |
+| `POST /api/practice/engine-move` | `practice_engine_move_route` | 練習對弈**帶走子歷史**取著（`position fen … moves …`）→`engine_service.bestmove_with_moves`。**必須帶 moves**：無歷史引擎偵測不到重複→長將循環；一次性不快取 |
 | `POST /api/xqf/save` | `save`:641 | 存檔。副檔名分派：`.cbl#N`→`save_cbl_game`、`.cbr`→`save_cbr`、`.xqf`→`save_xqf`（→PatchedXQFWriter） |
 
 ### CBL/CBR 編輯整合（backend/cb_service.py）
@@ -383,6 +384,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 選子（只選輪到走的一方 `practicePieceSide`/`practiceSideToMove`）→`POST /api/xqf/legal-targets`（race guard）；落子 `applyIccs` | `practiceSquareClick` / `practicePlayMove` |
 | **多步逐著**：對書中該手→系統回對手書著→續解，全對＝完全解出 | `continueBookLine` / `practiceFullySolved` |
 | **非正解→人機對弈**：顯示 AI 評分與落差（一次 `analyze-line [preFen,postFen]`，`fmtEval`/`fmtGap` 解題方視角）→開放在該局面與 AI 對弈（深度 `PRACTICE.aiDepth`，預設 20／`PREFS.practiceAiDepth`／設定 `#practiceDepthInput`） | `enterSparring` / `sparEngineReply` / `playEngineMove` / `practiceAnalyze` |
+| **對弈帶走子歷史避長將**：每手經 `practiceApply` 登記進 `PRACTICE.moves`，spar 取著走 `/api/practice/engine-move {fen,moves}`（非 analyze-line）→引擎才偵測重複、依陸規避長將；前端另以 `PRACTICE.fenCounts` 三次重複保險判和 | `practiceApply` / `practiceTrackFen` / `practiceEngineMove` / `endSparRepetition` |
 | 成績**只記首著一次**（`recordFirstMove`→`/check`，`PRACTICE.recorded` 守）；本地逐手判定不重複記 | `recordFirstMove` |
 | 看答案（放棄→記 fail＋揭示）/ 演示重播（init_fen 逐手 `applyIccs` 算 fens，setInterval 步播）/ 成績列（`GET /api/practice/stats`） | `revealPracticeAnswer` / `startPracticeDemo` / `renderDemoStep` / `refreshPracticeStats` |
 

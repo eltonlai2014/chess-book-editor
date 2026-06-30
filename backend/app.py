@@ -25,6 +25,7 @@ Local-only by design (binds 127.0.0.1), no auth:
     GET  /api/practice/pick?book=&difficulty= -> one puzzle (due>new>any)
     GET  /api/practice/puzzle/<id>     -> one puzzle incl. answer (demo/reveal)
     POST /api/practice/check body {puzzle_id, user_iccs} -> grade + record
+    POST /api/practice/engine-move body {fen, moves, depth} -> {best,cp,mate} (spar)
     GET  /api/practice/stats           -> {attempts, passed, states, due}
     GET  /api/preferences              -> prefs dict
     POST /api/preferences body {...}   -> shallow-merge into prefs
@@ -93,6 +94,7 @@ from backend.engine_service import (  # noqa: E402
     _safe_int,
     analyze_line_stream,
     analyze_stream,
+    bestmove_with_moves,
     engine_signature,
     pikafish_info,
 )
@@ -740,6 +742,30 @@ def practice_stats_route():
     """個人成績總覽（成績分頁）：作答數/答對數/狀態分布/到期數。"""
     con = practice_service.pooled()
     return jsonify(practice_service.practice_progress_stats(con))
+
+
+@app.post("/api/practice/engine-move")
+def practice_engine_move_route():
+    """練習走錯後與 AI 對弈的「帶歷史一次取著」。Body：``{fen, moves:[uci…], depth?}``
+    → ``{best, cp, mate}``（紅 POV）。
+
+    **必須帶 moves**：只送 FEN 無走子歷史，引擎偵測不到重複局面 → 勝勢時一直挑同一
+    將軍著（長將循環）。送出自起始盤的完整走子後，Pikafish 依陸規避開長將。一次性、
+    不快取（局面隨歷史而異）。
+    """
+    body = request.get_json(silent=True) or {}
+    fen = (body.get("fen") or "").strip()
+    moves = [m for m in (body.get("moves") or []) if isinstance(m, str) and m]
+    depth = max(1, min(30, _safe_int(body.get("depth"), 20)))
+    if not fen:
+        return jsonify({"error": "fen is required"}), 400
+    engine = _get_pikafish()
+    if not (engine.exists() and engine.is_file()):
+        return jsonify({"error": "皮卡魚引擎未設定"}), 400
+    try:
+        return jsonify(bestmove_with_moves(engine, fen, moves, depth))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.post("/api/xqf/save")
