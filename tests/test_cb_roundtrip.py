@@ -79,6 +79,21 @@ def test_cbl_record_count_multislot():
     assert ran > 0, "所有回歸檔都缺：請確認 D:\\Elton\\CCBridge3\\CBL 仍在"
 
 
+def test_cbl_title_even_aligned_decode():
+    """_decode_slot 偶數對齊截斷：「編號 空格 一/二、…類」標題不可帶二進位亂碼。
+
+    UTF-16-LE 下「空格(20 00)＋一(4E00)」在字元交界湊出奇數位假 \\x00\\x00，舊版
+    放棄截斷→整段亂碼。修正後須乾淨終止（也保住 ASCII 收尾標題不掉尾字）。
+    """
+    p = Path(r"D:\Elton\CCBridge3\CBL\棋研探秘\象棋杀着大全\象棋杀着大全.cbl")
+    if not p.is_file():
+        print(f"  · SKIP（缺檔）：{p.name}")
+        return
+    title = load_cb(p, 0)["info"]["title"]
+    assert title == "001  一、单兵和单炮类  定式01", f"標題未對齊截斷：{title!r}"
+    _ok(f"標題對齊截斷乾淨：{title!r}")
+
+
 def test_cbr_single_roundtrip(book):
     """單盤 Book -> json -> book -> CBR -> 重讀，路徑全等。"""
     data = book_to_json(book)
@@ -163,6 +178,9 @@ def main():
 
     print("[3] CBL 盤數（multi-slot／髒檔回歸）")
     test_cbl_record_count_multislot()
+
+    print("[4] CBL 標題偶數對齊解碼（亂碼回歸）")
+    test_cbl_title_even_aligned_decode()
 
     print("\n全部通過 ✓")
 

@@ -331,8 +331,19 @@ are reused verbatim — the only new code is the format boundary in
   in an ASCII char (`)`, a digit) loses its last character (e.g. `…(棄傌局)` →
   `…(棄傌局`). `list_cbl_games` (display) and `load_cb` (which overrides
   `book.info['title']` with `_decode_cbr_title`) both decode the fixed title field
-  aligned, so the editor shows AND saves the full title. Don't revert to the raw
-  `read_from_cbr_buffer` title.
+  aligned (`_decode_slot`), so the editor shows AND saves the full title. Don't
+  revert to the raw `read_from_cbr_buffer` title.
+  - **`_decode_slot` must scan for the first EVEN-aligned `\x00\x00`, not just
+    check whether the *first* `\x00\x00` is even.** A title like `001  一、…類`
+    encodes as `…20 00`(space)`00 4E`(一=U+4E00, low byte 0x00)… → the space's
+    high `00` + 一's low `00` form a SPURIOUS odd-offset `\x00\x00` at the char
+    boundary. The old code saw that odd NUL, gave up on truncation, and returned
+    the whole 128-byte field WITH its binary tail as PUA/control-char garbage.
+    Any `編號 空格 一/二/三、…` title (very common in the 殺法/中局 books the CBL
+    reader fix just surfaced) was affected. All-ASCII fields (GUID/email/dates)
+    are unchanged — their chars never have a 0x00 low byte before the real
+    terminator. Regression: `test_cbl_title_even_aligned_decode` in
+    `tests/test_cb_roundtrip.py`.
 
 ## CWP 造字區「車」亂碼 (2026-06-08)
 

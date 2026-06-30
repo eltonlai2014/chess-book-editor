@@ -332,14 +332,26 @@ def _save_cbl_full(path: Path, index: int, data: dict) -> None:
 # ---------- raw-offset 讀取（read_cbl 不回傳的欄位） -------------------------
 
 def _decode_slot(buf: bytes, offset: int, size: int) -> str:
-    """讀 UTF-16-LE slot，於 NUL 終止處截斷。"""
+    """讀 UTF-16-LE 固定欄位，於第一個「**偶數對齊**」的 \\x00\\x00（真正的
+    U+0000 字元邊界）截斷。
+
+    不能只找第一個 \\x00\\x00 再檢查對齊：UTF-16-LE 下「空格(20 00)＋低位元組為
+    00 的 CJK 字（一=4E00、上=4E0A…）」會在字元交界處湊出一個**奇數位**的假
+    \\x00\\x00。舊版一遇奇數位 \\x00\\x00 就放棄截斷、回傳含二進位尾段的整個欄位
+    ——凡標題形如「001  一、…類」者全變亂碼（CBL reader 漏數修好後，這些書才被
+    列出，亂碼標題隨之曝光）。逐 2 bytes 掃偶數位才正確；也保住以 ASCII 收尾的
+    標題（如「…(棄傌局)」不掉尾字）。全 ASCII 欄位（GUID/email/日期）行為不變
+    ——其字元低位元組非 0，不可能在真終止前湊出 \\x00\\x00。
+    """
     if offset + size > len(buf):
         return ""
     raw = buf[offset : offset + size]
-    nul = raw.find(b"\x00\x00")
-    if nul != -1 and nul % 2 == 0:
-        raw = raw[:nul]
-    return raw.decode(CBR_ENCODING, errors="ignore").rstrip("\x00")
+    end = len(raw)
+    for i in range(0, len(raw) - 1, 2):
+        if raw[i] == 0 and raw[i + 1] == 0:
+            end = i
+            break
+    return raw[:end].decode(CBR_ENCODING, errors="ignore").rstrip("\x00")
 
 
 def read_cbl_lib_meta(path: Path) -> dict:
