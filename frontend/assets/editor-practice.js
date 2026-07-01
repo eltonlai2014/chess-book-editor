@@ -34,7 +34,7 @@ const PRACTICE = {
   aiDepth: 20,
   moves: [],          // 自 init_fen 起的完整 UCI 走子串（對弈帶歷史給引擎，避免長將）
   fenCounts: {},      // 局面(盤+走子方)出現次數，三次重複即判和結束對弈
-  filters: { book: "", difficulty: "" },
+  filters: { theme: "", book: "", difficulty: "" },
 };
 
 function $pr(id) { return document.getElementById(id); }
@@ -42,6 +42,12 @@ function $pr(id) { return document.getElementById(id); }
 function practiceAiDepthPref() {
   const d = parseInt((typeof PREFS === "object" && PREFS) ? PREFS.practiceAiDepth : 20, 10);
   return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 20;
+}
+
+// 上次選過的主題（比照開局庫 lastFile：savePreference 存、開對話框還原）。
+function practiceThemePref() {
+  const t = (typeof PREFS === "object" && PREFS) ? PREFS.practiceTheme : "";
+  return typeof t === "string" ? t : "";
 }
 
 // 世代守衛：載新題/重來會 PRACTICE.gen++，令在途的引擎回應（await 後）失效，
@@ -77,24 +83,83 @@ async function fetchPracticeInfo() {
     PRACTICE.info = info;
     if (info && info.exists) {
       $pr("practiceBtn").hidden = false;
-      populatePracticeBooks(info);
+      buildPracticeFilters(info);
     }
   } catch (_) { /* 後端未起或無題庫：入口保持隱藏 */ }
 }
 
-function populatePracticeBooks(info) {
+// 依 info.themes 建主題分頁＋書目下拉，並還原上次選過的主題（若仍有題）。
+// setupPractice 早於 boot 的 loadPreferences 跑 → 首建時 PREFS 可能還空；openPracticeModal
+// 會在 PREFS 載入後再呼叫一次以套用持久化的主題。
+function buildPracticeFilters(info) {
+  const themes = (info && info.themes) || [];
+  const want = practiceThemePref();
+  PRACTICE.filters.theme = (want && themes.some(t => t.theme === want)) ? want : "";
+  renderPracticeTabs(themes);
+  rebuildPracticeBooks(themes);
+}
+
+function renderPracticeTabs(themes) {
+  const bar = $pr("practiceThemeTabs");
+  if (!bar) return;
+  const cur = PRACTICE.filters.theme;
+  const tabs = [{ theme: "", label: "全部", count: 0 }].concat(
+    themes.map(t => ({ theme: t.theme, label: t.theme, count: t.count })));
+  bar.innerHTML = tabs.map(t => {
+    const on = t.theme === cur;
+    const n = t.count ? `<span class="practiceTabN">${t.count}</span>` : "";
+    return `<button type="button" class="practiceTab${on ? " active" : ""}"`
+      + ` data-theme="${escAttr(t.theme)}" role="tab" aria-selected="${on}">`
+      + `${escHtml(t.label)}${n}</button>`;
+  }).join("");
+  bar.querySelectorAll(".practiceTab").forEach(btn => {
+    btn.onclick = () => onPracticeThemeTab(btn.dataset.theme || "");
+  });
+}
+
+// 書目下拉隨主題重建：全部→所有 collection 依主題 optgroup 分組；某主題→該主題書目扁平。
+function rebuildPracticeBooks(themes) {
   const sel = $pr("practiceBook");
   if (!sel) return;
-  const opts = ['<option value="">全部書目</option>'];
-  for (const b of (info.books || [])) {
-    opts.push(`<option value="${escAttr(b.book)}">${escHtml(b.book)}（${b.count}）</option>`);
+  const cur = PRACTICE.filters.theme;
+  const opt = (b) =>
+    `<option value="${escAttr(b.book)}">${escHtml(b.book)}（${b.count}）</option>`;
+  let html;
+  if (!cur) {
+    const parts = ['<option value="">全部書目</option>'];
+    for (const t of themes) {
+      parts.push(`<optgroup label="${escAttr(t.theme)}（${t.count}）">`);
+      for (const b of (t.books || [])) parts.push(opt(b));
+      parts.push("</optgroup>");
+    }
+    html = parts.join("");
+  } else {
+    const th = themes.find(t => t.theme === cur);
+    const cnt = th ? th.count : 0;
+    html = [`<option value="">全部${escHtml(cur)}（${cnt}）</option>`]
+      .concat((th ? th.books : []).map(opt)).join("");
   }
-  sel.innerHTML = opts.join("");
+  sel.innerHTML = html;
+  sel.value = PRACTICE.filters.book || "";
+}
+
+// 點主題分頁：記錄（比照開局庫）＋書目重置＋立即抽該主題一題（分頁＝導覽）。
+function onPracticeThemeTab(theme) {
+  if (theme === PRACTICE.filters.theme) return;
+  PRACTICE.filters.theme = theme;
+  PRACTICE.filters.book = "";
+  if (typeof savePreference === "function") savePreference("practiceTheme", theme);
+  const themes = (PRACTICE.info && PRACTICE.info.themes) || [];
+  renderPracticeTabs(themes);
+  rebuildPracticeBooks(themes);
+  loadPracticePuzzle();
 }
 
 async function openPracticeModal() {
   stopPracticeDemo();
   PRACTICE.aiDepth = practiceAiDepthPref();
+  // PREFS 此時已載入（boot 早已跑完）→ 套用上次選過的主題，重畫分頁/書目。
+  if (PRACTICE.info && PRACTICE.info.exists) buildPracticeFilters(PRACTICE.info);
   $pr("practiceModal").hidden = false;
   await refreshPracticeStats();
   await loadPracticePuzzle();
@@ -110,6 +175,7 @@ async function loadPracticePuzzle() {
   practiceAbortInflight();
   stopPracticeDemo();
   const qs = new URLSearchParams();
+  if (PRACTICE.filters.theme) qs.set("theme", PRACTICE.filters.theme);
   if (PRACTICE.filters.book) qs.set("book", PRACTICE.filters.book);
   if (PRACTICE.filters.difficulty) qs.set("difficulty", PRACTICE.filters.difficulty);
   try {

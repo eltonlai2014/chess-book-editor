@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>梅友弈鑑 — 象棋譜分析</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/editor.css?v=47">
+  <link rel="stylesheet" href="/assets/editor.css?v=48">
 </head>
 
 <body>
@@ -263,6 +263,9 @@
     <div class="modalDialog practiceDialog" role="dialog" aria-modal="true" aria-labelledby="practiceTitle">
       <h3 id="practiceTitle"><span>中局練習</span><button id="practiceClose" class="modalClose"
           aria-label="關閉" title="關閉">✕</button></h3>
+      <!-- 主題分頁（殺法/中局/殘局/戰術…）：由 editor-practice.js renderPracticeTabs
+           依 /info themes 動態填；點分頁即抽該主題一題並記錄 PREFS.practiceTheme。 -->
+      <div class="practiceTabs" id="practiceThemeTabs" role="tablist"></div>
       <div class="practiceTop">
         <label>書目 <select id="practiceBook"><option value="">全部書目</option></select></label>
         <label>難度 <select id="practiceDiff">
@@ -448,7 +451,7 @@
   <script src="/assets/editor-autoplay.js?v=1"></script>
   <script src="/assets/editor-aichart.js?v=1"></script>
   <script src="/assets/editor-demo.js?v=1"></script>
-  <script src="/assets/editor-practice.js?v=7"></script>
+  <script src="/assets/editor-practice.js?v=8"></script>
   <script src="/assets/editor.js?v=59"></script>
   <script src="/assets/gifenc.global.js"></script>
   <script src="/assets/gifexport.js?v=3"></script>

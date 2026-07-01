@@ -694,14 +694,15 @@ def practice_info_route():
 
 @app.get("/api/practice/pick")
 def practice_pick_route():
-    """抽一題（到期複習優先→新題→任一）。query：book / difficulty / include_doubt。"""
+    """抽一題（到期複習優先→新題→任一）。query：theme / book / difficulty / include_doubt。"""
+    theme = (request.args.get("theme") or "").strip() or None
     book = (request.args.get("book") or "").strip() or None
     difficulty = request.args.get("difficulty")
     difficulty = _safe_int(difficulty, 0) or None if difficulty else None
     exclude_doubt = request.args.get("include_doubt") not in ("1", "true", "yes")
     con = practice_service.pooled()
     puzzle = practice_service.pick_puzzle(con, book=book, difficulty=difficulty,
-                                          exclude_doubt=exclude_doubt)
+                                          exclude_doubt=exclude_doubt, theme=theme)
     if puzzle is None:
         return jsonify({"error": "題庫為空或無符合條件的題（先用 CLI 抽題）"}), 404
     return jsonify(puzzle)

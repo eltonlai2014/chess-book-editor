@@ -101,8 +101,8 @@ Flask (backend/app.py, threaded=True) —— 只剩薄路由（parse/驗證/包 
 | `GET /api/engine/analyze` **(SSE)** | `engine_analyze`:564 | 單局面即時分析串流→`engine_service.analyze_stream`（逐行 `_parse_info_line`、共用 `_spawn`/`_engine_fen`） |
 | `POST /api/engine/analyze-line` | `analyze_line`:540 | 整條線逐局面掃描，NDJSON 串流（走勢圖）→`engine_service.analyze_line_stream`（`_parse_score`）。**共用 TT 不清空**；**eval cache**（`eval_cache`，key＝fen+depth+depth2+引擎簽章）命中跳引擎、`fresh:true` 重算 |
 | `POST /api/engine/eval-cache` | `engine_eval_cache` | **只讀 eval cache、絕不開引擎**：回 `{hits,total,records:[rec|null]}`（每 fen 一格）。前端進 AI 分頁／在該頁切檔時自動打，有快取就立刻畫（`eval_cache.read_line`）|
-| `GET /api/practice/info` | `practice_info_route` | 題庫總覽 gate 練習入口（空庫 exists:false）→`practice_service.practice_info` |
-| `GET /api/practice/pick` | `practice_pick_route` | 抽題（到期複習→新題→任一；排除 doubt）→`pick_puzzle`。query：book/difficulty/include_doubt |
+| `GET /api/practice/info` | `practice_info_route` | 題庫總覽 gate 練習入口（空庫 exists:false）；**書目分主題群**（`themes`）→`practice_service.practice_info` |
+| `GET /api/practice/pick` | `practice_pick_route` | 抽題（到期複習→新題→任一；排除 doubt）→`pick_puzzle`。query：theme/book/difficulty/include_doubt（theme+book 先 `_resolve_srcs` 反解成 source_rel 集合再篩） |
 | `GET /api/practice/puzzle/<id>` | `practice_puzzle_route` | 取單題含答案（演示/揭示）→`get_puzzle` |
 | `POST /api/practice/check` | `practice_check_route` | 評首著（書答或 engine_best＝引擎等值）＋記 attempt＋間隔重練→`check_answer` |
 | `GET /api/practice/stats` | `practice_stats_route` | 個人成績（作答/答對/狀態/到期）→`practice_progress_stats` |
@@ -147,7 +147,8 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | **路由層（P1）**：Flask 池化連線（db_pool，WAL，晚綁路徑可測試重導向） | `pooled` |
 | 抽題（到期複習→新題→任一，排除 doubt） / 取單題 | `pick_puzzle` / `get_puzzle` |
 | 評首著（對書答或已存 engine_best＝引擎等值）＋記 attempt＋間隔重練 | `check_answer` / `record_attempt` / `update_progress`（learning1d→review3d→mastered7d） |
-| 題庫總覽 / 個人成績 | `practice_info` / `practice_progress_stats` |
+| 題庫總覽（**書目分主題群** `themes:[{theme,count,books}]`＋扁平 `books` 相容）/ 個人成績 | `practice_info` / `practice_progress_stats` |
+| **書目主題分群＋收合**（純由 source_rel 資料夾推導，無 schema／無重抽）：分類 殺法/中局/殘局/戰術（優先序，殘局勝殺法）；訓練手冊 ~50 章節小檔收成「阶段强化训练手册·<章節>」；`_resolve_srcs` 反解 (主題,書)→source_rel 集合供 pick 篩 | `_theme_of` / `_collection` / `_resolve_srcs` / `THEME_ORDER` |
 | **題庫共享 seed**：匯出 `puzzles`→版控 `data/practice_seed.db`（只題庫）；空 db 首次啟動由 `pooled` 自動灌入（作答/進度各機獨立、不進 seed；`connect` 不自動灌） | `export_seed` / `_seed_puzzles_if_empty` / `PRACTICE_SEED_PATH` |
 
 > CLI（離線批次抽題）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`、`export-seed`（題庫→版控 seed，重抽後 commit）。
@@ -380,8 +381,9 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 **🎯 中局練習（frontend/assets/editor-practice.js；獨立對話框＋自帶互動棋盤，與 EDITOR/主盤/走子樹完全解耦）**
 | 功能 | 函式（editor-practice.js，狀態物件 `PRACTICE`） |
 |---|---|
-| 入口：開機 `GET /api/practice/info` 探測題庫，有題才顯示 header `#practiceBtn`（同 engine/eval info 優雅降級）；填書目下拉 | `setupPractice`（由 editor.js boot 呼一次）/ `fetchPracticeInfo` / `populatePracticeBooks` |
-| 開對話框→`pick` 抽題（書目/難度濾）→渲染盤面＋題目資訊（輪到X方/類目/★難度/書名） | `openPracticeModal` / `loadPracticePuzzle` / `renderPracticeMeta` |
+| 入口：開機 `GET /api/practice/info` 探測題庫，有題才顯示 header `#practiceBtn`（同 engine/eval info 優雅降級）；建主題分頁＋書目下拉 | `setupPractice`（由 editor.js boot 呼一次）/ `fetchPracticeInfo` / `buildPracticeFilters` |
+| **書目主題分頁**（`#practiceThemeTabs`，殺法/中局/殘局/戰術，填自 `/info themes`）＋書目下拉隨主題重建（全部→optgroup 分群、某主題→扁平）；**點分頁即抽該主題一題＋記錄 `PREFS.practiceTheme`**（比照開局庫 lastFile；`setupPractice` 早於 boot `loadPreferences`，故開對話框再套用一次） | `renderPracticeTabs` / `rebuildPracticeBooks` / `onPracticeThemeTab` / `practiceThemePref` |
+| 開對話框→（PREFS 已載）套用上次主題→`pick` 抽題（主題/書目/難度濾）→渲染盤面＋題目資訊（輪到X方/類目/★難度/書名） | `openPracticeModal` / `loadPracticePuzzle` / `renderPracticeMeta` |
 | **自帶點擊棋盤**：`drawBoard`(board.js) 畫子後**自繪**點擊覆蓋層（透明 rects＋合法落點環/點＋選中光暈），鏡像 `installBoardOverlay` 但讀 `PRACTICE`、無浮子 | `renderPracticeBoard` / `installPracticeOverlay` |
 | 選子（只選輪到走的一方 `practicePieceSide`/`practiceSideToMove`）→`POST /api/xqf/legal-targets`（race guard）；落子 `applyIccs` | `practiceSquareClick` / `practicePlayMove` |
 | **多步逐著**：對書中該手→系統回對手書著→續解，全對＝完全解出 | `continueBookLine` / `practiceFullySolved` |

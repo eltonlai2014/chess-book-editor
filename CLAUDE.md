@@ -436,6 +436,27 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   point (master picked the self-contained-dialog architecture 2026-06-30). Entry
   is `setupPractice()` (called once from editor.js boot) + a header `#practiceBtn`
   shown only when `/info` says the bank exists.
+- **書目主題分頁 (2026-07-01, master-directed).** The CBL corpus is a folder tree
+  (`象棋丛书/{作者}/{書}/{章}`, `棋研探秘/{主題}/`) but抽題 kept only the filename
+  stem — the flat book dropdown read as「中殘混搭、無序」, and《象棋阶段强化训练手册》
+  (~50 章節小檔) drowned the real books. Fix restores two levels **purely from
+  `source_rel` folders** (NO schema change, NO re-extract): `_theme_of` classifies
+  each book into 殺法/中局/殘局/戰術/其他 (priority-ordered — 殘局 must beat 殺法 for
+  「实用残局…看杀局练心算」), and `_collection` collapses the manual's chapters into
+  「阶段强化训练手册·<章節>」 (theme from the **section folder**, so 02-基本杀法→殺法,
+  03-中局战术→中局). `practice_info` returns `themes:[{theme,count,books:[{book,count}]}]`
+  (the dropdown's data源; flat `books` kept for back-compat). This derivation lives
+  **only in `practice_service`** — `_resolve_srcs(theme,book)` reverse-maps a
+  (主題, 收合後 collection label) pair to a `source_rel` set and `pick_puzzle` filters
+  `source_rel IN (...)`; the frontend/SQL never re-derive theme. UI = 主題分頁 tabs
+  (`renderPracticeTabs`, built from `/info themes`) atop the 書目 dropdown
+  (`rebuildPracticeBooks`: 全部→optgroup by theme, 某主題→flat). **Clicking a tab
+  persists `PREFS.practiceTheme`** (比照開局庫 `lastFile`) — restored on dialog open
+  (`buildPracticeFilters` in `openPracticeModal`, since `setupPractice` runs before
+  boot's `loadPreferences`). `book` param now = collection label (≠ book_title for
+  manual sections). Regression: `test_theme_and_collection` / `test_info_themes_and_filter`
+  in `tests/test_practice.py`. (成績 tab's `top_books` still groups raw book_title —
+  not collapsed; low-priority follow-up.)
 - **Solving flow (2026-06-30 redesign, master-directed):** the user plays their
   side on the practice board. A move matching the book answer at the current ply
   → the system auto-plays the opponent's book reply and the user keeps solving

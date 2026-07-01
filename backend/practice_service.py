@@ -216,6 +216,53 @@ def _parse_title(title: str) -> tuple[str, str]:
     return (m.group(0) if m else ""), clean
 
 
+# ---------- 主題分群 + 收合（顯示/篩選用，純由 source_rel 資料夾推導） --------------
+#
+# 動機：CBL 語料本來就整理成一棵資料夾樹（`象棋丛书/{作者}/{書}/{章}`、`棋研探秘/{主題}/`），
+# 但抽題時 book_title 只留了檔名 stem，樹被砍平 → 下拉「中殘混搭、無序」。這裡**唯讀
+# source_rel 的資料夾名**還原兩層資訊，NO schema change、NO 重抽：
+#   ① 主題（殺法/中局/殘局/戰術/其他）——供對話框分頁。優先序先命中先贏，殘局要贏過殺法
+#      （「实用残局…看杀局练心算」含「杀」但屬殘局）。
+#   ② 收合——《象棋阶段强化训练手册》被切成 ~50 個章節小檔（每檔 3~31 題）淹沒真正的大書，
+#      收成「阶段强化训练手册·<章節>」一條，主題取**章節資料夾**（02-基本杀法→殺法、
+#      03-中局战术→中局），避免整本混成一主題。其餘書 collection = 檔名 stem、主題照全路徑判。
+# 都靠 source_rel，故 `_resolve_srcs` 反解 (主題,書) → source_rel 集合，pick 用 `IN (...)` 篩，
+# 主題/收合邏輯只此一份（前端只送字串、SQL 不做關鍵字推導）。
+_THEME_RULES = [
+    ("殘局", ("残局", "殘局")),
+    ("中局", ("中局",)),
+    ("殺法", ("杀法", "殺法", "杀着", "杀著", "绝杀", "絕殺", "追杀", "追殺",
+             "入局", "杀局", "殺局", "闷宫", "悶宮", "铁门栓")),
+    ("戰術", ("战术", "戰術", "弃子", "棄子", "少子", "谋子", "闪击", "捉双",
+             "牵制", "顿挫", "串打", "围困", "兑子", "先弃后取", "抢攻")),
+]
+_THEME_OTHER = "其他"
+# 分頁顯示順序（缺題的主題前端自動不顯示）
+THEME_ORDER = ["殺法", "中局", "殘局", "戰術", _THEME_OTHER]
+
+_MANUAL_MARK = "《象棋阶段强化训练手册》"
+
+
+def _theme_of(text: str) -> str:
+    """路徑/資料夾名 → 主題（先命中先贏，抓不到回「其他」）。"""
+    for name, kws in _THEME_RULES:
+        if any(k in text for k in kws):
+            return name
+    return _THEME_OTHER
+
+
+def _collection(source_rel: str, book_title: str) -> tuple[str, str]:
+    """source_rel → (主題, 收合後書目 label)。見上方區塊註解。"""
+    parts = (source_rel or "").split("/")
+    if _MANUAL_MARK in parts:
+        i = parts.index(_MANUAL_MARK)
+        # parts[-1] 是檔名；章節資料夾 = 手冊底下那層（除非手冊直接放 .cbl → 退回書名）
+        section = parts[i + 1] if i + 1 < len(parts) - 1 else book_title
+        label = re.sub(r"^\d+[-\s]*", "", section)          # 去 "02-" 序號前綴
+        return _theme_of(section), f"阶段强化训练手册·{label}"
+    return _theme_of(source_rel or ""), (book_title or source_rel or "")
+
+
 def _book_meta(cbl_path: Path) -> tuple[str, str]:
     """(book_title, book_author)。書名 = 檔名 stem；作者啟發式從 stem 末段拆。
 
@@ -477,23 +524,67 @@ def pooled(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 def practice_info(con: sqlite3.Connection) -> dict:
-    """題庫總覽（gate UI 入口）：題數、已仲裁數、難度分布、書目清單。"""
+    """題庫總覽（gate UI 入口）：題數、已仲裁數、難度分布、**主題分群書目**。
+
+    ``themes`` = [{theme, count, books:[{book, count} …]}]（對話框主題分頁＋書目下拉的
+    唯一資料源；主題/收合由 ``_collection`` 純推導）。``books`` = 扁平清單，保留向後相容
+    （舊消費者/測試）。兩者的 book 值都是**收合後 collection label**（≠必等 book_title）。
+    """
     total = con.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0]
     arbitrated = con.execute(
         "SELECT COUNT(*) FROM puzzles WHERE engine_verdict IS NOT NULL").fetchone()[0]
     by_diff = {int(k): v for k, v in con.execute(
         "SELECT difficulty, COUNT(*) FROM puzzles GROUP BY difficulty").fetchall()}
-    books = [{"book": r[0], "count": r[1]} for r in con.execute(
-        "SELECT book_title, COUNT(*) c FROM puzzles GROUP BY book_title"
-        " ORDER BY c DESC").fetchall()]
+    # 主題 → {collection label → 題數}（GROUP BY source_rel，再由 _collection 收合）
+    tmap: dict[str, dict[str, int]] = {}
+    for src, bt, c in con.execute(
+            "SELECT source_rel, book_title, COUNT(*) c FROM puzzles"
+            " GROUP BY source_rel").fetchall():
+        theme, col = _collection(src, bt or "")
+        tmap.setdefault(theme, {})[col] = tmap.setdefault(theme, {}).get(col, 0) + c
+    themes = []
+    for th in THEME_ORDER:
+        cols = tmap.get(th)
+        if not cols:
+            continue
+        books = sorted(({"book": n, "count": c} for n, c in cols.items()),
+                       key=lambda b: -b["count"])
+        themes.append({"theme": th, "count": sum(b["count"] for b in books),
+                       "books": books})
+    books_flat = [b for t in themes for b in t["books"]]
     return {"exists": total > 0, "total": total, "arbitrated": arbitrated,
-            "by_difficulty": by_diff, "books": books}
+            "by_difficulty": by_diff, "themes": themes, "books": books_flat}
 
 
-def _filters(book, difficulty, exclude_doubt) -> tuple[str, list]:
+def _resolve_srcs(con: sqlite3.Connection, theme: str | None,
+                  book: str | None) -> list[str] | None:
+    """(主題, 收合後書目 label) → 相符的 source_rel 清單；兩者皆空回 None（不篩）。
+
+    主題/收合只此一份推導（`_collection`）——SQL 不做關鍵字判斷，前端只送字串。
+    回空 list 代表「有指定但無相符」（pick 會落到 0 筆）。
+    """
+    if not theme and not book:
+        return None
+    out = []
+    for src, bt in con.execute(
+            "SELECT DISTINCT source_rel, book_title FROM puzzles").fetchall():
+        th, col = _collection(src, bt or "")
+        if theme and th != theme:
+            continue
+        if book and col != book:
+            continue
+        out.append(src)
+    return out
+
+
+def _filters(srcs, difficulty, exclude_doubt) -> tuple[str, list]:
     where, params = [], []
-    if book:
-        where.append("p.book_title = ?"); params.append(book)
+    if srcs is not None:                       # None = 不篩書/主題；[] = 無相符
+        if not srcs:
+            where.append("0")
+        else:
+            where.append(f"p.source_rel IN ({','.join('?' * len(srcs))})")
+            params.extend(srcs)
     if difficulty:
         where.append("p.difficulty = ?"); params.append(int(difficulty))
     if exclude_doubt:
@@ -502,10 +593,16 @@ def _filters(book, difficulty, exclude_doubt) -> tuple[str, list]:
 
 
 def pick_puzzle(con: sqlite3.Connection, book: str | None = None,
-                difficulty: int | None = None, exclude_doubt: bool = True) -> dict | None:
+                difficulty: int | None = None, exclude_doubt: bool = True,
+                theme: str | None = None) -> dict | None:
     """抽一題：① 到期複習（progress.next_review_ts ≤ now，最舊優先）→ ② 新題
-    （無 progress，隨機）→ ③ 任一符合（隨機）。預設排除 doubt 題。"""
-    wsql, params = _filters(book, difficulty, exclude_doubt)
+    （無 progress，隨機）→ ③ 任一符合（隨機）。預設排除 doubt 題。
+
+    ``theme``/``book`` 先經 `_resolve_srcs` 反解成 source_rel 集合再篩（book = 收合後
+    collection label，可能對應多個原始檔＝手冊某章節的多個小檔）。
+    """
+    srcs = _resolve_srcs(con, theme, book)
+    wsql, params = _filters(srcs, difficulty, exclude_doubt)
     now = _now()
     row = con.execute(
         f"SELECT p.* FROM puzzles p JOIN progress g ON g.puzzle_id = p.id"

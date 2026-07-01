@@ -2011,6 +2011,54 @@ h2.panelHead>span {
   font-variant-numeric: tabular-nums;
 }
 
+/* 主題分頁（殺法/中局/殘局/戰術…）：一排 pill 分頁，選中的一枚亮起（暖金＝同
+   當前步/下一步 segment 的 --btn-active-bg）。動態填自 /info themes，缺題主題不顯示。 */
+.practiceTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.practiceTabs .practiceTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg-1);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.practiceTabs .practiceTab:hover {
+  border-color: rgba(var(--accent-strong-rgb), 0.4);
+  color: var(--text);
+}
+
+.practiceTabs .practiceTab.active {
+  background: var(--btn-active-bg, rgba(var(--accent-strong-rgb), 0.16));
+  border-color: rgba(var(--accent-strong-rgb), 0.5);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* 分頁內的題數：淡、等寬數字，選中時吃主題色 */
+.practiceTabs .practiceTabN {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.practiceTabs .practiceTab.active .practiceTabN {
+  color: inherit;
+  opacity: 0.75;
+}
+
 /* 棋盤固定在左、提示面板固定在右——**永不換行堆疊**（換行是舊版破版主因：面板掉到
    棋盤下方→高度翻倍→關閉鈕搆不到）。高度靠面板內捲動吸收，dialog 高度恆定≈棋盤高。 */
 .practiceMain {
