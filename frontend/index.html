@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>梅友弈鑑 — 象棋譜分析</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/editor.css?v=46">
+  <link rel="stylesheet" href="/assets/editor.css?v=47">
 </head>
 
 <body>
@@ -284,8 +284,10 @@
         </div>
       </div>
       <div class="practiceControls">
-        <button id="practiceRevealBtn" class="iconBtn" title="放棄並看答案">看答案</button>
-        <button id="practiceDemoBtn" class="iconBtn" title="重播答案主線">▶ 演示答案</button>
+        <!-- 單一「答案」鈕：解題中＝放棄看答案（記一次失敗＋自動演示）；已結束＝重播答案主線。
+             文案/行為隨 PRACTICE.mode 切換，見 editor-practice.js setPracticeButtons/onPracticeAnswerBtn。 -->
+        <button id="practiceAnswerBtn" class="iconBtn" title="放棄並看答案（記一次失敗）">看答案</button>
+        <button id="practiceResetBtn" class="iconBtn" title="清空你的走子，回到題目起始局面重新解（不影響已記成績）" disabled>↺ 重來</button>
         <button id="practiceNextBtn" class="iconBtn" title="換下一題（到期複習優先）">下一題 ▶</button>
       </div>
     </div>
@@ -446,7 +448,7 @@
   <script src="/assets/editor-autoplay.js?v=1"></script>
   <script src="/assets/editor-aichart.js?v=1"></script>
   <script src="/assets/editor-demo.js?v=1"></script>
-  <script src="/assets/editor-practice.js?v=5"></script>
+  <script src="/assets/editor-practice.js?v=7"></script>
   <script src="/assets/editor.js?v=59"></script>
   <script src="/assets/gifenc.global.js"></script>
   <script src="/assets/gifexport.js?v=3"></script>

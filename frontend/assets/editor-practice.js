@@ -27,6 +27,8 @@ const PRACTICE = {
   mode: "solve",      // "solve"(循書) | "spar"(人機對弈) | "done"(鎖盤)
   recorded: false,    // 首著已記一次成績
   busy: false,        // 等引擎中（鎖盤）
+  gen: 0,             // 世代碼：載新題/重來即 +1，令在途的引擎回應失效（過期不落盤）
+  abort: null,        // 目前在途引擎請求的 AbortController（重來時中止思考）
   startTs: 0,
   demo: null,
   aiDepth: 20,
@@ -42,14 +44,23 @@ function practiceAiDepthPref() {
   return Number.isFinite(d) && d >= 1 && d <= 30 ? d : 20;
 }
 
+// 世代守衛：載新題/重來會 PRACTICE.gen++，令在途的引擎回應（await 後）失效，
+// 過期就不落盤。每個會 await 的流程開頭抓 g=PRACTICE.gen，await 後 practiceStale(g) 即 return。
+function practiceStale(g) { return g !== PRACTICE.gen; }
+
+// 中止目前在途的引擎請求（重來時「立即停止思考」）——fetch 收到 abort 會拋錯→回 null。
+function practiceAbortInflight() {
+  if (PRACTICE.abort) { try { PRACTICE.abort.abort(); } catch (_) {} PRACTICE.abort = null; }
+}
+
 function setupPractice() {
   const btn = $pr("practiceBtn");
   if (!btn) return;
   btn.onclick = openPracticeModal;
   $pr("practiceClose").onclick = closePracticeModal;
   $pr("practiceNextBtn").onclick = () => loadPracticePuzzle();
-  $pr("practiceRevealBtn").onclick = revealPracticeAnswer;
-  $pr("practiceDemoBtn").onclick = togglePracticeDemo;
+  $pr("practiceAnswerBtn").onclick = onPracticeAnswerBtn;   // 看答案／演示 合一
+  $pr("practiceResetBtn").onclick = resetPracticePuzzle;    // 回到起始局面重解
   $pr("practiceBoard").addEventListener("click", onPracticeSquareClick);
   $pr("practiceBook").onchange = (e) => { PRACTICE.filters.book = e.target.value; };
   $pr("practiceDiff").onchange = (e) => { PRACTICE.filters.difficulty = e.target.value; };
@@ -95,6 +106,8 @@ function closePracticeModal() {
 }
 
 async function loadPracticePuzzle() {
+  PRACTICE.gen++;                 // 令舊題在途的引擎回應失效
+  practiceAbortInflight();
   stopPracticeDemo();
   const qs = new URLSearchParams();
   if (PRACTICE.filters.book) qs.set("book", PRACTICE.filters.book);
@@ -136,6 +149,7 @@ function showPracticeEmpty(msg) {
   $pr("practiceResult").innerHTML = "";
   $pr("practiceCommentary").hidden = true;
   drawBoard($pr("practiceBoard"), "9/9/9/9/9/9/9/9/9/9 w", null, null);
+  setPracticeButtons();   // 無題：答案/重來皆停用
 }
 
 /* ---------- 盤面渲染（自帶點擊覆蓋層，鏡像 installBoardOverlay 但讀 PRACTICE） ---- */
@@ -148,6 +162,7 @@ function renderPracticeBoard() {
   const svg = $pr("practiceBoard");
   drawBoard(svg, PRACTICE.fen, PRACTICE.lastIccs, null);
   if (practiceInteractive()) installPracticeOverlay(svg);
+  setPracticeButtons();   // 每次重畫同步「答案」文案＋「重來」可用性（走子/等引擎後即時反映）
 }
 
 function installPracticeOverlay(svg) {
@@ -288,6 +303,7 @@ async function practicePlayMove(iccs) {
 }
 
 async function continueBookLine() {
+  const g = PRACTICE.gen;
   const answer = PRACTICE.puzzle.answer_iccs || [];
   const zh = PRACTICE.puzzle.answer_zh || [];
   PRACTICE.plyIdx += 1;
@@ -296,6 +312,7 @@ async function continueBookLine() {
   PRACTICE.busy = true;
   renderPracticeBoard();
   await practiceSleep(450);
+  if (practiceStale(g)) return;                  // 期間按了重來/換題 → 不落子
   const reply = answer[PRACTICE.plyIdx];
   const replyZh = zh[PRACTICE.plyIdx] || "";
   practiceApply(reply);
@@ -317,6 +334,7 @@ function practiceFullySolved() {
 
 /* 非正解 → 顯示 AI 評分＋落差 → 開放與 AI 對弈（深度 practiceAiDepth）。 */
 async function enterSparring(preFen) {
+  const g = PRACTICE.gen;
   PRACTICE.mode = "spar";
   PRACTICE.busy = true;
   renderPracticeBoard();
@@ -324,6 +342,7 @@ async function enterSparring(preFen) {
   const postFen = PRACTICE.fen;
   const side = PRACTICE.puzzle.side;
   const recs = await practiceAnalyze([preFen, postFen], PRACTICE.aiDepth);
+  if (practiceStale(g)) return;                   // 分析途中按了重來 → 放棄
   PRACTICE.busy = false;
   if (!recs) {                                    // 無引擎：退化成只揭答
     PRACTICE.mode = "done";
@@ -338,16 +357,19 @@ async function enterSparring(preFen) {
   const aiReply = recs[1] ? recs[1].best : null;
   if (aiReply && aiReply !== "(none)") await playEngineMove(aiReply);
   else { renderPracticeResult({ _spar: "over", side, pre: recs[0], post: recs[1] }); PRACTICE.mode = "done"; }
+  if (practiceStale(g)) return;
   renderPracticeBoard();
 }
 
 async function sparEngineReply() {
+  const g = PRACTICE.gen;
   // 玩家剛走的這手若已造成三次重複 → 收場（和）。
   if ((PRACTICE.fenCounts[currentFenKey()] || 0) >= 3) { endSparRepetition(); return; }
   PRACTICE.busy = true;
   renderPracticeBoard();
   // 帶完整走子歷史，引擎才偵測得到重複、依陸規避開長將。
   const rec = await practiceEngineMove(PRACTICE.puzzle.init_fen, PRACTICE.moves, PRACTICE.aiDepth);
+  if (practiceStale(g)) return;                   // 思考途中按了重來 → 引擎回著不落盤
   PRACTICE.busy = false;
   const best = rec ? rec.best : null;
   if (best && best !== "(none)") {
@@ -373,31 +395,65 @@ function endSparRepetition(rec) {
 }
 
 async function playEngineMove(iccs) {
+  const g = PRACTICE.gen;
   await practiceSleep(350);
+  if (practiceStale(g)) return 0;                 // 期間重來/換題 → 不落引擎著
+  // 防線：引擎回著若在目前盤面非法（任何 desync）→ 不落盤，收場，絕不走出自殺著。
+  if (!(await practiceMoveLegal(PRACTICE.fen, iccs))) {
+    if (practiceStale(g)) return 0;
+    PRACTICE.mode = "done";
+    renderPracticeResult({ _sparDesync: true });
+    renderPracticeBoard();
+    setPracticeButtons();
+    return 0;
+  }
+  if (practiceStale(g)) return 0;
   const count = practiceApply(iccs);
   renderPracticeBoard();
   return count;
 }
 
-/* 帶走子歷史的一次取著（紅 POV {best,cp,mate}）；無引擎/失敗回 null。 */
+/* 驗一步 iccs 在 fen 是否合法（後端 legal-targets 已是真合法：含濾自將/對臉）。
+   驗證失敗（網路/後端問題）就放行，不因驗證本身炸掉對弈流程。 */
+async function practiceMoveLegal(fen, iccs) {
+  if (!fen || !iccs || iccs.length < 4) return true;
+  try {
+    const r = await fetch("/api/xqf/legal-targets", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, from: iccs.slice(0, 2) }),
+    });
+    if (!r.ok) return true;
+    const j = await r.json();
+    return ((j && j.targets) || []).includes(iccs.slice(2, 4));
+  } catch (_) { return true; }
+}
+
+/* 帶走子歷史的一次取著（紅 POV {best,cp,mate}）；無引擎/失敗/被中止回 null。 */
 async function practiceEngineMove(fen, moves, depth) {
+  const ctrl = new AbortController();
+  PRACTICE.abort = ctrl;                          // 重來時可 abort 這次思考
   try {
     const r = await fetch("/api/practice/engine-move", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fen, moves, depth }),
+      signal: ctrl.signal,
     });
     if (!r.ok) return null;
     const rec = await r.json();
     return rec && !rec.error ? rec : null;
-  } catch (_) { return null; }
+  } catch (_) { return null; }                    // AbortError 也走這 → null（由世代守衛擋落盤）
+  finally { if (PRACTICE.abort === ctrl) PRACTICE.abort = null; }
 }
 
-/* 一次 analyze-line 取多個 fen 的 {cp,mate,best}（紅 POV）；無引擎/失敗回 null。 */
+/* 一次 analyze-line 取多個 fen 的 {cp,mate,best}（紅 POV）；無引擎/失敗/被中止回 null。 */
 async function practiceAnalyze(fens, depth) {
+  const ctrl = new AbortController();
+  PRACTICE.abort = ctrl;                          // 重來時可 abort 這次分析
   try {
     const r = await fetch("/api/engine/analyze-line", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fens, depth }),
+      signal: ctrl.signal,
     });
     if (!r.ok) return null;                        // 400＝引擎未設定
     const text = await r.text();
@@ -409,12 +465,20 @@ async function practiceAnalyze(fens, depth) {
     }
     return out;
   } catch (_) { return null; }
+  finally { if (PRACTICE.abort === ctrl) PRACTICE.abort = null; }
 }
 
-/* ---------- 揭答 / 演示 ------------------------------------------------------ */
+/* ---------- 揭答 / 演示（單一「答案」鈕） ------------------------------------ */
+
+// 合一分派：解題中＝放棄看答案（記一次失敗＋自動演示）；已結束＝重播/停止答案演示。
+function onPracticeAnswerBtn() {
+  if (!PRACTICE.puzzle) return;
+  if (PRACTICE.mode === "done") { togglePracticeDemo(); return; }
+  revealPracticeAnswer();
+}
 
 async function revealPracticeAnswer() {
-  if (!PRACTICE.puzzle || PRACTICE.mode === "done") { togglePracticeDemo(); return; }
+  if (!PRACTICE.puzzle) return;
   if (!PRACTICE.recorded) {                        // 放棄＝記一次 fail
     PRACTICE.recorded = true;
     try {
@@ -458,7 +522,7 @@ function startPracticeDemo() {
     d.idx += 1;
     renderDemoStep();
   }, 1100);
-  $pr("practiceDemoBtn").textContent = "⏸ 停止";
+  $pr("practiceAnswerBtn").textContent = "⏸ 停止";
 }
 
 function renderDemoStep() {
@@ -480,8 +544,35 @@ function renderDemoStep() {
 function stopPracticeDemo() {
   if (PRACTICE.demo && PRACTICE.demo.timer) clearInterval(PRACTICE.demo.timer);
   PRACTICE.demo = null;
-  const btn = $pr("practiceDemoBtn");
+  const btn = $pr("practiceAnswerBtn");
+  // 演示只在 done 態播放，停後恢復「演示答案」；防呆再交給 setPracticeButtons。
   if (btn) btn.textContent = "▶ 演示答案";
+}
+
+/* 回到題目起始局面重解（走錯進對弈後想重來）。不重置 recorded——首著成績已記，
+   重解不再計分，也防刷正確率。**可在 AI 思考中(busy)按下 → 立即中止思考**（世代碼令
+   在途回著失效＋AbortController 中止請求）。 */
+function resetPracticePuzzle() {
+  if (!PRACTICE.puzzle || PRACTICE.mode === "done") return;
+  PRACTICE.gen++;                 // 令在途引擎回應失效（過期不落盤）
+  practiceAbortInflight();        // 立即中止思考
+  stopPracticeDemo();
+  PRACTICE.fen = PRACTICE.puzzle.init_fen;
+  PRACTICE.lastIccs = null;
+  PRACTICE.selected = null;
+  PRACTICE.legal = [];
+  PRACTICE.plyIdx = 0;
+  PRACTICE.mode = "solve";
+  PRACTICE.busy = false;
+  PRACTICE.moves = [];
+  PRACTICE.fenCounts = {};
+  practiceTrackFen();
+  renderPracticeResult({ _hint: PRACTICE.recorded
+    ? "已回到起始局面重解（此題成績已記，不再計分）"
+    : "輪到你走，找出最佳一手" });
+  $pr("practiceCommentary").hidden = true;
+  setPracticeButtons();
+  renderPracticeBoard();
 }
 
 /* ---------- 文字面板 -------------------------------------------------------- */
@@ -533,6 +624,9 @@ function renderPracticeResult(st) {
     html = `<div class="practiceVerdict gaveup">對弈結束（終局）</div>`;
   } else if (st._sparDraw) {
     html = `<div class="practiceVerdict gaveup">對弈結束（局面三次重複，判和）</div>`;
+  } else if (st._sparDesync) {
+    html = `<div class="practiceVerdict gaveup">對弈結束</div>` +
+           `<div class="practiceAnswer">（引擎回著與盤面不一致，已停止以免出錯——請按「重來」或「下一題」）</div>`;
   }
   box.innerHTML = html;
 }
@@ -581,8 +675,22 @@ function fmtGap(pre, post, side) {
 }
 
 function setPracticeButtons() {
-  $pr("practiceRevealBtn").disabled = (PRACTICE.mode === "done");
-  $pr("practiceDemoBtn").disabled = !PRACTICE.puzzle;
+  const ans = $pr("practiceAnswerBtn");
+  if (ans) {
+    ans.disabled = !PRACTICE.puzzle;
+    // 演示播放中的「⏸ 停止」由 start/stopPracticeDemo 直接管，這裡別覆寫。
+    if (!(PRACTICE.demo && PRACTICE.demo.timer)) {
+      const done = PRACTICE.mode === "done";
+      ans.textContent = done ? "▶ 演示答案" : "看答案";
+      ans.title = done ? "重播答案主線" : "放棄並看答案（記一次失敗）";
+    }
+  }
+  const reset = $pr("practiceResetBtn");
+  if (reset) {
+    // 走過子且未鎖盤即可用——**含 AI 思考中(busy)**，好讓「重來」能立即中止思考。
+    reset.disabled = !PRACTICE.puzzle
+      || PRACTICE.mode === "done" || PRACTICE.moves.length === 0;
+  }
 }
 
 async function refreshPracticeStats() {

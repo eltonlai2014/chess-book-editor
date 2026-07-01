@@ -477,9 +477,18 @@ def pv_to_chinese(fen: str, uci_moves, limit: int = 64) -> list:
 
 
 def compute_legal_targets(fen: str, from_sq: str) -> list:
-    """Return a list of legal destination square iccs (e.g. ['e2','e3',...])
-    for the piece on `from_sq` under `fen`. Empty list if no piece or no
-    legal moves. Used to render destination markers in the editor."""
+    """Return a list of **fully-legal** destination square iccs (e.g.
+    ['e2','e3',...]) for the piece on `from_sq` under `fen`. Empty list if no
+    piece or no legal moves. Used to render destination markers in the editor
+    AND to gate the 中局練習 board's clicks — so it MUST exclude 自殺 moves
+    (leaving your own general in check / 將帥對臉), not just piece-movement rules.
+
+    `create_piece_moves` is only PSEUDO-legal (piece geometry). Each candidate is
+    additionally filtered by `is_valid_move` (basic rules incl. 對臉 on king moves)
+    AND `not is_checked_move` (after the move, is the mover still/now in check —
+    covers self-check and a move that exposes the general to face-off). Without
+    this, a suicidal move shows a marker and the practice board would let you play
+    it, corrupting the position (and making the AI's reply look nonsensical)."""
     if not fen or not from_sq or len(from_sq) < 2:
         return []
     board = ChessBoard(fen)
@@ -490,6 +499,11 @@ def compute_legal_targets(fen: str, from_sq: str) -> list:
     board.set_move_side(get_fench_color(fench))
     targets = []
     for _, to_pos in board.create_piece_moves(move_from):
+        # is_checked_move raises on a non-valid move, so gate on is_valid_move first.
+        if not board.is_valid_move(move_from, to_pos):
+            continue
+        if board.is_checked_move(move_from, to_pos):   # 走完自將／對臉 → 非法，剔除
+            continue
         targets.append(pos2iccs(to_pos, to_pos)[:2])
     return targets
 

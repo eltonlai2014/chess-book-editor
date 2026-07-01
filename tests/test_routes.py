@@ -85,6 +85,14 @@ def test_move_info():
     r = c.post("/api/xqf/move-info", json={"iccs": "h2e2"})
     check("missing fen -> 400", r.status_code == 400, f"got {r.status_code} {r.get_json()}")
 
+    # legal-targets must be FULLY legal (no 自殺): 紅炮 e3 被黑車 e5 釘在己方帥 e0 的縱線上；
+    # 離開 e 線＝走完自將，須被剔除；只留 e 線內 e1/e2/e4。(中局練習盤靠這份清單擋落子。)
+    pin = "4k4/9/9/9/4r4/9/4C4/9/9/4K4 w"
+    r = c.post("/api/xqf/legal-targets", json={"fen": pin, "from": "e3"})
+    tg = sorted((r.get_json() or {}).get("targets", []))
+    check("legal-targets excludes self-check (pinned cannon)",
+          r.status_code == 200 and tg == ["e1", "e2", "e4"], f"got {r.status_code} {tg}")
+
 
 # --------------------------------------------------------------------------- #
 # POST /api/eval/batch

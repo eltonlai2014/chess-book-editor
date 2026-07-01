@@ -1963,9 +1963,20 @@ h2.panelHead>span {
 }
 
 /* ===== 中局練習 dialog（自帶互動棋盤＋側面板；獨立於主編輯器） ============= */
-.practiceDialog {
+/* 用 .modalDialog.practiceDialog（兩個 class）提高特異度：基底 .modalDialog 的
+   max-width:480/min-width:360 在原始碼中排在後面，同特異度會蓋掉這裡——雙 class 才穩贏，
+   否則 dialog 被夾成 480 寬、固定寬右面板溢出深色底（底色寬度不足）。 */
+.modalDialog.practiceDialog {
+  /* 明確寬度容納「棋盤(414)＋gap(18)＋提示面板」並排——auto 寬度在 flex column 下
+     不會撐到並排所需寬。box-sizing:border-box 讓 22px padding 算進寬內。 */
+  box-sizing: border-box;
+  width: min(780px, 96vw);
   max-width: none;
-  width: auto;
+  min-width: 0;
+  /* 對話框高度封頂，永遠關得掉；內容再多也在右側面板內捲動，不把 dialog 撐爆。 */
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .practiceTop {
@@ -2000,12 +2011,14 @@ h2.panelHead>span {
   font-variant-numeric: tabular-nums;
 }
 
-/* 棋盤＋側面板並排；窄窗時側面板掉到棋盤下方。 */
+/* 棋盤固定在左、提示面板固定在右——**永不換行堆疊**（換行是舊版破版主因：面板掉到
+   棋盤下方→高度翻倍→關閉鈕搆不到）。高度靠面板內捲動吸收，dialog 高度恆定≈棋盤高。 */
 .practiceMain {
   display: flex;
   gap: 18px;
   align-items: flex-start;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-height: 0;
 }
 
 .practiceMain #practiceBoard {
@@ -2015,15 +2028,17 @@ h2.panelHead>span {
 }
 
 .practicePanel {
-  flex: 1 1 230px;
-  min-width: 220px;
-  /* ~棋盤寬：面板掉到棋盤下方時用滿整列，書名/題名那行才有足夠寬度不被截斷
-     （仍保留 nowrap+ellipsis 兜超長標題）。 */
-  max-width: 414px;
+  /* 放右側、填滿棋盤右邊剩餘寬（dialog 寬已固定→此值穩定約 300px）。內容（判定／評分／
+     講解）超出棋盤高就在面板內捲動，不再往下把 dialog 撐長。 */
+  flex: 1 1 auto;
+  min-width: 280px;
+  align-self: stretch;
+  max-height: 460px;   /* ≈ 棋盤高（#practiceBoard height） */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-top: 4px;
+  padding: 4px 6px 4px 0;
 }
 
 .practiceMeta .practiceSide {
@@ -2127,8 +2142,7 @@ h2.panelHead>span {
   border: 1px solid rgba(var(--accent-strong-rgb), 0.14);
   border-radius: 8px;
   padding: 8px 12px;
-  max-height: 200px;
-  overflow-y: auto;
+  /* 捲動交給整個 .practicePanel（單一捲動區）；這裡自然流動即可。 */
   white-space: pre-wrap;
 }
 

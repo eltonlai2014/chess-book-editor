@@ -165,7 +165,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 著法字形（紅/黑替換） | `_apply_side_glyphs`:267 |
 | 單步中文著法 | `compute_move_info`:392 |
 | PV(UCI)→中文著法列（limit 64） | `pv_to_chinese`:419 |
-| 合法著點 | `compute_legal_targets`:455 |
+| 合法著點（**真合法**：偽合法著再濾 `is_valid_move`＋`not is_checked_move`＝剔除走完自將／將帥對臉；供編輯器落點標記＆中局練習擋落子） | `compute_legal_targets` |
 | 載入/存檔 wrapper | `load_xqf`（包 `fast_parse_book`）/ `save_xqf` / `create_xqf` |
 | **解析加速**：載入期間短路 `ChessBoard.is_checking`→False，省 cchess 每步重算攻擊矩陣＋將死（純 overhead、輸出不讀）。輸出逐字節相同、~3x（巨檔 9s→3s）。**T3-4**：改 thread-local 旗標 `_suppress_check` 閘控（`is_checking` 永久包一層，只在「當前執行緒正在 `fast_parse_book`」時回 False），故 A 執行緒解析不再讓 B 執行緒的走子驗證/引擎看到假將軍（舊全域 swap 在 `threaded=True` 會）。可重入、免 lock。XQF＋CBL 載入共用 | `fast_parse_book`（cm；`load_xqf`/`cb_service.load_cb` 都包） |
 | 編碼/檔名修復（GB18030/Big5/PUA） | `recover_book_strings`:235、`_maybe_recover_big5`:162、`sanitise_filename`:45 |
@@ -387,11 +387,16 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | **多步逐著**：對書中該手→系統回對手書著→續解，全對＝完全解出 | `continueBookLine` / `practiceFullySolved` |
 | **非正解→人機對弈**：顯示 AI 評分與落差（一次 `analyze-line [preFen,postFen]`，`fmtEval`/`fmtGap` 解題方視角）→開放在該局面與 AI 對弈（深度 `PRACTICE.aiDepth`，預設 20／`PREFS.practiceAiDepth`／設定 `#practiceDepthInput`） | `enterSparring` / `sparEngineReply` / `playEngineMove` / `practiceAnalyze` |
 | **對弈帶走子歷史避長將**：每手經 `practiceApply` 登記進 `PRACTICE.moves`，spar 取著走 `/api/practice/engine-move {fen,moves}`（非 analyze-line）→引擎才偵測重複、依陸規避長將；前端另以 `PRACTICE.fenCounts` 三次重複保險判和 | `practiceApply` / `practiceTrackFen` / `practiceEngineMove` / `endSparRepetition` |
+| **引擎回著落盤前驗合法**（防 desync 走出自殺著）：`playEngineMove` 套用前用 `legal-targets` 驗這手在目前盤面是否合法，非法即收場（`_sparDesync`），絕不落自殺著 | `playEngineMove` / `practiceMoveLegal` |
+| **中止在途思考**：載新題／`↺ 重來` 會 `PRACTICE.gen++` 令 await 後的引擎回應失效（過期不落盤）＋ `AbortController` 中止 fetch。每個會 await 的流程開頭抓 `g=gen`、await 後 `practiceStale(g)` 即 return | `practiceStale` / `practiceAbortInflight`（`PRACTICE.gen`/`.abort`） |
 | 成績**只記首著一次**（`recordFirstMove`→`/check`，`PRACTICE.recorded` 守）；本地逐手判定不重複記 | `recordFirstMove` |
-| 看答案（放棄→記 fail＋揭示）/ 演示重播（init_fen 逐手 `applyIccs` 算 fens，setInterval 步播）/ 成績列（`GET /api/practice/stats`） | `revealPracticeAnswer` / `startPracticeDemo` / `renderDemoStep` / `refreshPracticeStats` |
+| **單一「答案」鈕**（合一）：解題中＝`#practiceAnswerBtn` 顯「看答案」（放棄→記 fail＋揭示＋自動演示一次）；鎖盤後同鈕變「▶ 演示答案」重播（init_fen 逐手 `applyIccs` 算 fens，setInterval 步播），播放中變「⏸ 停止」。文案/行為隨 `PRACTICE.mode` 由 `setPracticeButtons` 切換 | `onPracticeAnswerBtn`（分派）/ `revealPracticeAnswer` / `togglePracticeDemo` / `startPracticeDemo` / `renderDemoStep` |
+| **↺ 重來**（`#practiceResetBtn`）：清空自己走的子、回 `init_fen` 重解（走錯進對弈或解一半想重來）；**含 AI 思考中(busy)可按→立即中止思考**（gen＋abort）；只在「走過子、非鎖盤」啟用；**不重置 `recorded`**（首著成績已記，重解不再計分、防刷正確率） | `resetPracticePuzzle` |
+| 成績列（`GET /api/practice/stats`） | `refreshPracticeStats` |
 
 > 模態 HTML：index.html `#practiceModal`（`#practiceBoard` SVG＋`.practicePanel`）；CSS：editor.css `.practiceDialog`/`.practiceMain`/`.practiceSparNote` 等（用主題 token，不寫死色）。
-> **解耦原則**：練習盤即天然沙盒（不碰 EDITOR/走子樹）；只複用無狀態共享 helper（drawBoard/applyIccs/座標）＋後端驗法（legal-targets）/取題（practice/*）/評分著（analyze-line）路由。
+> **版面（棋盤左／提示右、高度恆定）**：`.modalDialog.practiceDialog`（雙 class 提特異度，蓋過基底 `.modalDialog max-width:480`）明確寬 `min(780px,96vw)`＋`max-height:92vh`；`.practiceMain` **`flex-wrap:nowrap`**（不再堆疊到棋盤下＝舊破版主因）；`.practicePanel` 填滿右側剩寬、`max-height≈棋盤高`＋`overflow-y:auto` **內部捲動**——訊息再長也不撐高 dialog、關閉鈕永遠可點。
+> **解耦原則**：練習盤即天然沙盒（不碰 EDITOR/走子樹）；只複用無狀態共享 helper（drawBoard/applyIccs/座標）＋後端驗法（`legal-targets` **已是真合法：濾自將/對臉**，見 xqf_service）/取題（practice/*）/評分著（analyze-line）路由。
 > 引擎只在「走錯／對弈」時打（analyze-line，eval 進共用 cache），非每步；無引擎則走錯退化成揭答。仍待迭代：非書著但等值仍判「錯」（進對弈、落差≈0）。
 
 **設定 / 路徑 / 偏好**
