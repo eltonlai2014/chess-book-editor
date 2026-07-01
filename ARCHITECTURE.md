@@ -382,7 +382,7 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 功能 | 函式（editor-practice.js，狀態物件 `PRACTICE`） |
 |---|---|
 | 入口：開機 `GET /api/practice/info` 探測題庫，有題才顯示 header `#practiceBtn`（同 engine/eval info 優雅降級）；建主題分頁＋書目下拉 | `setupPractice`（由 editor.js boot 呼一次）/ `fetchPracticeInfo` / `buildPracticeFilters` |
-| **書目主題分頁**（`#practiceThemeTabs`，殺法/中局/殘局/戰術，填自 `/info themes`）＋書目下拉隨主題重建（全部→optgroup 分群、某主題→扁平）；**點分頁即抽該主題一題＋記錄 `PREFS.practiceTheme`**（比照開局庫 lastFile；`setupPractice` 早於 boot `loadPreferences`，故開對話框再套用一次） | `renderPracticeTabs` / `rebuildPracticeBooks` / `onPracticeThemeTab` / `practiceThemePref` |
+| **書目主題分頁**（`#practiceThemeTabs`，殺法/中局/殘局/戰術，填自 `/info themes`）＋書目下拉隨主題重建（全部→optgroup 分群、某主題→扁平）；**點分頁即抽該主題一題＋記錄 `PREFS.practiceTheme`**（比照開局庫 lastFile；`setupPractice` 早於 boot `loadPreferences`，故開對話框再套用一次）。**書目/難度 onchange 亦即時換題**（與分頁一致；rebuildPracticeBooks 程式化改值不觸發 onchange，無雙載） | `renderPracticeTabs` / `rebuildPracticeBooks` / `onPracticeThemeTab` / `practiceThemePref` |
 | 開對話框→（PREFS 已載）套用上次主題→`pick` 抽題（主題/書目/難度濾）→渲染盤面＋題目資訊（輪到X方/類目/★難度/書名） | `openPracticeModal` / `loadPracticePuzzle` / `renderPracticeMeta` |
 | **自帶點擊棋盤**：`drawBoard`(board.js) 畫子後**自繪**點擊覆蓋層（透明 rects＋合法落點環/點＋選中光暈），鏡像 `installBoardOverlay` 但讀 `PRACTICE`、無浮子 | `renderPracticeBoard` / `installPracticeOverlay` |
 | 選子（只選輪到走的一方 `practicePieceSide`/`practiceSideToMove`）→`POST /api/xqf/legal-targets`（race guard）；落子 `applyIccs` | `practiceSquareClick` / `practicePlayMove` |

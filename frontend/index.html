@@ -31,7 +31,7 @@
         </select>
       </label>
       <span class="actionsDivider" aria-hidden="true"></span>
-      <button id="practiceBtn" hidden title="中局練習題庫（殺法／戰術／中局）">🎯 中局練習</button>
+      <button id="practiceBtn" hidden title="中殘練習題庫（殺法／戰術／中局／殘局）">🧩 中殘練習</button>
       <button id="saveBtn" disabled>儲存</button>
       <span id="status"></span>
     </div>
@@ -256,12 +256,12 @@
       <div id="demoStatus" class="demoStatus" hidden></div>
     </div>
   </div>
-  <!-- 中局練習 dialog. Self-contained interactive board (#practiceBoard) + its own
+  <!-- 中殘練習 dialog. Self-contained interactive board (#practiceBoard) + its own
        state (PRACTICE in editor-practice.js); never touches the main board / tree.
-       Opened from the header 🎯 中局練習 button (shown only when practice.db exists). -->
+       Opened from the header 🧩 中殘練習 button (shown only when practice.db exists). -->
   <div id="practiceModal" class="modal" hidden>
     <div class="modalDialog practiceDialog" role="dialog" aria-modal="true" aria-labelledby="practiceTitle">
-      <h3 id="practiceTitle"><span>中局練習</span><button id="practiceClose" class="modalClose"
+      <h3 id="practiceTitle"><span>中殘練習</span><button id="practiceClose" class="modalClose"
           aria-label="關閉" title="關閉">✕</button></h3>
       <!-- 主題分頁（殺法/中局/殘局/戰術…）：由 editor-practice.js renderPracticeTabs
            依 /info themes 動態填；點分頁即抽該主題一題並記錄 PREFS.practiceTheme。 -->
@@ -352,9 +352,9 @@
                 title="某步的著法損失達到此值時標為漏著">
             </div>
             <div class="settingRow">
-              <label title="中局練習走錯後，與 AI 在該局面對弈時皮卡魚的搜尋深度（越高越強越慢）">中局練習對弈層數</label>
+              <label title="中殘練習走錯後，與 AI 在該局面對弈時皮卡魚的搜尋深度（越高越強越慢）">中殘練習對弈層數</label>
               <input id="practiceDepthInput" type="number" min="1" max="30" step="1" value="20"
-                title="中局練習走錯後與 AI 對弈的搜尋深度">
+                title="中殘練習走錯後與 AI 對弈的搜尋深度">
             </div>
           </div>
         </section>
@@ -451,7 +451,7 @@
   <script src="/assets/editor-autoplay.js?v=1"></script>
   <script src="/assets/editor-aichart.js?v=1"></script>
   <script src="/assets/editor-demo.js?v=1"></script>
-  <script src="/assets/editor-practice.js?v=8"></script>
+  <script src="/assets/editor-practice.js?v=9"></script>
   <script src="/assets/editor.js?v=59"></script>
   <script src="/assets/gifenc.global.js"></script>
   <script src="/assets/gifexport.js?v=3"></script>

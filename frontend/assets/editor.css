@@ -1962,7 +1962,7 @@ h2.panelHead>span {
   background: rgba(var(--accent-strong-rgb), 0.07);
 }
 
-/* ===== 中局練習 dialog（自帶互動棋盤＋側面板；獨立於主編輯器） ============= */
+/* ===== 中殘練習 dialog（自帶互動棋盤＋側面板；獨立於主編輯器） ============= */
 /* 用 .modalDialog.practiceDialog（兩個 class）提高特異度：基底 .modalDialog 的
    max-width:480/min-width:360 在原始碼中排在後面，同特異度會蓋掉這裡——雙 class 才穩贏，
    否則 dialog 被夾成 480 寬、固定寬右面板溢出深色底（底色寬度不足）。 */

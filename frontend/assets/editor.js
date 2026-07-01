@@ -2705,7 +2705,7 @@ $("#enginePickBtn").onclick = pickEngine;
 // live-analysis toggle.
 $("#rpVars").querySelectorAll(".rpTab").forEach((b) => b.addEventListener("click", () => switchRpTab(b.dataset.tab)));
 $("#rpAnnote").querySelectorAll(".rpTab").forEach((b) => b.addEventListener("click", () => switchAnnoteTab(b.dataset.tab)));
-// 中局練習（editor-practice.js）：自帶對話框＋棋盤，gate 於 practice.db 是否存在。
+// 中殘練習（editor-practice.js）：自帶對話框＋棋盤，gate 於 practice.db 是否存在。
 if (typeof setupPractice === "function") setupPractice();
 $("#engineToggleBtn").onclick = () => engineModeClick("prev");
 $("#engineCurBtn").onclick = () => engineModeClick("cur");
@@ -2763,7 +2763,7 @@ if (aiDepthInput) {
     savePreference("aiAnalysisDepth", v);
   });
 }
-// 中局練習對弈層數（預設 20，editor-practice.js 讀 PREFS.practiceAiDepth）。
+// 中殘練習對弈層數（預設 20，editor-practice.js 讀 PREFS.practiceAiDepth）。
 const practiceDepthInput = $("#practiceDepthInput");
 if (practiceDepthInput) {
   practiceDepthInput.addEventListener("change", () => {

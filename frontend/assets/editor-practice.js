@@ -1,6 +1,6 @@
 "use strict";
 /*
- * 中局練習 — 獨立對話框＋自帶互動棋盤（P1 前端）。
+ * 中殘練習 — 獨立對話框＋自帶互動棋盤（P1 前端）。含殺法/戰術/中局/殘局題。
  *
  * 刻意與主編輯器/走子樹「完全解耦」：練習盤是 #practiceModal 內的 #practiceBoard，
  * 自己一套狀態（PRACTICE），不碰 EDITOR、不碰主盤、不碰走子樹——練習本身即天然沙盒。
@@ -68,8 +68,10 @@ function setupPractice() {
   $pr("practiceAnswerBtn").onclick = onPracticeAnswerBtn;   // 看答案／演示 合一
   $pr("practiceResetBtn").onclick = resetPracticePuzzle;    // 回到起始局面重解
   $pr("practiceBoard").addEventListener("click", onPracticeSquareClick);
-  $pr("practiceBook").onchange = (e) => { PRACTICE.filters.book = e.target.value; };
-  $pr("practiceDiff").onchange = (e) => { PRACTICE.filters.difficulty = e.target.value; };
+  // 書目/難度改變即立即換該條件一題（與主題分頁一致；不必再按「下一題」）。
+  // 註：分頁切換時 rebuildPracticeBooks 是程式化改 .value/.innerHTML，不觸發 onchange，無雙載。
+  $pr("practiceBook").onchange = (e) => { PRACTICE.filters.book = e.target.value; loadPracticePuzzle(); };
+  $pr("practiceDiff").onchange = (e) => { PRACTICE.filters.difficulty = e.target.value; loadPracticePuzzle(); };
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !$pr("practiceModal").hidden) closePracticeModal();
   });
