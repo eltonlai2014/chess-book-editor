@@ -13,13 +13,20 @@ writable ``output/practice.db``：每題 = 一個自訂中局盤面 ``init_fen``
 與 ``eval_cache`` / 編輯器 chessdb cache 平行（皆編輯器自有 ``output/``）。引擎仲裁
 的 eval 也回寫進共用的 ``editor_eval_cache.db``（同 depth 鍵），所以重跑仲裁免費。
 
-CLI（離線批次；P1 的 UI/路由日後另建）::
+**題庫共享靠版控 seed（不是把 practice.db 進 git）。** 語料 CBL 與 ``practice.db``
+都不在 git（``output/`` gitignore），所以其他主機無法自行抽題。改把 ``puzzles``
+匯出成 ``data/practice_seed.db``（進 git、只題庫、不含作答/進度），其他主機 git pull
+後由 ``pooled()`` 首次啟動自動灌入（本機 practice.db 無題時）——UI 入口才亮。作答/
+複習進度仍各機獨立（不進 seed，不互蓋）。重抽題庫後跑 ``export-seed`` 更新 seed 再 commit。
+
+CLI（離線批次）::
 
     # 抽題（單檔或整個資料夾遞迴）＋引擎仲裁
     python -m backend.practice_service extract <book.cbl 或 資料夾> [--depth 12]
     python -m backend.practice_service extract <...> --no-engine   # 只抽題、不跑引擎
     python -m backend.practice_service arbitrate [--depth 12]      # 補跑既有未複核題
     python -m backend.practice_service stats                       # 看題庫統計
+    python -m backend.practice_service export-seed                 # 題庫→版控 seed（進 git）
 """
 from __future__ import annotations
 
@@ -43,8 +50,14 @@ try:
 except Exception:  # pragma: no cover - cchess 必在，保險用
     _STD_BOARD = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR"
 
-# 題庫 DB：編輯器自有、可寫，與 eval_cache 同住 output/。
+# 題庫 DB：編輯器自有、可寫，與 eval_cache 同住 output/（gitignore，本機各自作答）。
 PRACTICE_DB_PATH = config._data_base() / "output" / "practice.db"
+# 題庫 SEED：**版控**的唯讀種子（只含 puzzles，不含作答/進度），跟著 repo 走，讓
+# 其他主機 git pull 後免抽即用。首次啟動（本機 practice.db 無題）由 pooled() 自動
+# 灌入。語料 CBL 與 practice.db 都不在 git，所以「共享題庫」靠這顆 seed；作答/複習
+# 進度仍各機獨立（不進 seed）。用 _resource_base()：source run=repo 根、frozen=_MEIPASS
+# （server.spec 的 datas 已帶 data/）。重抽後用 CLI `export-seed` 重新產生。
+PRACTICE_SEED_PATH = config._resource_base() / "data" / "practice_seed.db"
 
 # 抽題門檻。答案主線少於這麼多 ply 視為「瑣碎一手/類目佔位」濾掉；可由 CLI 調。
 DEFAULT_MIN_PLY = 2
@@ -100,13 +113,70 @@ CREATE INDEX IF NOT EXISTS ix_puzzles_verdict ON puzzles(engine_verdict);
 # ---------- DB ---------------------------------------------------------------
 
 def connect(db_path: Path = PRACTICE_DB_PATH) -> sqlite3.Connection:
-    """開（並按需建表）practice.db，回 row_factory=Row 的連線。呼叫端負責 close。"""
+    """開（並按需建表）practice.db，回 row_factory=Row 的連線。呼叫端負責 close。
+
+    **不自動灌 seed**——CLI 的抽題/仲裁/匯出走這條，得看到「本機真實內容」（空就是空、
+    才好重抽）。seed 載入只發生在 Flask serving 的 ``pooled()``（見那裡）。
+    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(db_path))
     con.row_factory = sqlite3.Row
     con.executescript(_SCHEMA)
     con.commit()
     return con
+
+
+def _seed_puzzles_if_empty(con: sqlite3.Connection,
+                           seed_path: Path | None = None) -> int:
+    """本機 puzzles 為空且版控 seed 存在時，把 seed 的題庫灌進來；回灌入題數（否則 0）。
+
+    只灌 ``puzzles``（作答/進度各機獨立、不在 seed）。ATTACH 來源檔、``INSERT … SELECT
+    *``——seed 是同 ``_SCHEMA`` 匯出，欄位對齊。給其他主機「pull 完就有題」用；本機已有
+    題（重抽過）則原封不動。
+    """
+    seed_path = seed_path if seed_path is not None else PRACTICE_SEED_PATH
+    try:
+        if con.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0] > 0:
+            return 0
+    except sqlite3.Error:
+        return 0
+    if not seed_path.exists():
+        return 0
+    con.execute("ATTACH DATABASE ? AS seed", (str(seed_path),))
+    try:
+        con.execute("INSERT INTO puzzles SELECT * FROM seed.puzzles")
+        con.commit()
+        return con.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0]
+    finally:
+        con.execute("DETACH DATABASE seed")
+
+
+def export_seed(con: sqlite3.Connection,
+                seed_path: Path | None = None) -> int:
+    """把 ``con`` 的 ``puzzles`` 匯出成版控 seed（只題庫、不含作答/進度）；回題數。
+
+    從**既有連線**讀列、寫進新 seed db——不對 practice.db 二次開檔（避免與跑著的
+    server 的 WAL 鎖相撞）。seed 是完整 ``_SCHEMA`` 的獨立 db（attempts/progress 表
+    存在但空），本身也是合法的「空作答」practice.db。重抽後跑 CLI ``export-seed``
+    更新它再 commit。
+    """
+    seed_path = seed_path if seed_path is not None else PRACTICE_SEED_PATH
+    seed_path.parent.mkdir(parents=True, exist_ok=True)
+    cur = con.execute("SELECT * FROM puzzles")
+    cols = [d[0] for d in cur.description]
+    rows = [tuple(r) for r in cur.fetchall()]
+    if seed_path.exists():
+        seed_path.unlink()
+    dst = sqlite3.connect(str(seed_path))
+    try:
+        dst.executescript(_SCHEMA)
+        placeholders = ",".join("?" * len(cols))
+        dst.executemany(
+            f"INSERT INTO puzzles ({','.join(cols)}) VALUES ({placeholders})", rows)
+        dst.commit()
+        return dst.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0]
+    finally:
+        dst.close()
 
 
 # ---------- 抽題輔助 ----------------------------------------------------------
@@ -400,6 +470,8 @@ def pooled(db_path: Path | None = None) -> sqlite3.Connection:
     if key not in _pooled_inited:
         con.executescript(_SCHEMA)
         con.commit()
+        # 其他主機首次啟動：本機 practice.db 無題 → 從版控 seed 灌題庫，UI 入口才亮。
+        _seed_puzzles_if_empty(con)
         _pooled_inited.add(key)
     return con
 
@@ -613,6 +685,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("stats", help="題庫統計")
 
+    ps = sub.add_parser("export-seed",
+                        help="把題庫匯出成版控 seed（data/practice_seed.db）")
+    ps.add_argument("--seed", default=None, help="seed 輸出路徑（預設 PRACTICE_SEED_PATH）")
+
     args = ap.parse_args(argv)
     con = connect(Path(args.db))
     try:
@@ -653,6 +729,10 @@ def main(argv: list[str] | None = None) -> int:
             print("  書目（前 20）：")
             for name, c in s["top_books"]:
                 print(f"    {c:5d}  {name}")
+        elif args.cmd == "export-seed":
+            seed = Path(args.seed) if args.seed else PRACTICE_SEED_PATH
+            n = export_seed(con, seed)
+            print(f"已匯出 {n} 題 → {seed}（版控 seed；記得 git add + commit）")
     finally:
         con.close()
     return 0

@@ -148,10 +148,12 @@ XQF 與 CBL/CBR 的每盤同為 `cchess.Book`，序列化（`book_to_json`/`json
 | 抽題（到期複習→新題→任一，排除 doubt） / 取單題 | `pick_puzzle` / `get_puzzle` |
 | 評首著（對書答或已存 engine_best＝引擎等值）＋記 attempt＋間隔重練 | `check_answer` / `record_attempt` / `update_progress`（learning1d→review3d→mastered7d） |
 | 題庫總覽 / 個人成績 | `practice_info` / `practice_progress_stats` |
+| **題庫共享 seed**：匯出 `puzzles`→版控 `data/practice_seed.db`（只題庫）；空 db 首次啟動由 `pooled` 自動灌入（作答/進度各機獨立、不進 seed；`connect` 不自動灌） | `export_seed` / `_seed_puzzles_if_empty` / `PRACTICE_SEED_PATH` |
 
-> CLI（離線批次抽題）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`。
+> CLI（離線批次抽題）：`extract <檔或資料夾> [--depth N] [--no-engine]`、`arbitrate [--depth N] [--fresh]`、`stats`、`export-seed`（題庫→版控 seed，重抽後 commit）。
 > P1 路由：`GET /api/practice/info|pick|puzzle/<id>|stats`、`POST /api/practice/check`（見 API 表）。
-> 測：`tests/test_practice.py`（抽題：合成濾除 CI-safe＋真語料抽樣）＋`tests/test_routes.py`（5 條路由契約，臨時 DB 隔離）。
+> 題庫分發：CBL 語料與 `output/practice.db` 都不在 git；`data/practice_seed.db`（版控、只 puzzles）讓其他主機 git pull 後首次啟動免抽即用（frozen 由 `server.spec` datas 帶入）。
+> 測：`tests/test_practice.py`（抽題：合成濾除 CI-safe＋真語料抽樣＋seed round-trip）＋`tests/test_routes.py`（路由契約，臨時 DB 隔離、seed 隔離）。
 > P1 前端已建（`editor-practice.js`＋practice modal）——見下方「🎯 中局練習」區與 CLAUDE.md。
 
 ### XQF 譜處理（backend/xqf_service.py）

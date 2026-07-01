@@ -21,9 +21,11 @@ from backend.practice_service import (  # noqa: E402
     _difficulty,
     _mate_difficulty,
     _parse_title,
+    _seed_puzzles_if_empty,
     _verdict,
     build_puzzle,
     connect,
+    export_seed,
     extract_cbl,
     _STD_BOARD,
 )
@@ -116,12 +118,70 @@ def test_extract_real_book():
             con.close()
 
 
+def _insert_puzzle(con, gi, fen="9/9/9/9/9/9/9/9/9/4K4 w"):
+    con.execute(
+        "INSERT INTO puzzles(source_rel,game_index,init_fen,side,answer_iccs,"
+        "answer_zh,ply_count,difficulty) VALUES(?,?,?,?,?,?,?,?)",
+        ("x.cbl", gi, fen, "w", '["e0e1"]', '["帥五進一"]', 1, 1))
+
+
+def test_seed_roundtrip():
+    """題庫 seed：export 只帶 puzzles（不含作答/進度）；空 db 自動灌入、且冪等。"""
+    with tempfile.TemporaryDirectory() as td:
+        src = connect(Path(td) / "src.db")
+        seed = Path(td) / "practice_seed.db"
+        try:
+            _insert_puzzle(src, 0)
+            _insert_puzzle(src, 1)
+            # 作答/進度：export 不應帶進 seed（各機獨立）。
+            src.execute("INSERT INTO attempts(puzzle_id,ts,result) VALUES(1,'t','pass')")
+            src.execute("INSERT INTO progress(puzzle_id,state) VALUES(1,'learning')")
+            src.commit()
+
+            n = export_seed(src, seed)
+            assert n == 2, n
+            chk = connect(seed)
+            try:
+                assert chk.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0] == 2
+                assert chk.execute("SELECT COUNT(*) FROM attempts").fetchone()[0] == 0
+                assert chk.execute("SELECT COUNT(*) FROM progress").fetchone()[0] == 0
+            finally:
+                chk.close()
+            _ok("export-seed：只帶 2 題、不含 attempts/progress")
+
+            # 全新空 db → 自動從 seed 灌入；再灌一次冪等（已有題）。
+            fresh = connect(Path(td) / "fresh.db")
+            try:
+                assert _seed_puzzles_if_empty(fresh, seed) == 2
+                assert fresh.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0] == 2
+                assert _seed_puzzles_if_empty(fresh, seed) == 0   # 冪等：已有題不重灌
+                # id 保留（跨機一致）。
+                ids = [r[0] for r in fresh.execute("SELECT id FROM puzzles ORDER BY id")]
+                assert ids == [1, 2], ids
+            finally:
+                fresh.close()
+            _ok("空 practice.db：自動灌 seed、冪等、id 保留")
+
+            # seed 不存在 → 不灌、回 0（其他主機沒 seed 也不炸）。
+            empty = connect(Path(td) / "empty.db")
+            try:
+                assert _seed_puzzles_if_empty(empty, Path(td) / "nope.db") == 0
+                assert empty.execute("SELECT COUNT(*) FROM puzzles").fetchone()[0] == 0
+            finally:
+                empty.close()
+            _ok("缺 seed：不灌、不報錯")
+        finally:
+            src.close()
+
+
 def main():
     print("[1] build_puzzle 濾除/抽取")
     test_build_puzzle_filters()
     print("[2] 純函式（難度/類目/仲裁）")
     test_helpers()
-    print("[3] 真語料抽題抽樣")
+    print("[3] 題庫 seed round-trip")
+    test_seed_roundtrip()
+    print("[4] 真語料抽題抽樣")
     test_extract_real_book()
     print("\n全部通過 ✓")
 

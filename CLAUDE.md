@@ -390,8 +390,22 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   the mover — mate-in-N is a far better signal than book-line length (which
   includes the opponent's replies + extra mop-up moves). Non-mate (cp) puzzles
   keep the ply placeholder. Glicko-2 is a later upgrade.
-- **practice.db is generated data, gitignored (`output/`).** The CODE is the
-  deliverable; the DB is rebuilt locally via the CLI. Don't commit it.
+- **practice.db is generated data, gitignored (`output/`) — but the puzzle bank
+  IS shared via a VERSIONED SEED.** The CBL corpus AND `output/practice.db` are
+  both out of git, so another machine can't self-extract. The fix (chosen over
+  committing practice.db whole, which would also version-control the user's
+  attempts/progress + churn a 4.9MB blob every time you play): export just the
+  `puzzles` table to `data/practice_seed.db` (committed; puzzles only, NO
+  attempts/progress). On first launch a machine with an empty practice.db has the
+  seed auto-loaded by `pooled()` (`_seed_puzzles_if_empty`) → the 🎯 entry lights
+  up with zero setup. Attempts + spaced-repetition progress stay per-machine
+  (never in the seed, never overwritten). `connect()` (the CLI extract/arbitrate
+  path) deliberately does NOT auto-load — it must see the real local content.
+  **After re-extracting the bank, run `export-seed` and commit the new seed**
+  (`python -m backend.practice_service export-seed`). The frozen build bundles the
+  seed via `server.spec` datas (`_MEIPASS/data/`), first-run loads it into the
+  exe-adjacent `output/practice.db`. Seed path uses `_resource_base()` (repo root
+  in source, `_MEIPASS` when frozen).
 - **P1 routes grade the FIRST move against the book answer OR the stored
   `engine_best` — no live engine call.** `check_answer` reads the pre-computed
   `engine_best` (from arbitration) as the "engine-equivalent" acceptance, so an

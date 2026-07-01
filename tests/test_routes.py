@@ -246,10 +246,14 @@ def test_practice_routes():
     print("[/api/practice/*]")
     c = app.test_client()
     orig_path = practice_service.PRACTICE_DB_PATH
+    orig_seed = practice_service.PRACTICE_SEED_PATH
     with tempfile.TemporaryDirectory() as td:
         dbp = Path(td) / "practice.db"
         _seed_practice_db(dbp)
         practice_service.PRACTICE_DB_PATH = dbp
+        # 隔離真 seed：pooled() 首次會對「空題庫」自動灌 seed；本測試自塞 2 題，
+        # 指向不存在的 seed 確保永不吃到版控的 3439 題（即使日後移掉預塞）。
+        practice_service.PRACTICE_SEED_PATH = Path(td) / "no_seed.db"
         practice_service._pooled_inited.discard(str(dbp))
         try:
             # info
@@ -307,6 +311,7 @@ def test_practice_routes():
             check("stats passed == 2", body.get("passed") == 2, body)
         finally:
             practice_service.PRACTICE_DB_PATH = orig_path
+            practice_service.PRACTICE_SEED_PATH = orig_seed
             practice_service._pooled_inited.discard(str(dbp))
             # db_pool keeps the WAL connection open (by design); close+evict it
             # so the temp dir can be removed on Windows (open handle = locked file).

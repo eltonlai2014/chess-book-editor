@@ -12,13 +12,21 @@
 #          to the exe so a fresh machine runs with zero config)
 #
 # Bundled here:   Python runtime, Flask, cchess, frontend/, tkinter (for the
-#                 native file/folder pickers via the exe's `--pick` branch).
+#                 native file/folder pickers via the exe's `--pick` branch), and
+#                 data\practice_seed.db (中局練習題庫 seed → first-run loads it
+#                 into output\practice.db).
 # Staged by package.ps1 next to the exe (NOT in this spec): engine\Windows\,
 #                 samples\.  Set via the in-app UI pickers if moved.
 # NOT shipped:    positions.db eval cache (AI repo's data; absent = graceful).
+import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = [('frontend', 'frontend')]
+# 版控的中局練習題庫 seed（唯讀）。frozen 解到 _MEIPASS/data/；practice_service
+# 的 PRACTICE_SEED_PATH 用 _resource_base()/data/practice_seed.db，首次啟動灌進
+# exe-adjacent 的可寫 output/practice.db（見 backend/practice_service.py）。
+if os.path.isfile(os.path.join('data', 'practice_seed.db')):
+    datas += [(os.path.join('data', 'practice_seed.db'), 'data')]
 binaries = []
 # tkinter powers the native pickers (server.py --pick). Listing it pulls in the
 # PyInstaller tkinter hook (tcl/tk data + _tkinter.pyd) which the static import
