@@ -1818,6 +1818,7 @@ h2.panelHead>span {
 #navBar button,
 #metaBtn,
 #saveBtn,
+#practiceBtn,
 .rootPath #rootPickBtn {
   display: inline-flex;
   align-items: center;
