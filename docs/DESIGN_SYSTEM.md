@@ -185,7 +185,9 @@ suggest 取對比強的藍/橘（灰綠環會融進綠灰盤）。
   動態文字（檔案樹、路徑/引擎 chip）用 `setIconText(el,key,text)`（text 以 text node
   附加，路徑含 `<`/`&` 也安全）。
 - 新 icon＝在 `ICON` 加一筆 24×24 stroke SVG。已備 `fish`(引擎)/`library`(棋庫)/
-  `trophy`(賽事)。
+  `trophy`(賽事)/`puzzle`(中殘練習＝解題)。
+- **header 按鈕也走 SVG，不用 emoji**（2026-07-01：中殘練習按鈕原用 🧩 emoji，改 `ICON.puzzle`
+  ＝與 saveBtn/走法/雲庫 同語言；除檔案樹 📁/📚 外全系統無彩色 emoji icon）。
 
 ## 4. 品牌
 

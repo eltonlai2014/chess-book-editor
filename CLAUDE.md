@@ -457,9 +457,12 @@ UI: 演示/評分/成績 routes + `editor-practice.js`) is not built yet.**
   manual sections). Regression: `test_theme_and_collection` / `test_info_themes_and_filter`
   in `tests/test_practice.py`. (成績 tab's `top_books` still groups raw book_title —
   not collapsed; low-priority follow-up.) **Book/難度下拉 onchange 亦即時換題**（與分頁一致，
-  非「按下一題才生效」）。**UI 顯示名 2026-07-01 由「中局練習」🎯 改「中殘練習」🧩**（題庫本就
+  非「按下一題才生效」）。**UI 顯示名 2026-07-01 由「中局練習」改「中殘練習」**（題庫本就
   含殺法/戰術/中局/**殘局**，舊名誤導）——只改前端顯示字串＋按鈕/標題/設定標籤；內部識別碼
   （`practiceBtn`/`PRACTICE`/`practice_service`/practice.db/路由）與 doc 段名維持「中局練習」不動。
+  **按鈕 icon 用 `ICON.puzzle`（Lucide 線稿，`iconLabel("puzzle","中殘練習")` 於 editor.js 底部
+  init 區設定，同 saveBtn/走法/雲庫）——系統早已無彩色 emoji，勿再用 🧩/🎯。** 新 header 按鈕
+  一律走 ICON registry + `iconLabel`，別寫死 emoji。
 - **Solving flow (2026-06-30 redesign, master-directed):** the user plays their
   side on the practice board. A move matching the book answer at the current ply
   → the system auto-plays the opponent's book reply and the user keeps solving
